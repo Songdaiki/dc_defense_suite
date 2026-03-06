@@ -218,15 +218,30 @@ async function fetchComments(postNo, esno, commentPage = 1) {
  * @param {string} esno - e_s_n_o 토큰
  * @returns {Promise<{comments: Array, totalCnt: number}>}
  */
-async function fetchAllComments(postNo, esno) {
+async function fetchAllComments(postNo, esno, pageConcurrency = 4) {
   const firstPage = await fetchComments(postNo, esno, 1);
   const allComments = [...firstPage.comments];
   const firstPageSize = firstPage.comments.length || 20;
   const totalPages = Math.max(1, Math.ceil(firstPage.totalCnt / firstPageSize));
 
-  for (let page = 2; page <= totalPages; page++) {
-    const nextPage = await fetchComments(postNo, esno, page);
-    allComments.push(...nextPage.comments);
+  if (totalPages > 1) {
+    const pageNumbers = [];
+    for (let page = 2; page <= totalPages; page++) {
+      pageNumbers.push(page);
+    }
+
+    const pageResults = await mapWithConcurrency(
+      pageNumbers,
+      pageConcurrency,
+      async (page) => ({
+        page,
+        data: await fetchComments(postNo, esno, page),
+      }),
+    );
+
+    for (const result of pageResults) {
+      allComments.push(...result.data.comments);
+    }
   }
 
   return {
@@ -316,6 +331,28 @@ async function deleteComments(postNo, commentNos) {
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const workerCount = Math.max(1, Math.min(concurrency, items.length));
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
 }
 
 function isDeleteResponseSuccessful(response, data) {

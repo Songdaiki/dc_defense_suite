@@ -19,6 +19,7 @@ const minPageInput = document.getElementById('minPage');
 const maxPageInput = document.getElementById('maxPage');
 const requestDelayInput = document.getElementById('requestDelay');
 const cycleDelayInput = document.getElementById('cycleDelay');
+const postConcurrencyInput = document.getElementById('postConcurrency');
 const saveConfigBtn = document.getElementById('saveConfigBtn');
 const resetBtn = document.getElementById('resetBtn');
 
@@ -48,11 +49,18 @@ toggleBtn.addEventListener('change', async () => {
 
 // 설정 저장
 saveConfigBtn.addEventListener('click', async () => {
+    const minPage = parseOptionalInt(minPageInput.value, 1);
+    const maxPage = parseOptionalInt(maxPageInput.value, 5);
+    const requestDelay = parseOptionalInt(requestDelayInput.value, 100);
+    const cycleDelay = parseOptionalInt(cycleDelayInput.value, 5000);
+    const postConcurrency = parseOptionalInt(postConcurrencyInput.value, 8);
+
     const config = {
-        minPage: parseInt(minPageInput.value, 10) || 1,
-        maxPage: parseInt(maxPageInput.value, 10) || 5,
-        requestDelay: parseInt(requestDelayInput.value, 10) || 500,
-        cycleDelay: parseInt(cycleDelayInput.value, 10) || 5000,
+        minPage,
+        maxPage,
+        requestDelay,
+        cycleDelay,
+        postConcurrency,
     };
 
     const response = await sendMessage({ action: 'updateConfig', config });
@@ -112,10 +120,11 @@ function updateUI(status) {
 
     // 설정
     if (status.config) {
-        syncConfigInput(minPageInput, status.config.minPage);
-        syncConfigInput(maxPageInput, status.config.maxPage);
-        syncConfigInput(requestDelayInput, status.config.requestDelay);
-        syncConfigInput(cycleDelayInput, status.config.cycleDelay);
+        syncConfigInput(minPageInput, status.config.minPage ?? 1);
+        syncConfigInput(maxPageInput, status.config.maxPage ?? 5);
+        syncConfigInput(requestDelayInput, status.config.requestDelay ?? 100);
+        syncConfigInput(cycleDelayInput, status.config.cycleDelay ?? 5000);
+        syncConfigInput(postConcurrencyInput, status.config.postConcurrency ?? 8);
     }
 
     // 로그
@@ -160,4 +169,9 @@ function syncConfigInput(input, nextValue) {
     if (input.value !== normalizedValue) {
         input.value = normalizedValue;
     }
+}
+
+function parseOptionalInt(value, fallback) {
+    const parsed = parseInt(value, 10);
+    return Number.isNaN(parsed) ? fallback : parsed;
 }

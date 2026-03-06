@@ -36,8 +36,10 @@ class Scheduler {
         this.config = {
             minPage: 1,            // 시작 페이지 (테스트용)
             maxPage: 5,
-            requestDelay: 500,     // API 요청 간 딜레이 (ms)
+            requestDelay: 100,     // 워커별 게시물 처리 후 딜레이 (ms)
             cycleDelay: 5000,      // 사이클 간 딜레이 (ms)
+            postConcurrency: 8,    // 한 페이지에서 동시에 처리할 게시물 수
+            commentPageConcurrency: 4, // 한 게시물의 댓글 페이지 동시 조회 수
         };
     }
 
@@ -82,19 +84,16 @@ class Scheduler {
 
                     this.log(`📄 ${page}페이지 게시물 목록 로딩...`);
                     const { posts, esno } = await fetchPostList(page);
-                    this.log(`📄 ${page}페이지: ${posts.length}개 게시물 발견`);
+                    const candidatePosts = posts.filter((post) => post.commentCount > 0);
+                    this.log(
+                        `📄 ${page}페이지: ${posts.length}개 게시물, 댓글 있는 ${candidatePosts.length}개 병렬 처리 (${this.config.postConcurrency}동시)`,
+                    );
 
-                    // 각 게시물 처리
-                    for (const post of posts) {
-                        if (!this.isRunning) break;
-                        this.currentPostNo = post.no;
-                        await this.saveState();
-
-                        const shouldDelay = await this.processPost(post, esno);
-                        if (shouldDelay) {
-                            await delay(this.config.requestDelay);
-                        }
+                    if (candidatePosts.length === 0) {
+                        continue;
                     }
+
+                    await this.processPostsInParallel(candidatePosts, esno);
                 }
 
                 // 사이클 완료
@@ -151,7 +150,11 @@ class Scheduler {
             let comments;
 
             try {
-                ({ comments } = await fetchAllComments(postNo, esno));
+                ({ comments } = await fetchAllComments(
+                    postNo,
+                    esno,
+                    this.config.commentPageConcurrency,
+                ));
             } catch (error) {
                 if (!sharedEsno) {
                     throw error;
@@ -163,7 +166,11 @@ class Scheduler {
                     throw error;
                 }
 
-                ({ comments } = await fetchAllComments(postNo, refreshedEsno));
+                ({ comments } = await fetchAllComments(
+                    postNo,
+                    refreshedEsno,
+                    this.config.commentPageConcurrency,
+                ));
             }
 
             if (comments.length === 0) {
@@ -200,6 +207,32 @@ class Scheduler {
             await this.saveState();
             return true;
         }
+    }
+
+    async processPostsInParallel(posts, sharedEsno) {
+        const workerCount = Math.max(1, Math.min(this.config.postConcurrency, posts.length));
+        let nextIndex = 0;
+
+        const workers = Array.from({ length: workerCount }, async () => {
+            while (this.isRunning) {
+                const currentIndex = nextIndex;
+                nextIndex += 1;
+
+                if (currentIndex >= posts.length) {
+                    return;
+                }
+
+                const post = posts[currentIndex];
+                this.currentPostNo = post.no;
+
+                const shouldDelay = await this.processPost(post, sharedEsno);
+                if (shouldDelay && this.config.requestDelay > 0) {
+                    await delay(this.config.requestDelay);
+                }
+            }
+        });
+
+        await Promise.all(workers);
     }
 
     // ============================================================
