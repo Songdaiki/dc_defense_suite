@@ -1,0 +1,275 @@
+/* ============================================================
+   DC Comment Protect - Popup Styles
+   ============================================================ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 360px;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-size: 13px;
+}
+
+.container {
+  padding: 16px;
+}
+
+/* ---- 헤더 ---- */
+.header {
+  text-align: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #2a2a4a;
+}
+
+.header h1 {
+  font-size: 18px;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.subtitle {
+  font-size: 11px;
+  color: #888;
+}
+
+/* ---- 토글 스위치 ---- */
+.toggle-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #16213e;
+  border-radius: 8px;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 56px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #444;
+  border-radius: 28px;
+  transition: background 0.3s;
+}
+
+.slider::before {
+  content: '';
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  left: 3px;
+  bottom: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.3s;
+}
+
+.toggle-switch input:checked + .slider {
+  background: #00c853;
+}
+
+.toggle-switch input:checked + .slider::before {
+  transform: translateX(28px);
+}
+
+.toggle-label {
+  font-size: 16px;
+  font-weight: bold;
+  min-width: 36px;
+}
+
+.toggle-label.on {
+  color: #00c853;
+}
+
+.toggle-label.off {
+  color: #888;
+}
+
+/* ---- 상태 정보 ---- */
+.status-section {
+  margin-bottom: 12px;
+}
+
+.status-section h2,
+.log-section h2 {
+  font-size: 13px;
+  color: #aaa;
+  margin-bottom: 8px;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.status-item {
+  background: #16213e;
+  padding: 8px 10px;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.status-label {
+  font-size: 10px;
+  color: #888;
+  text-transform: uppercase;
+}
+
+.status-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.status-on {
+  color: #00c853 !important;
+}
+
+.status-off {
+  color: #ff5252 !important;
+}
+
+/* ---- 설정 ---- */
+.settings-section {
+  margin-bottom: 12px;
+  background: #16213e;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.settings-section summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: #aaa;
+  outline: none;
+}
+
+.settings-grid {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.setting-item label {
+  font-size: 12px;
+  color: #ccc;
+}
+
+.setting-item input {
+  width: 80px;
+  padding: 4px 8px;
+  background: #0f3460;
+  color: #fff;
+  border: 1px solid #2a2a4a;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 12px;
+}
+
+/* ---- 버튼 ---- */
+.btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: opacity 0.2s;
+}
+
+.btn:hover {
+  opacity: 0.85;
+}
+
+.btn-config {
+  background: #0f3460;
+  color: #fff;
+  width: 100%;
+}
+
+.btn-reset {
+  background: #2a2a4a;
+  color: #aaa;
+  width: 100%;
+}
+
+/* ---- 로그 ---- */
+.log-section {
+  margin-bottom: 12px;
+}
+
+.log-list {
+  background: #0d1117;
+  border-radius: 6px;
+  padding: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.log-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.log-list::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+.log-entry {
+  padding: 2px 0;
+  border-bottom: 1px solid #1a1a2e;
+  word-break: break-all;
+}
+
+.log-entry:last-child {
+  border-bottom: none;
+}
+
+.log-empty {
+  color: #555;
+  text-align: center;
+  padding: 20px 0;
+}
+
+/* ---- 하단 ---- */
+.footer {
+  padding-top: 8px;
+  border-top: 1px solid #2a2a4a;
+}
