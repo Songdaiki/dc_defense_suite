@@ -19,6 +19,8 @@ import {
 } from './parser.js';
 
 const STORAGE_KEY = 'commentSchedulerState';
+const MAX_VERIFICATION_EVENTS = 200;
+const DEFAULT_VERIFICATION_WINDOW_MS = 30000;
 
 // ============================================================
 // 스케줄러 클래스
@@ -32,6 +34,8 @@ class Scheduler {
         this.currentPostNo = 0;
         this.totalDeleted = 0;
         this.cycleCount = 0;
+        this.lastVerifiedDeletedCount = 0;
+        this.verificationEvents = [];
         this.logs = [];
 
         // 설정 (기본값)
@@ -149,6 +153,10 @@ class Scheduler {
                 return false;
             }
 
+            if (!this.isRunning) {
+                return false;
+            }
+
             // 2. 댓글 목록 가져오기
             let comments;
 
@@ -189,6 +197,10 @@ class Scheduler {
                 return true;
             }
 
+            if (!this.isRunning) {
+                return false;
+            }
+
             // 4. 댓글 삭제
             const commentNos = extractCommentNos(fluidComments);
             this.log(`🗑️ #${postNo}: 유동닉 ${fluidComments.length}개 삭제 중...`);
@@ -196,10 +208,27 @@ class Scheduler {
             const result = await deleteComments(this.config, postNo, commentNos);
 
             if (result.success) {
-                this.totalDeleted += fluidComments.length;
-                this.log(`✅ #${postNo}: ${fluidComments.length}개 삭제 완료 (총 ${this.totalDeleted}개)`);
+                const verification = await this.verifyDeletedComments(postNo, esno, commentNos, sharedEsno);
+                const verifiedDeletedCount = verification.deletedCount;
+
+                this.lastVerifiedDeletedCount = verifiedDeletedCount;
+                this.recordVerifiedDeletionEvent(verifiedDeletedCount);
+                this.totalDeleted += verifiedDeletedCount;
+
+                if (verification.verificationFailed) {
+                    this.log(`⚠️ #${postNo}: 삭제 응답 성공, 검증 실패 - ${verification.message}`);
+                } else if (verifiedDeletedCount === fluidComments.length) {
+                    this.log(`✅ #${postNo}: ${verifiedDeletedCount}개 검증 삭제 완료 (총 ${this.totalDeleted}개)`);
+                } else if (verifiedDeletedCount > 0) {
+                    this.log(
+                        `⚠️ #${postNo}: ${verifiedDeletedCount}/${fluidComments.length}개만 검증 삭제됨 (총 ${this.totalDeleted}개)`,
+                    );
+                } else {
+                    this.log(`⚠️ #${postNo}: 삭제 응답 성공, 검증 삭제 수 0개`);
+                }
                 await this.saveState();
             } else {
+                this.lastVerifiedDeletedCount = 0;
                 this.log(`❌ #${postNo}: 삭제 실패 - ${result.message}`);
                 await this.saveState();
             }
@@ -208,9 +237,68 @@ class Scheduler {
 
         } catch (error) {
             const postNo = typeof post === 'number' ? post : post.no;
+            this.lastVerifiedDeletedCount = 0;
             this.log(`❌ #${postNo}: 처리 실패 - ${error.message}`);
             await this.saveState();
             return true;
+        }
+    }
+
+    async verifyDeletedComments(postNo, initialEsno, targetCommentNos, sharedEsno = null) {
+        const normalizedTargets = targetCommentNos.map((no) => String(no));
+        const targetSet = new Set(normalizedTargets);
+
+        try {
+            let esno = initialEsno;
+            let comments;
+
+            try {
+                ({ comments } = await fetchAllComments(
+                    this.config,
+                    postNo,
+                    esno,
+                    this.config.commentPageConcurrency,
+                ));
+            } catch (error) {
+                if (!sharedEsno) {
+                    throw error;
+                }
+
+                const html = await fetchPostPage(this.config, postNo);
+                const refreshedEsno = extractEsno(html);
+                if (!refreshedEsno) {
+                    throw error;
+                }
+
+                esno = refreshedEsno;
+                ({ comments } = await fetchAllComments(
+                    this.config,
+                    postNo,
+                    esno,
+                    this.config.commentPageConcurrency,
+                ));
+            }
+
+            const remainingActiveNos = new Set(
+                extractCommentNos(filterFluidComments(comments))
+                    .filter((no) => targetSet.has(String(no))),
+            );
+
+            return {
+                deletedCount: normalizedTargets.length - remainingActiveNos.size,
+                remainingCount: remainingActiveNos.size,
+                remainingNos: [...remainingActiveNos],
+                verificationFailed: false,
+                message: '',
+            };
+        } catch (error) {
+            return {
+                deletedCount: 0,
+                remainingCount: normalizedTargets.length,
+                remainingNos: [...targetSet],
+                verificationFailed: true,
+                message: error.message,
+            };
         }
     }
 
@@ -256,6 +344,54 @@ class Scheduler {
         }
     }
 
+    recordVerifiedDeletionEvent(count) {
+        const numericCount = Math.max(0, Number(count) || 0);
+        const now = Date.now();
+
+        this.pruneVerificationEvents(now);
+        this.verificationEvents.push({
+            at: now,
+            count: numericCount,
+        });
+
+        if (this.verificationEvents.length > MAX_VERIFICATION_EVENTS) {
+            this.verificationEvents = this.verificationEvents.slice(-MAX_VERIFICATION_EVENTS);
+        }
+    }
+
+    pruneVerificationEvents(now = Date.now(), windowMs = DEFAULT_VERIFICATION_WINDOW_MS * 10) {
+        const threshold = now - Math.max(windowMs, DEFAULT_VERIFICATION_WINDOW_MS);
+        this.verificationEvents = this.verificationEvents.filter((event) => {
+            if (!event || typeof event !== 'object') {
+                return false;
+            }
+
+            const at = Number(event.at) || 0;
+            return at >= threshold;
+        });
+    }
+
+    getVerifiedDeletedCountWithin(windowMs = DEFAULT_VERIFICATION_WINDOW_MS) {
+        const now = Date.now();
+        const normalizedWindowMs = Math.max(1000, Number(windowMs) || DEFAULT_VERIFICATION_WINDOW_MS);
+
+        this.pruneVerificationEvents(now, normalizedWindowMs * 10);
+
+        return this.verificationEvents.reduce((sum, event) => {
+            const at = Number(event.at) || 0;
+            if (now - at > normalizedWindowMs) {
+                return sum;
+            }
+
+            return sum + (Number(event.count) || 0);
+        }, 0);
+    }
+
+    resetVerificationState() {
+        this.lastVerifiedDeletedCount = 0;
+        this.verificationEvents = [];
+    }
+
     // ============================================================
     // 상태 저장/복원
     // ============================================================
@@ -269,6 +405,8 @@ class Scheduler {
                     currentPostNo: this.currentPostNo,
                     totalDeleted: this.totalDeleted,
                     cycleCount: this.cycleCount,
+                    lastVerifiedDeletedCount: this.lastVerifiedDeletedCount,
+                    verificationEvents: this.verificationEvents.slice(-MAX_VERIFICATION_EVENTS),
                     logs: this.logs.slice(0, 50), // 최근 50개만 저장
                     config: this.config,
                 },
@@ -287,6 +425,10 @@ class Scheduler {
                 this.currentPostNo = schedulerState.currentPostNo || 0;
                 this.totalDeleted = schedulerState.totalDeleted || 0;
                 this.cycleCount = schedulerState.cycleCount || 0;
+                this.lastVerifiedDeletedCount = schedulerState.lastVerifiedDeletedCount || 0;
+                this.verificationEvents = Array.isArray(schedulerState.verificationEvents)
+                    ? schedulerState.verificationEvents
+                    : [];
                 this.logs = schedulerState.logs || [];
                 this.config = { ...this.config, ...schedulerState.config };
             }
@@ -328,6 +470,8 @@ class Scheduler {
             currentPostNo: this.currentPostNo,
             totalDeleted: this.totalDeleted,
             cycleCount: this.cycleCount,
+            lastVerifiedDeletedCount: this.lastVerifiedDeletedCount,
+            recentVerifiedDeletedCount: this.getVerifiedDeletedCountWithin(DEFAULT_VERIFICATION_WINDOW_MS),
             logs: this.logs.slice(0, 20), // 팝업에는 최근 20개만
             config: this.config,
         };

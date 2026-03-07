@@ -65,6 +65,9 @@ async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
 
             return response;
         } catch (error) {
+            if (error?.name === 'AbortError') {
+                throw error;
+            }
             console.error(`[API] 네트워크 에러: ${error.message}. 재시도 ${i + 1}/${maxRetries}`);
             await delay(1000);
         }
@@ -102,7 +105,7 @@ async function fetchPostListHTML(config = {}, page = 1) {
  * @param {string[]} postNos - 분류할 게시물 번호 배열
  * @returns {Promise<{success: boolean, successCount: number, failureCount: number, failedNos: string[], message: string}>}
  */
-async function classifyPosts(config = {}, postNos) {
+async function classifyPosts(config = {}, postNos, options = {}) {
     const resolved = resolveConfig(config);
     if (postNos.length === 0) {
         return {
@@ -134,7 +137,7 @@ async function classifyPosts(config = {}, postNos) {
     };
 
     for (const chunk of chunks) {
-        const result = await classifyPostsWithFallback(resolved, ciToken, chunk);
+        const result = await classifyPostsWithFallback(resolved, ciToken, chunk, options);
         aggregate.successCount += result.successCount;
         aggregate.failedNos.push(...result.failedNos);
         if (result.message) {
@@ -151,8 +154,8 @@ async function classifyPosts(config = {}, postNos) {
     };
 }
 
-async function classifyPostsWithFallback(config, ciToken, postNos) {
-    const batchResult = await classifyPostBatch(config, ciToken, postNos);
+async function classifyPostsWithFallback(config, ciToken, postNos, options = {}) {
+    const batchResult = await classifyPostBatch(config, ciToken, postNos, options);
     if (batchResult.success) {
         return {
             successCount: postNos.length,
@@ -172,8 +175,8 @@ async function classifyPostsWithFallback(config, ciToken, postNos) {
     }
 
     const midpoint = Math.ceil(postNos.length / 2);
-    const leftResult = await classifyPostsWithFallback(config, ciToken, postNos.slice(0, midpoint));
-    const rightResult = await classifyPostsWithFallback(config, ciToken, postNos.slice(midpoint));
+    const leftResult = await classifyPostsWithFallback(config, ciToken, postNos.slice(0, midpoint), options);
+    const rightResult = await classifyPostsWithFallback(config, ciToken, postNos.slice(midpoint), options);
 
     return {
         successCount: leftResult.successCount + rightResult.successCount,
@@ -182,7 +185,7 @@ async function classifyPostsWithFallback(config, ciToken, postNos) {
     };
 }
 
-async function classifyPostBatch(config, ciToken, postNos) {
+async function classifyPostBatch(config, ciToken, postNos, options = {}) {
     if (postNos.length === 0) {
         return { success: true, message: '' };
     }
@@ -211,6 +214,7 @@ async function classifyPostBatch(config, ciToken, postNos) {
             'Origin': config.baseUrl,
         },
         body: bodyParts.join('&'),
+        signal: options.signal,
     });
 
     const responseText = await response.text();

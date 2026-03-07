@@ -35,7 +35,10 @@ function isFluidUser(comment) {
 function shouldSkip(comment) {
     return comment.nicktype === 'COMMENT_BOY'
         || comment.no === 0
-        || comment.no === '0';
+        || comment.no === '0'
+        || comment.del_yn === 'Y'
+        || comment.is_delete === '1'
+        || comment.is_delete === 1;
 }
 
 // ============================================================

@@ -16,6 +16,20 @@ function parseFluidPosts(html, targetHeadName = '도배기') {
     });
 }
 
+function parseUidBearingPosts(html, targetHeadName = '도배기') {
+    return collectBoardPosts(html).filter((post) => {
+        if (!post.hasUid) {
+            return false;
+        }
+
+        if (targetHeadName && post.currentHead.includes(targetHeadName)) {
+            return false;
+        }
+
+        return true;
+    });
+}
+
 function extractPostNos(posts) {
     return posts.map((post) => String(post.no));
 }
@@ -43,9 +57,11 @@ function collectBoardPosts(html) {
 
         results.push({
             no: postNo,
+            uid: writerMeta.uid,
             nick: writerMeta.nick,
             ip: writerMeta.ip,
             isFluid: Boolean(writerMeta.ip),
+            hasUid: Boolean(writerMeta.uid),
             subject: extractSubject(rowHtml),
             currentHead: extractCurrentHead(rowHtml),
         });
@@ -71,10 +87,12 @@ function extractWriterMeta(rowHtml) {
     }
 
     const writerTag = writerMatch[0];
+    const uidMatch = writerTag.match(/data-uid="([^"]*)"/);
     const ipMatch = writerTag.match(/data-ip="([^"]*)"/);
     const nickMatch = writerTag.match(/data-nick="([^"]*)"/);
 
     return {
+        uid: decodeHtml(uidMatch ? uidMatch[1] : ''),
         ip: decodeHtml(ipMatch ? ipMatch[1] : ''),
         nick: decodeHtml(nickMatch ? nickMatch[1] : ''),
     };
@@ -155,4 +173,5 @@ export {
     extractPostNos,
     parseBoardPosts,
     parseFluidPosts,
+    parseUidBearingPosts,
 };

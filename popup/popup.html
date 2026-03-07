@@ -1,96 +1,551 @@
 <!DOCTYPE html>
 <html lang="ko">
-
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=360">
-  <title>DC Comment Protect</title>
+  <meta name="viewport" content="width=380">
+  <title>DC Defense Suite</title>
   <link rel="stylesheet" href="popup.css">
 </head>
-
 <body>
-  <div class="container">
-    <!-- 헤더 -->
+  <div class="app">
     <header class="header">
-      <h1>🛡️ DC Comment Protect</h1>
-      <p class="subtitle">유동닉 댓글 자동 삭제</p>
+      <h1>DC Defense Suite</h1>
+      <p class="subtitle">댓글 삭제 / 유동·반고닉 분류 / IP 차단 / 감시 자동화 통합 운영</p>
     </header>
 
-    <!-- 토글 스위치 -->
-    <div class="toggle-section">
-      <label class="toggle-switch">
-        <input type="checkbox" id="toggleBtn">
-        <span class="slider"></span>
-      </label>
-      <span id="toggleLabel" class="toggle-label">OFF</span>
-    </div>
-
-    <!-- 상태 정보 -->
-    <div class="status-section">
-      <h2>📊 현재 상태</h2>
-      <div class="status-grid">
-        <div class="status-item">
-          <span class="status-label">상태</span>
-          <span id="statusText" class="status-value status-off">🔴 정지</span>
+    <section class="shared-settings">
+      <div class="shared-settings-head">
+        <div>
+          <h2>공통 설정</h2>
+          <p>마이너갤 전용 범용화: 갤러리 ID / 도배기탭 번호</p>
         </div>
-        <div class="status-item">
-          <span class="status-label">현재 위치</span>
-          <span id="currentPosition" class="status-value">-</span>
+        <button id="sharedSaveConfigBtn" class="btn btn-primary">공통 저장</button>
+      </div>
+      <div class="shared-settings-grid">
+        <div class="setting-item">
+          <label for="sharedGalleryId">갤러리 ID</label>
+          <input type="text" id="sharedGalleryId" value="thesingularity" spellcheck="false">
         </div>
-        <div class="status-item">
-          <span class="status-label">삭제된 댓글</span>
-          <span id="totalDeleted" class="status-value">0개</span>
-        </div>
-        <div class="status-item">
-          <span class="status-label">완료 사이클</span>
-          <span id="cycleCount" class="status-value">0회</span>
+        <div class="setting-item">
+          <label for="sharedHeadtextId">도배기탭 번호</label>
+          <input type="number" id="sharedHeadtextId" min="1" max="9999" value="130">
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- 설정 -->
-    <details class="settings-section">
-      <summary>⚙️ 설정</summary>
-      <div class="settings-grid">
-        <div class="setting-item">
-          <label for="minPage">시작 페이지</label>
-          <input type="number" id="minPage" min="1" max="20" value="1">
-        </div>
-        <div class="setting-item">
-          <label for="maxPage">끝 페이지</label>
-          <input type="number" id="maxPage" min="1" max="20" value="5">
-        </div>
-        <div class="setting-item">
-          <label for="requestDelay">요청 딜레이 (ms)</label>
-          <input type="number" id="requestDelay" min="0" max="5000" step="50" value="100">
-        </div>
-        <div class="setting-item">
-          <label for="cycleDelay">사이클 딜레이 (ms)</label>
-          <input type="number" id="cycleDelay" min="0" max="60000" step="500" value="5000">
-        </div>
-        <div class="setting-item">
-          <label for="postConcurrency">동시 처리 수</label>
-          <input type="number" id="postConcurrency" min="1" max="50" value="8">
-        </div>
-        <button id="saveConfigBtn" class="btn btn-config">설정 저장</button>
-      </div>
-    </details>
+    <nav class="tabs" aria-label="기능 선택">
+      <button class="tab-button tab-automation is-active" data-tab="monitor"><span class="tab-label">게시물<br>자동화</span></button>
+      <button class="tab-button tab-automation" data-tab="commentMonitor"><span class="tab-label">댓글<br>자동화</span></button>
+      <button class="tab-button" data-tab="comment">댓글 방어</button>
+      <button class="tab-button" data-tab="post"><span class="tab-label">게시글<br>분류</span></button>
+      <button class="tab-button" data-tab="semiPost"><span class="tab-label">반고닉<br>분류</span></button>
+      <button class="tab-button" data-tab="ip">IP 차단</button>
+    </nav>
 
-    <!-- 로그 -->
-    <div class="log-section">
-      <h2>📜 최근 로그</h2>
-      <div id="logList" class="log-list">
-        <div class="log-empty">로그가 없습니다.</div>
-      </div>
-    </div>
+    <main class="panels">
+      <section class="panel" data-feature="commentMonitor">
+        <div class="feature-header feature-comment-monitor">
+          <div>
+            <h2>댓글 자동화</h2>
+            <p>1-2페이지 게시물 댓글 급증 후 댓글 방어 자동 제어</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="commentMonitorToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="commentMonitorToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
 
-    <!-- 하단 버튼 -->
-    <div class="footer">
-      <button id="resetBtn" class="btn btn-reset">통계 초기화</button>
-    </div>
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="commentMonitorStatusText" class="status-value status-off">🔴 정지</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 단계</span>
+            <span id="commentMonitorPhaseText" class="status-value">SEEDING</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 폴링</span>
+            <span id="commentMonitorLastPollAt" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">새 댓글</span>
+            <span id="commentMonitorNewCommentCount" class="status-value">0개</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">실제 검증 삭제</span>
+            <span id="commentMonitorVerifiedDeletedCount" class="status-value">0개</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">변화 글 수</span>
+            <span id="commentMonitorChangedPostCount" class="status-value">0개</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">공격 감지 streak</span>
+            <span id="commentMonitorAttackHitCount" class="status-value">0회</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">종료 감지 streak</span>
+            <span id="commentMonitorReleaseHitCount" class="status-value">0회</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 공격 감지</span>
+            <span id="commentMonitorTotalAttackDetected" class="status-value">0회</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 자동 종료</span>
+            <span id="commentMonitorTotalAttackReleased" class="status-value">0회</span>
+          </div>
+        </div>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label for="commentMonitorPollIntervalMs">감시 폴링 시간 (ms)</label>
+              <input type="number" id="commentMonitorPollIntervalMs" min="1000" max="60000" step="1000" value="30000">
+            </div>
+            <div class="setting-item">
+              <label for="commentMonitorPages">감시 페이지 수</label>
+              <input type="number" id="commentMonitorPages" min="1" max="10" value="2">
+            </div>
+            <div class="setting-item">
+              <label for="commentMonitorAttackNewCommentThreshold">공격 감지 새 댓글 수</label>
+              <input type="number" id="commentMonitorAttackNewCommentThreshold" min="1" max="5000" value="300">
+            </div>
+            <div class="setting-item">
+              <label for="commentMonitorAttackConsecutiveCount">공격 감지 연속 횟수</label>
+              <input type="number" id="commentMonitorAttackConsecutiveCount" min="1" max="10" value="2">
+            </div>
+            <div class="setting-item">
+              <label for="commentMonitorReleaseNewCommentThreshold">공격 종료 새 댓글 수</label>
+              <input type="number" id="commentMonitorReleaseNewCommentThreshold" min="0" max="5000" value="50">
+            </div>
+            <div class="setting-item">
+              <label for="commentMonitorReleaseVerifiedDeleteThreshold">공격 종료 실제 삭제 수</label>
+              <input type="number" id="commentMonitorReleaseVerifiedDeleteThreshold" min="0" max="5000" value="50">
+            </div>
+            <div class="setting-item">
+              <label for="commentMonitorReleaseConsecutiveCount">공격 종료 연속 횟수</label>
+              <input type="number" id="commentMonitorReleaseConsecutiveCount" min="1" max="10" value="3">
+            </div>
+            <button id="commentMonitorSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          </div>
+        </details>
+
+        <div class="action-row">
+          <button id="commentMonitorResetBtn" class="btn btn-secondary">통계 초기화</button>
+        </div>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="commentMonitorLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+      </section>
+
+      <section class="panel" data-feature="comment">
+        <div class="feature-header feature-comment">
+          <div>
+            <h2>댓글 방어</h2>
+            <p>유동닉 댓글 자동 삭제</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="commentToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="commentToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="commentStatusText" class="status-value status-off">정지</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 위치</span>
+            <span id="commentCurrentPosition" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">삭제된 댓글</span>
+            <span id="commentTotalDeleted" class="status-value">0개</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">완료 사이클</span>
+            <span id="commentCycleCount" class="status-value">0회</span>
+          </div>
+        </div>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label for="commentMinPage">시작 페이지</label>
+              <input type="number" id="commentMinPage" min="1" max="20" value="1">
+            </div>
+            <div class="setting-item">
+              <label for="commentMaxPage">끝 페이지</label>
+              <input type="number" id="commentMaxPage" min="1" max="20" value="5">
+            </div>
+            <div class="setting-item">
+              <label for="commentRequestDelay">요청 딜레이 (ms)</label>
+              <input type="number" id="commentRequestDelay" min="0" max="5000" step="50" value="100">
+            </div>
+            <div class="setting-item">
+              <label for="commentCycleDelay">사이클 딜레이 (ms)</label>
+              <input type="number" id="commentCycleDelay" min="0" max="60000" step="500" value="5000">
+            </div>
+            <div class="setting-item">
+              <label for="commentPostConcurrency">동시 처리 수</label>
+              <input type="number" id="commentPostConcurrency" min="1" max="50" value="8">
+            </div>
+            <button id="commentSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          </div>
+        </details>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="commentLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+
+        <button id="commentResetBtn" class="btn btn-secondary">통계 초기화</button>
+      </section>
+
+      <section class="panel" data-feature="post">
+        <div class="feature-header feature-post">
+          <div>
+            <h2>게시글 분류</h2>
+            <p>유동 게시글 도배기 탭 자동 분류</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="postToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="postToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="postStatusText" class="status-value status-off">정지</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 페이지</span>
+            <span id="postCurrentPosition" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">분류된 게시글</span>
+            <span id="postTotalClassified" class="status-value">0개</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">완료 사이클</span>
+            <span id="postCycleCount" class="status-value">0회</span>
+          </div>
+        </div>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label for="postMinPage">시작 페이지</label>
+              <input type="number" id="postMinPage" min="1" max="20" value="1">
+            </div>
+            <div class="setting-item">
+              <label for="postMaxPage">끝 페이지</label>
+              <input type="number" id="postMaxPage" min="1" max="20" value="5">
+            </div>
+            <div class="setting-item">
+              <label for="postRequestDelay">요청 딜레이 (ms)</label>
+              <input type="number" id="postRequestDelay" min="0" max="5000" step="50" value="500">
+            </div>
+            <div class="setting-item">
+              <label for="postCycleDelay">사이클 딜레이 (ms)</label>
+              <input type="number" id="postCycleDelay" min="0" max="60000" step="500" value="5000">
+            </div>
+            <button id="postSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          </div>
+        </details>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="postLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+
+        <button id="postResetBtn" class="btn btn-secondary">통계 초기화</button>
+      </section>
+
+      <section class="panel" data-feature="semiPost">
+        <div class="feature-header feature-semi-post">
+          <div>
+            <h2>반고닉 분류</h2>
+            <p>식별코드 작성자 게시물 비율 기반 도배기 분류</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="semiPostToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="semiPostToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="semiPostStatusText" class="status-value status-off">🔴 정지</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 페이지</span>
+            <span id="semiPostCurrentPosition" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">판정 UID</span>
+            <span id="semiPostTotalSuspiciousUid" class="status-value">0명</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">분류된 게시글</span>
+            <span id="semiPostTotalClassified" class="status-value">0개</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">완료 사이클</span>
+            <span id="semiPostCycleCount" class="status-value">0회</span>
+          </div>
+        </div>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label for="semiPostMinPage">시작 페이지</label>
+              <input type="number" id="semiPostMinPage" min="1" max="20" value="1">
+            </div>
+            <div class="setting-item">
+              <label for="semiPostMaxPage">끝 페이지</label>
+              <input type="number" id="semiPostMaxPage" min="1" max="20" value="5">
+            </div>
+            <div class="setting-item">
+              <label for="semiPostRequestDelay">요청 딜레이 (ms)</label>
+              <input type="number" id="semiPostRequestDelay" min="0" max="5000" step="50" value="500">
+            </div>
+            <div class="setting-item">
+              <label for="semiPostCycleDelay">사이클 딜레이 (ms)</label>
+              <input type="number" id="semiPostCycleDelay" min="0" max="60000" step="500" value="5000">
+            </div>
+            <div class="setting-item">
+              <label for="semiPostMinTotalActivityCount">최소 총 활동수</label>
+              <input type="number" id="semiPostMinTotalActivityCount" min="1" max="100000" value="20">
+            </div>
+            <div class="setting-item">
+              <label for="semiPostMinPostRatioPercent">최소 게시물 비율 (%)</label>
+              <input type="number" id="semiPostMinPostRatioPercent" min="1" max="100" value="95">
+            </div>
+            <button id="semiPostSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          </div>
+        </details>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="semiPostLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+
+        <button id="semiPostResetBtn" class="btn btn-secondary">통계 초기화</button>
+      </section>
+
+      <section class="panel" data-feature="ip">
+        <div class="feature-header feature-ip">
+          <div>
+            <h2>IP 차단</h2>
+            <p>도배기 탭 유동 게시물 자동 차단 / 수동 해제</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="ipToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="ipToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="ipStatusText" class="status-value status-off">정지</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 페이지</span>
+            <span id="ipCurrentPosition" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">총 차단</span>
+            <span id="ipTotalBanned" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">활성 차단</span>
+            <span id="ipActiveBanCount" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">총 해제</span>
+            <span id="ipTotalReleased" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">완료 사이클</span>
+            <span id="ipCycleCount" class="status-value">0회</span>
+          </div>
+        </div>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label for="ipMinPage">시작 페이지</label>
+              <input type="number" id="ipMinPage" min="1" max="50" value="1">
+            </div>
+            <div class="setting-item">
+              <label for="ipMaxPage">끝 페이지</label>
+              <input type="number" id="ipMaxPage" min="1" max="50" value="5">
+            </div>
+            <div class="setting-item">
+              <label for="ipRequestDelay">요청 딜레이 (ms)</label>
+              <input type="number" id="ipRequestDelay" min="0" max="10000" step="50" value="500">
+            </div>
+            <div class="setting-item">
+              <label for="ipCycleDelay">사이클 딜레이 (ms)</label>
+              <input type="number" id="ipCycleDelay" min="0" max="60000" step="500" value="5000">
+            </div>
+            <div class="setting-item">
+              <label for="ipReleaseScanMaxPages">해제 검색 페이지 수</label>
+              <input type="number" id="ipReleaseScanMaxPages" min="1" max="100" value="20">
+            </div>
+            <button id="ipSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          </div>
+        </details>
+
+        <div class="action-row">
+          <button id="ipReleaseBtn" class="btn btn-warning">내가 차단한 대상 해제</button>
+          <button id="ipResetBtn" class="btn btn-secondary">통계 초기화</button>
+        </div>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="ipLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+      </section>
+
+      <section class="panel is-active" data-feature="monitor">
+        <div class="feature-header feature-monitor">
+          <div>
+            <h2>게시물 자동화</h2>
+            <p>새 게시물 급증 감지 후 게시글 분류 / IP 차단 자동 제어</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="monitorToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="monitorToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="monitorStatusText" class="status-value status-off">정지</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 단계</span>
+            <span id="monitorPhaseText" class="status-value">SEEDING</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 폴링</span>
+            <span id="monitorLastPollAt" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">새 게시물</span>
+            <span id="monitorNewPostCount" class="status-value">0개</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">새 유동 게시물</span>
+            <span id="monitorNewFluidCount" class="status-value">0개</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">유동 비율</span>
+            <span id="monitorFluidRatio" class="status-value">0.0%</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">공격 감지 streak</span>
+            <span id="monitorAttackHitCount" class="status-value">0회</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">종료 감지 streak</span>
+            <span id="monitorReleaseHitCount" class="status-value">0회</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 공격 감지</span>
+            <span id="monitorTotalAttackDetected" class="status-value">0회</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 자동 종료</span>
+            <span id="monitorTotalAttackReleased" class="status-value">0회</span>
+          </div>
+        </div>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label for="monitorPollIntervalMs">감시 폴링 시간 (ms)</label>
+              <input type="number" id="monitorPollIntervalMs" min="1000" max="60000" step="1000" value="30000">
+            </div>
+            <div class="setting-item">
+              <label for="monitorPages">감시 페이지 수</label>
+              <input type="number" id="monitorPages" min="1" max="10" value="1">
+            </div>
+            <div class="setting-item">
+              <label for="monitorAttackNewPostThreshold">공격 감지 새 게시물 수</label>
+              <input type="number" id="monitorAttackNewPostThreshold" min="1" max="500" value="30">
+            </div>
+            <div class="setting-item">
+              <label for="monitorAttackFluidRatioThreshold">공격 감지 유동 비율 (%)</label>
+              <input type="number" id="monitorAttackFluidRatioThreshold" min="1" max="100" value="70">
+            </div>
+            <div class="setting-item">
+              <label for="monitorAttackConsecutiveCount">공격 감지 연속 횟수</label>
+              <input type="number" id="monitorAttackConsecutiveCount" min="1" max="10" value="2">
+            </div>
+            <div class="setting-item">
+              <label for="monitorReleaseNewPostThreshold">공격 종료 새 게시물 수</label>
+              <input type="number" id="monitorReleaseNewPostThreshold" min="0" max="500" value="10">
+            </div>
+            <div class="setting-item">
+              <label for="monitorReleaseFluidRatioThreshold">공격 종료 유동 비율 (%)</label>
+              <input type="number" id="monitorReleaseFluidRatioThreshold" min="0" max="100" value="40">
+            </div>
+            <div class="setting-item">
+              <label for="monitorReleaseConsecutiveCount">공격 종료 연속 횟수</label>
+              <input type="number" id="monitorReleaseConsecutiveCount" min="1" max="10" value="3">
+            </div>
+            <button id="monitorSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          </div>
+        </details>
+
+        <div class="action-row">
+          <button id="monitorResetBtn" class="btn btn-secondary">통계 초기화</button>
+        </div>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="monitorLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+      </section>
+    </main>
   </div>
 
   <script src="popup.js"></script>
 </body>
-
 </html>

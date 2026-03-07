@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "DC Comment Protect",
+  "name": "DC Defense Suite",
   "version": "1.0.0",
-  "description": "디시인사이드 유동닉 악성 댓글 자동 삭제 (부매니저용)",
+  "description": "디시인사이드 댓글 삭제, 게시글 분류, IP 차단 통합 방어 확장",
   "permissions": [
     "storage",
     "alarms",
@@ -15,6 +15,11 @@
     "service_worker": "background/background.js",
     "type": "module"
   },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
@@ -22,10 +27,5 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
-  },
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
   }
 }
