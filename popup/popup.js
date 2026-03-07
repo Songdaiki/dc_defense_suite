@@ -242,11 +242,11 @@ function bindCommentMonitorEvents() {
     const config = {
       pollIntervalMs: Math.max(1000, parseOptionalInt(dom.pollIntervalMsInput.value, 30000)),
       monitorPages: Math.max(1, parseOptionalInt(dom.pagesInput.value, 2)),
-      attackNewCommentThreshold: Math.max(1, parseOptionalInt(dom.attackNewCommentThresholdInput.value, 300)),
+      attackNewCommentThreshold: Math.max(1, parseOptionalInt(dom.attackNewCommentThresholdInput.value, 250)),
       attackConsecutiveCount: Math.max(1, parseOptionalInt(dom.attackConsecutiveCountInput.value, 2)),
       releaseNewCommentThreshold: Math.max(0, parseOptionalInt(dom.releaseNewCommentThresholdInput.value, 50)),
       releaseVerifiedDeleteThreshold: Math.max(0, parseOptionalInt(dom.releaseVerifiedDeleteThresholdInput.value, 50)),
-      releaseConsecutiveCount: Math.max(1, parseOptionalInt(dom.releaseConsecutiveCountInput.value, 3)),
+      releaseConsecutiveCount: Math.max(1, parseOptionalInt(dom.releaseConsecutiveCountInput.value, 2)),
     };
 
     const response = await sendFeatureMessage('commentMonitor', { action: 'updateConfig', config });
@@ -305,8 +305,8 @@ function bindCommentEvents() {
       minPage: parseOptionalInt(dom.minPageInput.value, 1),
       maxPage: parseOptionalInt(dom.maxPageInput.value, 5),
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 100),
-      cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 5000),
-      postConcurrency: parseOptionalInt(dom.postConcurrencyInput.value, 8),
+      cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
+      postConcurrency: parseOptionalInt(dom.postConcurrencyInput.value, 50),
     };
 
     const response = await sendFeatureMessage('comment', { action: 'updateConfig', config });
@@ -345,7 +345,7 @@ function bindPostEvents() {
       minPage: parseOptionalInt(dom.minPageInput.value, 1),
       maxPage: parseOptionalInt(dom.maxPageInput.value, 5),
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 500),
-      cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 5000),
+      cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
     };
 
     const response = await sendFeatureMessage('post', { action: 'updateConfig', config });
@@ -384,8 +384,8 @@ function bindIpEvents() {
       minPage: parseOptionalInt(dom.minPageInput.value, 1),
       maxPage: parseOptionalInt(dom.maxPageInput.value, 5),
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 500),
-      cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 5000),
-      releaseScanMaxPages: parseOptionalInt(dom.releaseScanMaxPagesInput.value, 20),
+      cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
+      releaseScanMaxPages: parseOptionalInt(dom.releaseScanMaxPagesInput.value, 40),
     };
 
     const response = await sendFeatureMessage('ip', { action: 'updateConfig', config });
@@ -472,9 +472,9 @@ function bindSemiPostEvents() {
       minPage: parseOptionalInt(dom.minPageInput.value, 1),
       maxPage: parseOptionalInt(dom.maxPageInput.value, 5),
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 500),
-      cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 5000),
+      cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
       minTotalActivityCount: Math.max(1, parseOptionalInt(dom.minTotalActivityCountInput.value, 20)),
-      minPostRatioPercent: clampPercent(dom.minPostRatioPercentInput.value, 95, 1),
+      minPostRatioPercent: clampPercent(dom.minPostRatioPercentInput.value, 90, 1),
     };
 
     const response = await sendFeatureMessage('semiPost', { action: 'updateConfig', config });
@@ -543,8 +543,8 @@ function bindMonitorEvents() {
     const config = {
       pollIntervalMs: Math.max(1000, parseOptionalInt(dom.pollIntervalMsInput.value, 30000)),
       monitorPages: Math.max(1, parseOptionalInt(dom.pagesInput.value, 1)),
-      attackNewPostThreshold: Math.max(1, parseOptionalInt(dom.attackNewPostThresholdInput.value, 30)),
-      attackFluidRatioThreshold: clampPercent(dom.attackFluidRatioThresholdInput.value, 70, 1),
+      attackNewPostThreshold: Math.max(1, parseOptionalInt(dom.attackNewPostThresholdInput.value, 50)),
+      attackFluidRatioThreshold: clampPercent(dom.attackFluidRatioThresholdInput.value, 85, 1),
       attackConsecutiveCount: Math.max(1, parseOptionalInt(dom.attackConsecutiveCountInput.value, 2)),
       releaseNewPostThreshold: Math.max(0, parseOptionalInt(dom.releaseNewPostThresholdInput.value, 10)),
       releaseFluidRatioThreshold: clampPercent(dom.releaseFluidRatioThresholdInput.value, 40, 0),
@@ -633,11 +633,11 @@ function updateCommentMonitorUI(status) {
   syncFeatureConfigInputs('commentMonitor', [
     [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 30000],
     [dom.pagesInput, status.config?.monitorPages ?? 2],
-    [dom.attackNewCommentThresholdInput, status.config?.attackNewCommentThreshold ?? 300],
+    [dom.attackNewCommentThresholdInput, status.config?.attackNewCommentThreshold ?? 250],
     [dom.attackConsecutiveCountInput, status.config?.attackConsecutiveCount ?? 2],
     [dom.releaseNewCommentThresholdInput, status.config?.releaseNewCommentThreshold ?? 50],
     [dom.releaseVerifiedDeleteThresholdInput, status.config?.releaseVerifiedDeleteThreshold ?? 50],
-    [dom.releaseConsecutiveCountInput, status.config?.releaseConsecutiveCount ?? 3],
+    [dom.releaseConsecutiveCountInput, status.config?.releaseConsecutiveCount ?? 2],
   ]);
   updateLogList(dom.logList, status.logs);
 }
@@ -660,8 +660,8 @@ function updateCommentUI(status) {
     [dom.minPageInput, status.config?.minPage ?? 1],
     [dom.maxPageInput, status.config?.maxPage ?? 5],
     [dom.requestDelayInput, status.config?.requestDelay ?? 100],
-    [dom.cycleDelayInput, status.config?.cycleDelay ?? 5000],
-    [dom.postConcurrencyInput, status.config?.postConcurrency ?? 8],
+    [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
+    [dom.postConcurrencyInput, status.config?.postConcurrency ?? 50],
   ]);
   updateLogList(dom.logList, status.logs);
 }
@@ -684,7 +684,7 @@ function updatePostUI(status) {
     [dom.minPageInput, status.config?.minPage ?? 1],
     [dom.maxPageInput, status.config?.maxPage ?? 5],
     [dom.requestDelayInput, status.config?.requestDelay ?? 500],
-    [dom.cycleDelayInput, status.config?.cycleDelay ?? 5000],
+    [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
   ]);
   updateLogList(dom.logList, status.logs);
 }
@@ -719,8 +719,8 @@ function updateIpUI(status) {
     [dom.minPageInput, status.config?.minPage ?? 1],
     [dom.maxPageInput, status.config?.maxPage ?? 5],
     [dom.requestDelayInput, status.config?.requestDelay ?? 500],
-    [dom.cycleDelayInput, status.config?.cycleDelay ?? 5000],
-    [dom.releaseScanMaxPagesInput, status.config?.releaseScanMaxPages ?? 20],
+    [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
+    [dom.releaseScanMaxPagesInput, status.config?.releaseScanMaxPages ?? 40],
   ]);
   updateLogList(dom.logList, status.logs);
 }
@@ -744,9 +744,9 @@ function updateSemiPostUI(status) {
     [dom.minPageInput, status.config?.minPage ?? 1],
     [dom.maxPageInput, status.config?.maxPage ?? 5],
     [dom.requestDelayInput, status.config?.requestDelay ?? 500],
-    [dom.cycleDelayInput, status.config?.cycleDelay ?? 5000],
+    [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
     [dom.minTotalActivityCountInput, status.config?.minTotalActivityCount ?? 20],
-    [dom.minPostRatioPercentInput, status.config?.minPostRatioPercent ?? 95],
+    [dom.minPostRatioPercentInput, status.config?.minPostRatioPercent ?? 90],
   ]);
   updateLogList(dom.logList, status.logs);
 }
@@ -773,8 +773,8 @@ function updateMonitorUI(status) {
   syncFeatureConfigInputs('monitor', [
     [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 30000],
     [dom.pagesInput, status.config?.monitorPages ?? 1],
-    [dom.attackNewPostThresholdInput, status.config?.attackNewPostThreshold ?? 30],
-    [dom.attackFluidRatioThresholdInput, status.config?.attackFluidRatioThreshold ?? 70],
+    [dom.attackNewPostThresholdInput, status.config?.attackNewPostThreshold ?? 50],
+    [dom.attackFluidRatioThresholdInput, status.config?.attackFluidRatioThreshold ?? 85],
     [dom.attackConsecutiveCountInput, status.config?.attackConsecutiveCount ?? 2],
     [dom.releaseNewPostThresholdInput, status.config?.releaseNewPostThreshold ?? 10],
     [dom.releaseFluidRatioThresholdInput, status.config?.releaseFluidRatioThreshold ?? 40],

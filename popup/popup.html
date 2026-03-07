@@ -114,7 +114,7 @@
             </div>
             <div class="setting-item">
               <label for="commentMonitorAttackNewCommentThreshold">공격 감지 새 댓글 수</label>
-              <input type="number" id="commentMonitorAttackNewCommentThreshold" min="1" max="5000" value="300">
+              <input type="number" id="commentMonitorAttackNewCommentThreshold" min="1" max="5000" value="250">
             </div>
             <div class="setting-item">
               <label for="commentMonitorAttackConsecutiveCount">공격 감지 연속 횟수</label>
@@ -130,7 +130,7 @@
             </div>
             <div class="setting-item">
               <label for="commentMonitorReleaseConsecutiveCount">공격 종료 연속 횟수</label>
-              <input type="number" id="commentMonitorReleaseConsecutiveCount" min="1" max="10" value="3">
+              <input type="number" id="commentMonitorReleaseConsecutiveCount" min="1" max="10" value="2">
             </div>
             <button id="commentMonitorSaveConfigBtn" class="btn btn-primary">설정 저장</button>
           </div>
@@ -197,11 +197,11 @@
             </div>
             <div class="setting-item">
               <label for="commentCycleDelay">사이클 딜레이 (ms)</label>
-              <input type="number" id="commentCycleDelay" min="0" max="60000" step="500" value="5000">
+              <input type="number" id="commentCycleDelay" min="0" max="60000" step="500" value="1000">
             </div>
             <div class="setting-item">
               <label for="commentPostConcurrency">동시 처리 수</label>
-              <input type="number" id="commentPostConcurrency" min="1" max="50" value="8">
+              <input type="number" id="commentPostConcurrency" min="1" max="50" value="50">
             </div>
             <button id="commentSaveConfigBtn" class="btn btn-primary">설정 저장</button>
           </div>
@@ -266,7 +266,7 @@
             </div>
             <div class="setting-item">
               <label for="postCycleDelay">사이클 딜레이 (ms)</label>
-              <input type="number" id="postCycleDelay" min="0" max="60000" step="500" value="5000">
+              <input type="number" id="postCycleDelay" min="0" max="60000" step="500" value="1000">
             </div>
             <button id="postSaveConfigBtn" class="btn btn-primary">설정 저장</button>
           </div>
@@ -335,7 +335,7 @@
             </div>
             <div class="setting-item">
               <label for="semiPostCycleDelay">사이클 딜레이 (ms)</label>
-              <input type="number" id="semiPostCycleDelay" min="0" max="60000" step="500" value="5000">
+              <input type="number" id="semiPostCycleDelay" min="0" max="60000" step="500" value="1000">
             </div>
             <div class="setting-item">
               <label for="semiPostMinTotalActivityCount">최소 총 활동수</label>
@@ -343,7 +343,7 @@
             </div>
             <div class="setting-item">
               <label for="semiPostMinPostRatioPercent">최소 게시물 비율 (%)</label>
-              <input type="number" id="semiPostMinPostRatioPercent" min="1" max="100" value="95">
+              <input type="number" id="semiPostMinPostRatioPercent" min="1" max="100" value="90">
             </div>
             <button id="semiPostSaveConfigBtn" class="btn btn-primary">설정 저장</button>
           </div>
@@ -416,11 +416,11 @@
             </div>
             <div class="setting-item">
               <label for="ipCycleDelay">사이클 딜레이 (ms)</label>
-              <input type="number" id="ipCycleDelay" min="0" max="60000" step="500" value="5000">
+              <input type="number" id="ipCycleDelay" min="0" max="60000" step="500" value="1000">
             </div>
             <div class="setting-item">
               <label for="ipReleaseScanMaxPages">해제 검색 페이지 수</label>
-              <input type="number" id="ipReleaseScanMaxPages" min="1" max="100" value="20">
+              <input type="number" id="ipReleaseScanMaxPages" min="1" max="100" value="40">
             </div>
             <button id="ipSaveConfigBtn" class="btn btn-primary">설정 저장</button>
           </div>
@@ -508,11 +508,11 @@
             </div>
             <div class="setting-item">
               <label for="monitorAttackNewPostThreshold">공격 감지 새 게시물 수</label>
-              <input type="number" id="monitorAttackNewPostThreshold" min="1" max="500" value="30">
+              <input type="number" id="monitorAttackNewPostThreshold" min="1" max="500" value="50">
             </div>
             <div class="setting-item">
               <label for="monitorAttackFluidRatioThreshold">공격 감지 유동 비율 (%)</label>
-              <input type="number" id="monitorAttackFluidRatioThreshold" min="1" max="100" value="70">
+              <input type="number" id="monitorAttackFluidRatioThreshold" min="1" max="100" value="85">
             </div>
             <div class="setting-item">
               <label for="monitorAttackConsecutiveCount">공격 감지 연속 횟수</label>

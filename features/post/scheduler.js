@@ -43,7 +43,7 @@ class Scheduler {
             minPage: 1,            // 시작 페이지
             maxPage: 5,            // 끝 페이지
             requestDelay: 500,     // 페이지 간 딜레이 (ms)
-            cycleDelay: 5000,      // 사이클 간 딜레이 (ms)
+            cycleDelay: 1000,      // 사이클 간 딜레이 (ms)
         };
     }
 

@@ -38,11 +38,11 @@ class Scheduler {
       galleryId: 'thesingularity',
       monitorPages: 2,
       pollIntervalMs: 30000,
-      attackNewCommentThreshold: 300,
+      attackNewCommentThreshold: 250,
       attackConsecutiveCount: 2,
       releaseNewCommentThreshold: 50,
       releaseVerifiedDeleteThreshold: 50,
-      releaseConsecutiveCount: 3,
+      releaseConsecutiveCount: 2,
       reseedPollCountAfterRelease: 1,
     };
   }

@@ -163,12 +163,12 @@ const schedulers = {
   monitorPages: 2,
   pollIntervalMs: 30000,
 
-  attackNewCommentThreshold: 300,
+  attackNewCommentThreshold: 250,
   attackConsecutiveCount: 2,
 
   releaseNewCommentThreshold: 50,
   releaseVerifiedDeleteThreshold: 50,
-  releaseConsecutiveCount: 3,
+  releaseConsecutiveCount: 2,
   reseedPollCountAfterRelease: 1,
 }
 ```
@@ -433,8 +433,8 @@ attackCondition = newCommentCount >= attackNewCommentThreshold
 ```
 
 예:
-- threshold = 300
-- 300이면 공격 감지 1회
+- threshold = 250
+- 250이면 공격 감지 1회
 - 299면 감지 안 함
 
 ### 9.2 공격 종료
@@ -470,12 +470,12 @@ v1에서 댓글 쪽은 각 임계치에 대해 `<=`를 명시적으로 사용한
 monitorPages: 2
 pollIntervalMs: 30000
 
-attackNewCommentThreshold: 300
+attackNewCommentThreshold: 250
 attackConsecutiveCount: 2
 
 releaseNewCommentThreshold: 50
 releaseVerifiedDeleteThreshold: 50
-releaseConsecutiveCount: 3
+releaseConsecutiveCount: 2
 reseedPollCountAfterRelease: 1
 ```
 

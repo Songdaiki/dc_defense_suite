@@ -31,9 +31,9 @@ class Scheduler {
             minPage: 1,
             maxPage: 5,
             requestDelay: 500,
-            cycleDelay: 5000,
+            cycleDelay: 1000,
             minTotalActivityCount: 20,
-            minPostRatioPercent: 95,
+            minPostRatioPercent: 90,
         };
     }
 

@@ -124,14 +124,14 @@ postRatio = postCount / (postCount + commentCount)
 기본값 추천:
 
 - `minTotalActivityCount = 20`
-- `minPostRatioPercent = 95`
+- `minPostRatioPercent = 90`
 
 예시:
 
 - 글 `886`, 댓글 `47`
   - 총 활동 `933`
   - 게시물 비율 `94.96%`
-  - 기준 `95%`면 경계값, 설정에 따라 제외/포함
+  - 기준 `90%`면 도배기 후보
 - 글 `200`, 댓글 `5`
   - 총 활동 `205`
   - 게시물 비율 `97.56%`
@@ -422,10 +422,10 @@ v1은 기존 suite fetch 스타일을 따른다.
   minPage: 1,
   maxPage: 5,
   requestDelay: 500,
-  cycleDelay: 5000,
+  cycleDelay: 1000,
 
   minTotalActivityCount: 20,
-  minPostRatioPercent: 95,
+  minPostRatioPercent: 90,
 }
 ```
 

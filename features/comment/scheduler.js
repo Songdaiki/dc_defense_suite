@@ -44,8 +44,8 @@ class Scheduler {
             minPage: 1,            // 시작 페이지 (테스트용)
             maxPage: 5,
             requestDelay: 100,     // 워커별 게시물 처리 후 딜레이 (ms)
-            cycleDelay: 5000,      // 사이클 간 딜레이 (ms)
-            postConcurrency: 8,    // 한 페이지에서 동시에 처리할 게시물 수
+            cycleDelay: 1000,      // 사이클 간 딜레이 (ms)
+            postConcurrency: 50,   // 한 페이지에서 동시에 처리할 게시물 수
             commentPageConcurrency: 4, // 한 게시물의 댓글 페이지 동시 조회 수
         };
     }

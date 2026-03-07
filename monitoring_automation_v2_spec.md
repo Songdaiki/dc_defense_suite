@@ -177,8 +177,8 @@ const schedulers = {
   monitorPages: 1,
   pollIntervalMs: 30000,
 
-  attackNewPostThreshold: 30,
-  attackFluidRatioThreshold: 70,
+  attackNewPostThreshold: 50,
+  attackFluidRatioThreshold: 85,
   attackConsecutiveCount: 2,
 
   releaseNewPostThreshold: 10,
