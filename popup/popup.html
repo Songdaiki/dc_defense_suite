@@ -3,35 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=380">
-  <title>DC Defense Suite</title>
+  <title>특궁-Ⅱ</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="app">
     <header class="header">
-      <h1>DC Defense Suite</h1>
+      <h1>
+        <span class="title-main">특궁</span>
+        <span class="title-mark">II</span>
+      </h1>
       <p class="subtitle">댓글 삭제 / 유동·반고닉 분류 / IP 차단 / 감시 자동화 통합 운영</p>
     </header>
-
-    <section class="shared-settings">
-      <div class="shared-settings-head">
-        <div>
-          <h2>공통 설정</h2>
-          <p>마이너갤 전용 범용화: 갤러리 ID / 도배기탭 번호</p>
-        </div>
-        <button id="sharedSaveConfigBtn" class="btn btn-primary">공통 저장</button>
-      </div>
-      <div class="shared-settings-grid">
-        <div class="setting-item">
-          <label for="sharedGalleryId">갤러리 ID</label>
-          <input type="text" id="sharedGalleryId" value="thesingularity" spellcheck="false">
-        </div>
-        <div class="setting-item">
-          <label for="sharedHeadtextId">도배기탭 번호</label>
-          <input type="number" id="sharedHeadtextId" min="1" max="9999" value="130">
-        </div>
-      </div>
-    </section>
 
     <nav class="tabs" aria-label="기능 선택">
       <button class="tab-button tab-automation is-active" data-tab="monitor"><span class="tab-label">게시물<br>자동화</span></button>
@@ -544,6 +527,28 @@
         </section>
       </section>
     </main>
+
+    <details class="shared-settings">
+      <summary>공통 설정</summary>
+      <div class="shared-settings-body">
+        <div class="shared-settings-head">
+          <div>
+            <p>마이너갤 전용 범용화: 갤러리 ID / 도배기탭 번호</p>
+          </div>
+          <button id="sharedSaveConfigBtn" class="btn btn-primary">공통 저장</button>
+        </div>
+        <div class="shared-settings-grid">
+          <div class="setting-item">
+            <label for="sharedGalleryId">갤러리 ID</label>
+            <input type="text" id="sharedGalleryId" value="thesingularity" spellcheck="false">
+          </div>
+          <div class="setting-item">
+            <label for="sharedHeadtextId">도배기탭 번호</label>
+            <input type="number" id="sharedHeadtextId" min="1" max="9999" value="130">
+          </div>
+        </div>
+      </div>
+    </details>
   </div>
 
   <script src="popup.js"></script>
