@@ -165,7 +165,7 @@ function renderGalleryHeader() {
       <div class="gallery-info">
         <div class="gallery-title">특갤봇 운영 내역</div>
         <div class="gallery-desc">신고 사유와 Gemini 판정 이유를 누구나 확인할 수 있는 공개 페이지</div>
-        <div class="gallery-manager">운영 봇: <strong>특갤봇</strong> · AI 엔진: <strong>Gemini</strong></div>
+        <div class="gallery-manager">운영 봇: <strong>특갤봇</strong> · AI 판사: <strong>Gemini</strong></div>
       </div>
     </div>
   `;
@@ -210,7 +210,7 @@ function renderSidebar(total, stats) {
             <span class="sidebar-info-value">특갤봇</span>
           </div>
           <div class="sidebar-info-row">
-            <span class="sidebar-info-label">AI 엔진</span>
+            <span class="sidebar-info-label">AI 판사</span>
             <span class="sidebar-info-value">Gemini</span>
           </div>
           <div class="sidebar-info-row">
