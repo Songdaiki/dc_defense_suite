@@ -503,7 +503,10 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
       if (isExternalRequest) {
         const pathname = requestUrl.pathname;
         const isPublicRoute = request.method === 'GET' && (
-          pathname === '/transparency'
+          pathname === '/'
+          || pathname === ''
+          || pathname === '/index.html'
+          || pathname === '/transparency'
           || pathname === '/transparency.css'
           || pathname === '/bot-icon.png'
           || pathname === '/gemini-icon.webp'
@@ -556,6 +559,19 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
       }
 
       const pageHealthStatus = await buildTransparencyHealthStatus(runtimeConfig);
+
+      if (request.method === 'GET' && (
+        requestUrl.pathname === '/'
+        || requestUrl.pathname === ''
+        || requestUrl.pathname === '/index.html'
+      )) {
+        response.writeHead(302, {
+          Location: '/transparency',
+          ...buildCorsHeaders(request),
+        });
+        response.end();
+        return;
+      }
 
       if (request.method === 'GET' && requestUrl.pathname === '/transparency.css') {
         writeText(response, 200, TRANSPARENCY_CSS_TEXT, 'text/css; charset=utf-8', request);
