@@ -764,25 +764,29 @@ a:hover {
 
   .board-table td,
   .board-table th {
-    padding: 6px 6px;
-    font-size: 12px;
-  }
-
-  .col-reason,
-  .col-policy {
-    display: none;
+    padding: 6px 4px;
+    font-size: 11px;
   }
 
   .col-no {
-    width: 44px;
+    width: 38px;
   }
 
   .col-decision {
-    width: 60px;
+    width: 48px;
   }
 
+  .col-policy {
+    width: 36px;
+  }
+
+  .col-reason {
+    width: 36px;
+  }
+
+
   .col-date {
-    width: 60px;
+    width: 52px;
   }
 
   .badge {
