@@ -172,24 +172,33 @@
     <details class="helper-guide-section">
       <summary>Helper 사용법</summary>
       <div class="section-header">
-        <p>PowerShell에서 아래 명령을 그대로 복붙해서 helper를 실행하거나 상태를 확인합니다.</p>
+        <p>먼저 helper 서버를 실행하고, 외부에서 접속해야 하면 다른 PowerShell 창에서 Cloudflare Tunnel을 실행합니다.</p>
       </div>
 
       <div class="helper-guide-block">
         <span class="status-label">1. helper 실행</span>
-        <textarea class="helper-guide-textarea" readonly>cd C:\Users\eorb9\projects\dc_defense_suite_repo\projects\dc_auto_bot\helper
+        <textarea class="helper-guide-textarea" readonly>cd C:\Users\eorb915\projects\dc_defense_suite-main\projects\dc_auto_bot\helper
 npm run start</textarea>
       </div>
 
       <div class="helper-guide-block">
-        <span class="status-label">2. helper 상태 확인</span>
+        <span class="status-label">2. Cloudflare Tunnel 실행</span>
+        <textarea class="helper-guide-textarea" readonly>cloudflared tunnel --url http://localhost:4317</textarea>
+        <div class="helper-guide-note">
+          터널이 만든 `https://xxxxx.trycloudflare.com` 주소로 바로 들어가지 말고, 뒤에 `/transparency`를 붙여서 접속하세요.
+          예: `https://xxxxx.trycloudflare.com/transparency`
+        </div>
+      </div>
+
+      <div class="helper-guide-block">
+        <span class="status-label">3. helper 상태 확인</span>
         <textarea class="helper-guide-textarea" readonly>Invoke-WebRequest http://127.0.0.1:4317/health | Select-Object -Expand Content</textarea>
       </div>
 
       <div class="helper-guide-block">
-        <span class="status-label">3. Windows에서 여전히 Gemini CLI를 못 찾을 때</span>
+        <span class="status-label">4. Windows에서 여전히 Gemini CLI를 못 찾을 때</span>
         <textarea class="helper-guide-textarea" readonly>$env:GEMINI_COMMAND="gemini.cmd"
-cd C:\Users\eorb9\projects\dc_defense_suite_repo\projects\dc_auto_bot\helper
+cd C:\Users\eorb915\projects\dc_defense_suite-main\projects\dc_auto_bot\helper
 npm run start</textarea>
       </div>
 

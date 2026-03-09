@@ -355,17 +355,11 @@ function formatHelperHealthDetail(helperHealth, endpoint) {
     return '-';
   }
 
-  const parts = [endpoint];
-  if (helperHealth.checkedAt) {
-    parts.push(`확인 ${formatTimestamp(helperHealth.checkedAt)}`);
+  if (helperHealth.status === 'healthy') {
+    return '';
   }
-  if (Number.isFinite(Number(helperHealth.responseTimeMs)) && Number(helperHealth.responseTimeMs) > 0) {
-    parts.push(`${Math.round(Number(helperHealth.responseTimeMs))}ms`);
-  }
-  if (helperHealth.message) {
-    parts.push(helperHealth.message);
-  }
-  return parts.join(' / ');
+
+  return helperHealth.message || '';
 }
 
 async function sendMessage(message) {
