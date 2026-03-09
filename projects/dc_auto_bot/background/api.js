@@ -144,6 +144,20 @@ async function fetchPostPage(config = {}, postNo, signal) {
   return html;
 }
 
+async function fetchPostListHTML(config = {}, page = 1, signal) {
+  const resolved = resolveConfig(config);
+  const pageNo = Math.max(1, Number(page) || 1);
+  const url = `${resolved.baseUrl}/mgallery/board/lists/?id=${resolved.galleryId}&page=${pageNo}`;
+  const response = await dcFetchWithRetry(url, { signal });
+  const html = await response.text();
+
+  if (html.includes('정상적인 접근이 아닙니다')) {
+    throw new Error('게시물 목록 페이지 접근 차단 응답을 받았습니다');
+  }
+
+  return html;
+}
+
 function extractEsno(html) {
   const variableMatch = html.match(/e_s_n_o\s*=\s*['"]([^'"]+)['"]/);
   if (variableMatch) {
@@ -779,6 +793,7 @@ export {
   fetchComments,
   fetchRecentComments,
   fetchPostPage,
+  fetchPostListHTML,
   fetchUserActivityStats,
   getCiToken,
   normalizeCliHelperEndpoint,

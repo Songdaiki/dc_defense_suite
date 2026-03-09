@@ -4,24 +4,30 @@ import {
   delay,
   executeDeleteAndBan,
   extractEsno,
+  fetchPostListHTML,
   fetchRecentComments,
   fetchPostPage,
   fetchUserActivityStats,
 } from './api.js';
 import {
   buildCommandKey,
+  extractRecommendState,
   extractPostContentForLlm,
   isDeletedComment,
   isTrustedUser,
   normalizeReportTarget,
   normalizeTrustedUsers,
   parseCommandComment,
+  parseRegularBoardPosts,
   sortCommentsByNo,
   extractPostAuthorMeta,
 } from './parser.js';
 
 const STORAGE_KEY = 'reportBotSchedulerState';
 const LEGACY_DEFAULT_HELPER_TIMEOUT_MS = 20000;
+const RECENT_REGULAR_POST_LIMIT = 100;
+const RECENT_REGULAR_POST_CACHE_MS = 5000;
+const RECENT_REGULAR_POST_MAX_PAGES = 10;
 const PHASE = {
   IDLE: 'IDLE',
   SEEDING: 'SEEDING',
@@ -47,6 +53,10 @@ class Scheduler {
     this.seeded = false;
     this.runPromise = null;
     this.activeAbortController = null;
+    this.recentRegularPostsCache = {
+      fetchedAtMs: 0,
+      posts: [],
+    };
   }
 
   async loadState() {
@@ -144,6 +154,7 @@ class Scheduler {
     this.isRunning = true;
     this.phase = PHASE.SEEDING;
     this.seeded = false;
+    this.invalidateRecentRegularPostsCache();
     this.addLog('🟢 신문고 봇 시작');
     await this.saveState();
     this.ensureRunLoop();
@@ -157,6 +168,7 @@ class Scheduler {
     }
 
     this.phase = PHASE.IDLE;
+    this.invalidateRecentRegularPostsCache();
     this.addLog('🔴 신문고 봇 중지');
     await this.saveState();
   }
@@ -332,6 +344,35 @@ class Scheduler {
     if (!authorCheck.allowed) {
       this.totalFailedCommands += 1;
       this.addLog(`⏭️ [${trustedUser.label}] 자동 처리 제외 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
+      return;
+    }
+
+    const recommendState = extractRecommendState(pageHtml);
+    if (!recommendState.success) {
+      this.totalFailedCommands += 1;
+      this.addLog(`❌ [${trustedUser.label}] 개념글 판정 실패 #${parsedCommand.targetPostNo} - ${recommendState.message}`);
+      return;
+    }
+
+    if (recommendState.isConcept) {
+      this.totalFailedCommands += 1;
+      this.addLog(`⏭️ [${trustedUser.label}] 개념글 자동 처리 제외 #${parsedCommand.targetPostNo}`);
+      return;
+    }
+
+    let recentRegularPosts = null;
+    try {
+      recentRegularPosts = await this.getRecentRegularPosts(signal);
+    } catch (error) {
+      this.totalFailedCommands += 1;
+      this.addLog(`❌ [${trustedUser.label}] 최근 100개 판정 실패 #${parsedCommand.targetPostNo} - ${error.message}`);
+      return;
+    }
+
+    const isWithinRecentWindow = recentRegularPosts.some((post) => String(post.no) === String(parsedCommand.targetPostNo));
+    if (!isWithinRecentWindow) {
+      this.totalFailedCommands += 1;
+      this.addLog(`⏭️ [${trustedUser.label}] 최근 100개 밖 자동 처리 제외 #${parsedCommand.targetPostNo}`);
       return;
     }
 
@@ -512,6 +553,63 @@ class Scheduler {
     const timestamp = formatKstTime(new Date());
     this.logs.unshift(`[${timestamp}] ${message}`);
     this.logs = trimArray(this.logs, 200);
+  }
+
+  invalidateRecentRegularPostsCache() {
+    this.recentRegularPostsCache = {
+      fetchedAtMs: 0,
+      posts: [],
+    };
+  }
+
+  async getRecentRegularPosts(signal) {
+    const now = Date.now();
+    if (
+      this.recentRegularPostsCache.posts.length > 0
+      && (now - this.recentRegularPostsCache.fetchedAtMs) < RECENT_REGULAR_POST_CACHE_MS
+    ) {
+      return this.recentRegularPostsCache.posts;
+    }
+
+    const posts = [];
+    const seen = new Set();
+
+    for (let page = 1; page <= RECENT_REGULAR_POST_MAX_PAGES && posts.length < RECENT_REGULAR_POST_LIMIT; page += 1) {
+      const html = await fetchPostListHTML(this.config, page, signal);
+      const parsedPosts = parseRegularBoardPosts(html);
+      if (parsedPosts.length === 0) {
+        break;
+      }
+
+      for (const post of parsedPosts) {
+        const postNo = String(post.no || '').trim();
+        if (!postNo || seen.has(postNo)) {
+          continue;
+        }
+
+        seen.add(postNo);
+        posts.push({
+          no: postNo,
+          subject: String(post.subject || ''),
+          currentHead: String(post.currentHead || ''),
+        });
+
+        if (posts.length >= RECENT_REGULAR_POST_LIMIT) {
+          break;
+        }
+      }
+    }
+
+    if (posts.length === 0) {
+      throw new Error('전체글 목록에서 최근 regular row를 찾지 못했습니다.');
+    }
+
+    this.recentRegularPostsCache = {
+      fetchedAtMs: now,
+      posts,
+    };
+
+    return posts;
   }
 }
 

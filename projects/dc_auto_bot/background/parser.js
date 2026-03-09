@@ -222,6 +222,100 @@ function extractPostAuthorMeta(html) {
   };
 }
 
+function parseRegularBoardPosts(html) {
+  const htmlText = String(html || '');
+  const results = [];
+  const rowPattern = /<tr[^>]*class="ub-content[^"]*"[^>]*>([\s\S]*?)<\/tr>/ig;
+  let match = null;
+
+  while ((match = rowPattern.exec(htmlText)) !== null) {
+    const rowHtml = String(match[1] || '');
+    const gallNumMatch = rowHtml.match(/<td[^>]*class="gall_num[^"]*"[^>]*>([\s\S]*?)<\/td>/i);
+    const postNo = decodeHtml(String(gallNumMatch?.[1] || '').replace(/<[^>]+>/g, ' '))
+      .replace(/\s+/g, ' ')
+      .trim();
+    const currentHead = extractBoardRowHead(rowHtml);
+
+    if (!postNo || !isRegularBoardRow(rowHtml) || isExcludedBoardHead(currentHead)) {
+      continue;
+    }
+
+    results.push({
+      no: postNo,
+      subject: extractBoardRowSubject(rowHtml),
+      currentHead,
+    });
+  }
+
+  return results;
+}
+
+function isRegularBoardRow(rowHtml) {
+  const gallNumMatch = String(rowHtml || '').match(/<td[^>]*class="gall_num[^"]*"[^>]*>([\s\S]*?)<\/td>/i);
+  if (!gallNumMatch) {
+    return false;
+  }
+
+  const gallNumText = decodeHtml(String(gallNumMatch[1] || '').replace(/<[^>]+>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
+  return /^\d+$/.test(gallNumText);
+}
+
+function extractBoardRowSubject(rowHtml) {
+  const titleMatch = String(rowHtml || '').match(/<td[^>]*class="gall_tit[^"]*"[^>]*>([\s\S]*?)<\/td>/i);
+  if (!titleMatch) {
+    return '';
+  }
+
+  return decodeHtml(String(titleMatch[1] || ''))
+    .replace(/<em[^>]*class="icon_[^"]*"[\s\S]*?<\/em>/gi, ' ')
+    .replace(/<span[^>]*class="reply_num"[\s\S]*?<\/span>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractBoardRowHead(rowHtml) {
+  const subjectMatch = String(rowHtml || '').match(/<td[^>]*class="gall_subject[^"]*"[^>]*>([\s\S]*?)<\/td>/i);
+  if (!subjectMatch) {
+    return '';
+  }
+
+  return decodeHtml(String(subjectMatch[1] || ''))
+    .replace(/<p[^>]*class="subject_inner"[\s\S]*?<\/p>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*,\s*/g, ',')
+    .replace(/,+$/g, '')
+    .trim();
+}
+
+function isExcludedBoardHead(currentHead) {
+  const normalizedHead = String(currentHead || '').replace(/\s+/g, ' ').trim();
+  return normalizedHead === '공지' || normalizedHead === '설문';
+}
+
+function extractRecommendState(html) {
+  const htmlText = String(html || '');
+  const recommendMatch = htmlText.match(/<input[^>]*id=["']recommend["'][^>]*value=["']([^"']*)["']/i);
+  if (!recommendMatch) {
+    return {
+      success: false,
+      message: '게시물 recommend 상태를 찾지 못했습니다.',
+      recommendState: '',
+      isConcept: false,
+    };
+  }
+
+  const recommendState = String(recommendMatch[1] || '').trim();
+  return {
+    success: true,
+    recommendState,
+    isConcept: recommendState === 'K',
+  };
+}
+
 function decodeHtml(text) {
   return String(text || '')
     .replace(/&amp;/g, '&')
@@ -338,4 +432,6 @@ export {
   sortCommentsByNo,
   extractPostAuthorMeta,
   extractPostContentForLlm,
+  parseRegularBoardPosts,
+  extractRecommendState,
 };
