@@ -630,8 +630,9 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
 
       if (request.method === 'GET' && requestUrl.pathname === '/transparency') {
         const cursor = Math.max(0, Number(requestUrl.searchParams.get('cursor') || 0));
+        const currentFilter = String(requestUrl.searchParams.get('decision') || '').trim().toLowerCase();
         const listResult = await store.listRecords({
-          decision: requestUrl.searchParams.get('decision') || '',
+          decision: currentFilter,
           policyId: requestUrl.searchParams.get('policyId') || '',
           limit: requestUrl.searchParams.get('limit') || '50',
           cursor,
@@ -645,6 +646,7 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
             total: listResult.total,
             cursor,
             healthStatus: pageHealthStatus,
+            currentFilter,
           }),
           'text/html; charset=utf-8',
           request,
@@ -1075,6 +1077,63 @@ function sanitizeRecordRequest(input) {
     };
   }
 
+  const status = String(input.status || 'completed').trim().toLowerCase();
+  if (status === 'pending') {
+    return {
+      success: true,
+      recordInput: {
+        id: String(input.id || '').trim(),
+        source,
+        decisionSource: String(input.decisionSource || 'gemini').trim() || 'gemini',
+        status: 'pending',
+        targetUrl,
+        targetPostNo,
+        title: String(input.title || '').trim(),
+        bodyText: String(input.bodyText || '').trim(),
+        reportReason: String(input.reportReason || '').trim(),
+        imageUrls: Array.isArray(input.imageUrls)
+          ? input.imageUrls.map((value) => String(value || '').trim()).filter(Boolean).slice(0, MAX_IMAGE_URLS)
+          : [],
+        decision: '',
+        confidence: null,
+        policyIds: [],
+        reason: String(input.reason || '').trim() || '검토중',
+      },
+    };
+  }
+
+  if (status === 'failed') {
+    const reason = String(input.reason || '').trim();
+    if (!reason) {
+      return {
+        success: false,
+        message: 'failed record에는 reason 값이 필요합니다.',
+      };
+    }
+
+    return {
+      success: true,
+      recordInput: {
+        id: String(input.id || '').trim(),
+        source,
+        decisionSource: String(input.decisionSource || 'gemini').trim() || 'gemini',
+        status: 'failed',
+        targetUrl,
+        targetPostNo,
+        title: String(input.title || '').trim(),
+        bodyText: String(input.bodyText || '').trim(),
+        reportReason: String(input.reportReason || '').trim(),
+        imageUrls: Array.isArray(input.imageUrls)
+          ? input.imageUrls.map((value) => String(value || '').trim()).filter(Boolean).slice(0, MAX_IMAGE_URLS)
+          : [],
+        decision: '',
+        confidence: null,
+        policyIds: [],
+        reason,
+      },
+    };
+  }
+
   const decisionSource = String(input.decisionSource || 'gemini').trim();
   if (decisionSource === 'image_analysis_timeout_fallback') {
     const targetUrl = String(input.targetUrl || '').trim();
@@ -1099,6 +1158,7 @@ function sanitizeRecordRequest(input) {
         id: String(input.id || '').trim(),
         source,
         decisionSource,
+        status: 'completed',
         targetUrl,
         targetPostNo,
         title: String(input.title || '').trim(),
@@ -1130,13 +1190,14 @@ function sanitizeRecordRequest(input) {
 
   return {
     success: true,
-    recordInput: {
-      id: String(input.id || '').trim(),
-      source,
-      decisionSource,
-      targetUrl,
-      targetPostNo,
-      title: String(input.title || '').trim(),
+      recordInput: {
+        id: String(input.id || '').trim(),
+        source,
+        decisionSource,
+        status: 'completed',
+        targetUrl,
+        targetPostNo,
+        title: String(input.title || '').trim(),
       bodyText: String(input.bodyText || '').trim(),
       reportReason: String(input.reportReason || '').trim(),
       imageUrls: Array.isArray(input.imageUrls)
@@ -1165,6 +1226,7 @@ async function preparePublicRecord(input, runtimeConfig) {
     updatedAt: new Date().toISOString(),
     source: input.source,
     decisionSource: input.decisionSource,
+    status: String(input.status || 'completed'),
     targetUrl: input.targetUrl,
     targetPostNo: input.targetPostNo,
     publicTitle: String(input.title || '').trim(),

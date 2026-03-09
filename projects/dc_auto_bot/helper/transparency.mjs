@@ -1,6 +1,5 @@
-function renderTransparencyListPage({ records, nextCursor, total, healthStatus }) {
+function renderTransparencyListPage({ records, nextCursor, total, healthStatus, currentFilter = '' }) {
   const stats = countDecisions(records);
-  const currentFilter = '';
 
   const tableRows = records.length > 0
     ? records.map((record) => renderTableRow(record)).join('')
@@ -11,7 +10,7 @@ function renderTransparencyListPage({ records, nextCursor, total, healthStatus }
     : '';
 
   const nextLink = nextCursor
-    ? `<a class="pager-link" href="/transparency?cursor=${encodeURIComponent(nextCursor)}">다음 ▶</a>`
+    ? `<a class="pager-link" href="${escapeAttribute(buildListHref(nextCursor, currentFilter))}">다음 ▶</a>`
     : '';
 
   const tableBlock = records.length > 0
@@ -62,13 +61,18 @@ function renderTransparencyListPage({ records, nextCursor, total, healthStatus }
       </div>
 
       ${renderSidebar(total, stats)}
+      <script>
+        setTimeout(() => {
+          window.location.reload();
+        }, 5000);
+      </script>
     `,
     healthStatus,
   );
 }
 
 function renderTransparencyDetailPage(record, healthStatus) {
-  const decision = getDecisionLabel(record.decision);
+  const decision = getDecisionLabel(record.decision, record.status);
 
   const thumbnailSection = record.blurredThumbnailPath
     ? `
@@ -117,11 +121,11 @@ function renderTransparencyDetailPage(record, healthStatus) {
                 </tr>
                 <tr>
                   <th>신뢰도</th>
-                  <td>${escapeHtml(formatConfidence(record.confidence))}</td>
+                  <td>${escapeHtml(formatConfidence(record.confidence, record.status))}</td>
                 </tr>
                 <tr>
                   <th>정책 ID</th>
-                  <td>${escapeHtml(formatPolicyIds(record.policyIds))}</td>
+                  <td>${escapeHtml(formatPolicyIds(record.policyIds, record.status))}</td>
                 </tr>
               </tbody>
             </table>
@@ -129,7 +133,7 @@ function renderTransparencyDetailPage(record, healthStatus) {
 
           <div class="reason-box">
             <h3><img class="gemini-icon" src="/gemini-icon.webp" alt="Gemini" width="14" height="14"> Gemini 판단 이유</h3>
-            <p class="reason-text">${escapeHtml(record.reason || '-')}</p>
+            <p class="reason-text">${escapeHtml(formatReason(record))}</p>
           </div>
 
           <div class="detail-footer">
@@ -171,6 +175,18 @@ function renderFilterTabs(currentFilter) {
   }).join('');
 
   return `<div class="filter-tabs">${tabHtml}</div>`;
+}
+
+function buildListHref(cursor, currentFilter) {
+  const params = new URLSearchParams();
+  if (currentFilter) {
+    params.set('decision', currentFilter);
+  }
+  if (cursor) {
+    params.set('cursor', String(cursor));
+  }
+  const query = params.toString();
+  return query ? `/transparency?${query}` : '/transparency';
 }
 
 function renderSidebar(total, stats) {
@@ -278,7 +294,7 @@ function renderSidebar(total, stats) {
 }
 
 function renderTableRow(record) {
-  const decision = getDecisionLabel(record.decision);
+  const decision = getDecisionLabel(record.decision, record.status);
   const postNo = record.targetPostNo || '-';
   const title = record.publicTitle || '(제목 없음)';
   const detailHref = `/transparency/${encodeURIComponent(record.id)}`;
@@ -351,6 +367,14 @@ function countDecisions(records) {
   let review = 0;
 
   for (const record of records) {
+    const status = String(record.status || '').toLowerCase();
+    if (status === 'pending') {
+      review += 1;
+      continue;
+    }
+    if (status === 'failed') {
+      continue;
+    }
     const d = String(record.decision || '').toLowerCase();
     if (d === 'allow') allow += 1;
     else if (d === 'deny') deny += 1;
@@ -360,7 +384,15 @@ function countDecisions(records) {
   return { allow, deny, review };
 }
 
-function getDecisionLabel(decision) {
+function getDecisionLabel(decision, status = 'completed') {
+  const normalizedStatus = String(status || '').trim().toLowerCase();
+  if (normalizedStatus === 'pending') {
+    return { label: '검토중', className: 'pending' };
+  }
+  if (normalizedStatus === 'failed') {
+    return { label: '처리 실패', className: 'unknown' };
+  }
+
   const normalizedDecision = String(decision || '').trim().toLowerCase();
   if (normalizedDecision === 'allow') {
     return { label: '삭제 승인', className: 'allow' };
@@ -412,7 +444,10 @@ function formatShortDate(value) {
   }
 }
 
-function formatConfidence(value) {
+function formatConfidence(value, status = 'completed') {
+  if (String(status || '').toLowerCase() === 'pending') {
+    return '검토중';
+  }
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue.toFixed(2) : '-';
 }
@@ -426,7 +461,10 @@ function formatImageCount(value) {
   return `${Math.floor(numericValue)}장`;
 }
 
-function formatPolicyIds(values) {
+function formatPolicyIds(values, status = 'completed') {
+  if (String(status || '').toLowerCase() === 'pending') {
+    return '검토중';
+  }
   const policyIds = Array.isArray(values) ? values.map((value) => String(value || '').trim()).filter(Boolean) : [];
   if (policyIds.length === 0) {
     return '-';
@@ -435,6 +473,13 @@ function formatPolicyIds(values) {
   return policyIds
     .map((policyId) => (policyId.toUpperCase() === 'NONE' ? '위반 없음' : policyId))
     .join(', ');
+}
+
+function formatReason(record) {
+  if (String(record?.status || '').toLowerCase() === 'pending') {
+    return '검토중';
+  }
+  return String(record?.reason || '-');
 }
 
 function truncateText(value, maxLength) {

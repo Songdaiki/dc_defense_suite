@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
 const VALID_DECISIONS = new Set(['allow', 'deny', 'review']);
+const VALID_STATUSES = new Set(['pending', 'completed', 'failed']);
 function createModerationRecordStore(filePath) {
   return new ModerationRecordStore(filePath);
 }
@@ -39,7 +40,7 @@ class ModerationRecordStore {
       .map((line) => safeParseJson(line))
       .filter((entry) => entry && typeof entry === 'object' && !Array.isArray(entry))
       .map((entry) => normalizePublicModerationRecord(entry))
-      .filter((entry) => entry && entry.id && entry.decision && entry.reason);
+      .filter((entry) => entry && isPersistablePublicRecord(entry));
 
     sortRecordsDescending(this.records);
     this.loaded = true;
@@ -48,7 +49,7 @@ class ModerationRecordStore {
   async upsertRecord(input) {
     await this.init();
     const nextRecord = normalizePublicModerationRecord(input);
-    if (!nextRecord || !nextRecord.id || !nextRecord.decision || !nextRecord.reason) {
+    if (!nextRecord || !isPersistablePublicRecord(nextRecord)) {
       throw new Error('공개 moderation record 형식이 올바르지 않습니다.');
     }
     const existingIndex = this.records.findIndex((record) => record.id === nextRecord.id);
@@ -108,7 +109,7 @@ class ModerationRecordStore {
   }
 
   async persist() {
-    this.records = this.records.filter((record) => record && record.id && record.decision && record.reason);
+    this.records = this.records.filter((record) => isPersistablePublicRecord(record));
     const serialized = this.records.map((record) => JSON.stringify(record)).join('\n');
     this.writePromise = this.writePromise.then(() => writeFile(this.filePath, serialized ? `${serialized}\n` : '', 'utf8'));
     await this.writePromise;
@@ -131,6 +132,7 @@ function normalizePublicModerationRecord(input) {
     updatedAt,
     source: source || 'auto_report',
     decisionSource: normalizeOptionalString(input.decisionSource) || 'gemini',
+    status: normalizeStatus(input.status) || 'completed',
     targetUrl: normalizeOptionalString(input.targetUrl),
     targetPostNo: normalizeOptionalString(input.targetPostNo),
     publicTitle: rawTitle || '(제목 없음)',
@@ -162,6 +164,11 @@ function normalizeIsoDate(value) {
 function normalizeDecision(value) {
   const text = String(value || '').trim().toLowerCase();
   return VALID_DECISIONS.has(text) ? text : '';
+}
+
+function normalizeStatus(value) {
+  const text = String(value || '').trim().toLowerCase();
+  return VALID_STATUSES.has(text) ? text : '';
 }
 
 function normalizeOptionalString(value) {
@@ -220,6 +227,18 @@ function sortRecordsDescending(records) {
     }
     return String(right.id || '').localeCompare(String(left.id || ''));
   });
+}
+
+function isPersistablePublicRecord(record) {
+  if (!record || !record.id || !record.reason) {
+    return false;
+  }
+
+  if (record.status === 'pending' || record.status === 'failed') {
+    return true;
+  }
+
+  return Boolean(record.decision);
 }
 
 export {

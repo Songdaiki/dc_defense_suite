@@ -336,19 +336,56 @@ class Scheduler {
       return;
     }
 
+    const recordId = createRecordId();
     const pageHtml = await fetchPostPage(this.config, parsedCommand.targetPostNo, signal);
-    const authorCheck = await this.evaluateTargetAuthorFromPageHtml(pageHtml, this.config, signal);
     const content = extractPostContentForLlm(pageHtml, this.config.baseUrl);
+    await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+      id: recordId,
+      source: 'auto_report',
+      status: 'pending',
+      targetUrl: parsedCommand.targetUrl,
+      targetPostNo: parsedCommand.targetPostNo,
+      reportReason: parsedCommand.reasonText,
+      title: content.title,
+      bodyText: content.bodyText,
+      imageUrls: content.imageUrls,
+      reason: '검토중',
+    }), signal);
+    const authorCheck = await this.evaluateTargetAuthorFromPageHtml(pageHtml, this.config, signal);
 
     if (!authorCheck.success) {
       this.totalFailedCommands += 1;
       this.addLog(`❌ [${trustedUser.label}] 작성자 판정 실패 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
+      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+        id: recordId,
+        source: 'auto_report',
+        status: 'failed',
+        targetUrl: parsedCommand.targetUrl,
+        targetPostNo: parsedCommand.targetPostNo,
+        reportReason: parsedCommand.reasonText,
+        title: content.title,
+        bodyText: content.bodyText,
+        imageUrls: content.imageUrls,
+        reason: `작성자 판정 실패: ${authorCheck.message}`,
+      }), signal);
       return;
     }
 
     if (!authorCheck.allowed) {
       this.totalFailedCommands += 1;
       this.addLog(`⏭️ [${trustedUser.label}] 자동 처리 제외 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
+      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+        id: recordId,
+        source: 'auto_report',
+        status: 'failed',
+        targetUrl: parsedCommand.targetUrl,
+        targetPostNo: parsedCommand.targetPostNo,
+        reportReason: parsedCommand.reasonText,
+        title: content.title,
+        bodyText: content.bodyText,
+        imageUrls: content.imageUrls,
+        reason: `v2 core 작성자 필터 미통과: ${authorCheck.message}`,
+      }), signal);
       return;
     }
 
@@ -356,12 +393,36 @@ class Scheduler {
     if (!recommendState.success) {
       this.totalFailedCommands += 1;
       this.addLog(`❌ [${trustedUser.label}] 개념글 판정 실패 #${parsedCommand.targetPostNo} - ${recommendState.message}`);
+      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+        id: recordId,
+        source: 'auto_report',
+        status: 'failed',
+        targetUrl: parsedCommand.targetUrl,
+        targetPostNo: parsedCommand.targetPostNo,
+        reportReason: parsedCommand.reasonText,
+        title: content.title,
+        bodyText: content.bodyText,
+        imageUrls: content.imageUrls,
+        reason: `개념글 판정 실패: ${recommendState.message}`,
+      }), signal);
       return;
     }
 
     if (recommendState.isConcept) {
       this.totalFailedCommands += 1;
       this.addLog(`⏭️ [${trustedUser.label}] 개념글 자동 처리 제외 #${parsedCommand.targetPostNo}`);
+      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+        id: recordId,
+        source: 'auto_report',
+        status: 'failed',
+        targetUrl: parsedCommand.targetUrl,
+        targetPostNo: parsedCommand.targetPostNo,
+        reportReason: parsedCommand.reasonText,
+        title: content.title,
+        bodyText: content.bodyText,
+        imageUrls: content.imageUrls,
+        reason: '개념글은 자동 삭제/차단하지 않습니다.',
+      }), signal);
       return;
     }
 
@@ -371,6 +432,18 @@ class Scheduler {
     } catch (error) {
       this.totalFailedCommands += 1;
       this.addLog(`❌ [${trustedUser.label}] 최근 100개 판정 실패 #${parsedCommand.targetPostNo} - ${error.message}`);
+      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+        id: recordId,
+        source: 'auto_report',
+        status: 'failed',
+        targetUrl: parsedCommand.targetUrl,
+        targetPostNo: parsedCommand.targetPostNo,
+        reportReason: parsedCommand.reasonText,
+        title: content.title,
+        bodyText: content.bodyText,
+        imageUrls: content.imageUrls,
+        reason: `최근 100개 판정 실패: ${error.message}`,
+      }), signal);
       return;
     }
 
@@ -378,6 +451,18 @@ class Scheduler {
     if (!isWithinRecentWindow) {
       this.totalFailedCommands += 1;
       this.addLog(`⏭️ [${trustedUser.label}] 최근 100개 밖 자동 처리 제외 #${parsedCommand.targetPostNo}`);
+      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+        id: recordId,
+        source: 'auto_report',
+        status: 'failed',
+        targetUrl: parsedCommand.targetUrl,
+        targetPostNo: parsedCommand.targetPostNo,
+        reportReason: parsedCommand.reasonText,
+        title: content.title,
+        bodyText: content.bodyText,
+        imageUrls: content.imageUrls,
+        reason: '최근 100개 regular row 밖 게시물입니다.',
+      }), signal);
       return;
     }
 
@@ -410,8 +495,9 @@ class Scheduler {
           this.totalSucceededCommands += 1;
           this.addLog(`✅ [${trustedUser.label}] 이미지 분석 timeout fallback 처리 #${parsedCommand.targetPostNo}`);
           await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-            id: createRecordId(),
+            id: recordId,
             source: 'auto_report',
+            status: 'completed',
             decisionSource: 'image_analysis_timeout_fallback',
             targetUrl: parsedCommand.targetUrl,
             targetPostNo: parsedCommand.targetPostNo,
@@ -434,12 +520,25 @@ class Scheduler {
 
       this.totalFailedCommands += 1;
       this.addLog(`❌ [${trustedUser.label}] LLM helper 실패 #${parsedCommand.targetPostNo} - ${helperResult.message || '응답 확인 실패'}`);
+      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+        id: recordId,
+        source: 'auto_report',
+        status: 'failed',
+        targetUrl: parsedCommand.targetUrl,
+        targetPostNo: parsedCommand.targetPostNo,
+        reportReason: parsedCommand.reasonText,
+        title: content.title,
+        bodyText: content.bodyText,
+        imageUrls: content.imageUrls,
+        reason: helperResult.message || 'CLI helper 판정 실패',
+      }), signal);
       return;
     }
 
     await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-      id: createRecordId(),
+      id: recordId,
       source: 'auto_report',
+      status: 'completed',
       targetUrl: parsedCommand.targetUrl,
       targetPostNo: parsedCommand.targetPostNo,
       reportReason: parsedCommand.reasonText,

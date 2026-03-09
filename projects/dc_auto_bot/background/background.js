@@ -333,12 +333,25 @@ async function runLlmTest(targetUrl, reportReason) {
     ...scheduler.config,
     galleryId: parsedTarget.targetGalleryId || scheduler.config.galleryId,
   });
+  const recordId = createRecordId();
   let responseSuccess = false;
   let responseMessage = '';
 
   try {
     const pageHtml = await fetchPostPage(llmConfig, parsedTarget.targetPostNo);
     const content = extractPostContentForLlm(pageHtml, llmConfig.baseUrl);
+    await persistTransparencyRecordBestEffort(llmConfig, buildTransparencyRecord({
+      id: recordId,
+      source: 'manual_test',
+      status: 'pending',
+      targetUrl,
+      targetPostNo: parsedTarget.targetPostNo,
+      reportReason,
+      title: content.title,
+      bodyText: content.bodyText,
+      imageUrls: content.imageUrls,
+      reason: '검토중',
+    }));
     const authorCheck = await scheduler.evaluateTargetAuthorFromPageHtml(pageHtml, llmConfig);
     const authorFilter = mapAuthorFilterResult(authorCheck);
 
@@ -355,6 +368,18 @@ async function runLlmTest(targetUrl, reportReason) {
       };
       llmState.lastTestAt = new Date().toISOString();
       await saveLlmState();
+      await persistTransparencyRecordBestEffort(llmConfig, buildTransparencyRecord({
+        id: recordId,
+        source: 'manual_test',
+        status: 'failed',
+        targetUrl,
+        targetPostNo: parsedTarget.targetPostNo,
+        reportReason,
+        title: content.title,
+        bodyText: content.bodyText,
+        imageUrls: content.imageUrls,
+        reason: message,
+      }));
       responseMessage = message;
     } else if (!authorCheck.allowed) {
       const message = `v2 core 작성자 필터 미통과: ${authorCheck.message}`;
@@ -369,6 +394,18 @@ async function runLlmTest(targetUrl, reportReason) {
       };
       llmState.lastTestAt = new Date().toISOString();
       await saveLlmState();
+      await persistTransparencyRecordBestEffort(llmConfig, buildTransparencyRecord({
+        id: recordId,
+        source: 'manual_test',
+        status: 'failed',
+        targetUrl,
+        targetPostNo: parsedTarget.targetPostNo,
+        reportReason,
+        title: content.title,
+        bodyText: content.bodyText,
+        imageUrls: content.imageUrls,
+        reason: message,
+      }));
       responseMessage = message;
     } else {
       const result = await callCliHelperJudge(llmConfig, {
@@ -395,10 +432,24 @@ async function runLlmTest(targetUrl, reportReason) {
       llmState.lastTestAt = new Date().toISOString();
       await saveLlmState();
       if (!result.success) {
+        await persistTransparencyRecordBestEffort(llmConfig, buildTransparencyRecord({
+          id: recordId,
+          source: 'manual_test',
+          status: 'failed',
+          targetUrl,
+          targetPostNo: parsedTarget.targetPostNo,
+          reportReason,
+          title: content.title,
+          bodyText: content.bodyText,
+          imageUrls: content.imageUrls,
+          reason: result.message || 'CLI helper 판정 실패',
+        }));
         responseMessage = result.message || 'CLI helper 판정 실패';
       } else {
         const recordSaveResult = await persistTransparencyRecordBestEffort(llmConfig, buildTransparencyRecord({
+          id: recordId,
           source: 'manual_test',
+          status: 'completed',
           targetUrl,
           targetPostNo: parsedTarget.targetPostNo,
           reportReason,
@@ -459,10 +510,12 @@ function getConfidenceThresholdValue(value) {
 
 function buildTransparencyRecord(input) {
   return {
-    id: createRecordId(),
+    id: String(input.id || createRecordId()),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     source: String(input.source || 'manual_test'),
+    status: String(input.status || 'completed'),
+    decisionSource: String(input.decisionSource || 'gemini'),
     targetUrl: String(input.targetUrl || ''),
     targetPostNo: String(input.targetPostNo || ''),
     reportReason: String(input.reportReason || ''),
