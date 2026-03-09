@@ -291,6 +291,9 @@ function mapAuthorFilterResult(authorCheck) {
   if (message.startsWith('깡계(')) {
     return 'low_activity';
   }
+  if (message.startsWith('글편중(')) {
+    return 'post_dominant';
+  }
   if (message.startsWith('일반 계정(')) {
     return 'normal';
   }

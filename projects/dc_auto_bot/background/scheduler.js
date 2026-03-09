@@ -26,6 +26,7 @@ import {
 
 const STORAGE_KEY = 'reportBotSchedulerState';
 const LEGACY_DEFAULT_HELPER_TIMEOUT_MS = 20000;
+const POST_DOMINANT_RATIO_THRESHOLD = 0.9;
 const RECENT_REGULAR_POST_LIMIT = 100;
 const RECENT_REGULAR_POST_CACHE_MS = 5000;
 const RECENT_REGULAR_POST_MAX_PAGES = 10;
@@ -488,18 +489,31 @@ class Scheduler {
     }
 
     const threshold = Math.max(1, Number(evaluationConfig.lowActivityThreshold) || 100);
-    if (stats.totalActivityCount < threshold) {
+    const totalActivityCount = Math.max(0, Number(stats.totalActivityCount) || 0);
+    const postCount = Math.max(0, Number(stats.postCount) || 0);
+    const commentCount = Math.max(0, Number(stats.commentCount) || 0);
+    const postRatio = totalActivityCount > 0 ? postCount / totalActivityCount : 0;
+
+    if (totalActivityCount < threshold) {
       return {
         success: true,
         allowed: true,
-        message: `깡계(${authorMeta.nick || authorMeta.uid} ${stats.totalActivityCount})`,
+        message: `깡계(${authorMeta.nick || authorMeta.uid} ${totalActivityCount})`,
+      };
+    }
+
+    if (postRatio >= POST_DOMINANT_RATIO_THRESHOLD) {
+      return {
+        success: true,
+        allowed: true,
+        message: `글편중(${authorMeta.nick || authorMeta.uid} 글 ${postCount} 댓글 ${commentCount} 비중 ${postRatio.toFixed(2)})`,
       };
     }
 
     return {
       success: true,
       allowed: false,
-      message: `일반 계정(${authorMeta.nick || authorMeta.uid} ${stats.totalActivityCount})`,
+      message: `일반 계정(${authorMeta.nick || authorMeta.uid} 글 ${postCount} 댓글 ${commentCount} 비중 ${postRatio.toFixed(2)})`,
     };
   }
 
@@ -641,6 +655,9 @@ function mapAuthorFilterResult(authorCheck) {
   }
   if (message.startsWith('깡계(')) {
     return 'low_activity';
+  }
+  if (message.startsWith('글편중(')) {
+    return 'post_dominant';
   }
   if (message.startsWith('일반 계정(')) {
     return 'normal';
