@@ -105,8 +105,9 @@ function parseTargetUrl(targetUrl) {
 }
 
 function parseCommandComment(comment, commandPrefix) {
-  const memo = String(comment?.memo || '').trim();
+  const rawMemo = String(comment?.memo || '').trim();
   const prefix = String(commandPrefix || '').trim();
+  const memo = normalizeCommandMemo(rawMemo);
 
   if (!memo || !prefix || !memo.includes(prefix)) {
     return {
@@ -115,10 +116,10 @@ function parseCommandComment(comment, commandPrefix) {
     };
   }
 
-  const linkMatch = memo.match(/"([^"]+)"/);
+  const targetUrl = extractCommandUrl(memo);
   const reasonMatch = memo.match(/사유\s*:\s*(.+)$/);
 
-  if (!linkMatch) {
+  if (!targetUrl) {
     return {
       success: false,
       reason: '링크 없음',
@@ -132,7 +133,6 @@ function parseCommandComment(comment, commandPrefix) {
     };
   }
 
-  const targetUrl = linkMatch[1].trim();
   const parsedTarget = parseTargetUrl(targetUrl);
   if (!parsedTarget.success) {
     return {
@@ -155,6 +155,34 @@ function parseCommandComment(comment, commandPrefix) {
 
 function buildCommandKey(galleryId, targetGalleryId, targetPostNo) {
   return `${targetGalleryId || galleryId}:${targetPostNo}`;
+}
+
+function normalizeCommandMemo(memo) {
+  return decodeHtml(String(memo || ''))
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractCommandUrl(memo) {
+  const hrefMatch = memo.match(/href\s*=\s*["']([^"']+)["']/i);
+  if (hrefMatch && hrefMatch[1]) {
+    return hrefMatch[1].trim();
+  }
+
+  const quotedMatch = memo.match(/["'](https?:\/\/[^"']+)["']/i);
+  if (quotedMatch && quotedMatch[1]) {
+    return quotedMatch[1].trim();
+  }
+
+  const rawMatch = memo.match(/https?:\/\/[^\s<>'"]+/i);
+  if (rawMatch && rawMatch[0]) {
+    return rawMatch[0].trim();
+  }
+
+  return '';
 }
 
 function isTrustedUser(comment, trustedUsers) {

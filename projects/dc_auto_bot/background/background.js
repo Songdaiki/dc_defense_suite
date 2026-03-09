@@ -136,7 +136,7 @@ async function updateConfig(config) {
   nextConfig.dailyLimitPerUser = Math.max(1, Number(nextConfig.dailyLimitPerUser) || 2);
   nextConfig.commandPrefix = String(nextConfig.commandPrefix || '@특갤봇').trim() || '@특갤봇';
   nextConfig.avoidHour = String(nextConfig.avoidHour || '6');
-  nextConfig.avoidReason = String(nextConfig.avoidReason || '4');
+  nextConfig.avoidReason = String(nextConfig.avoidReason || '0');
   nextConfig.avoidTypeChk = nextConfig.avoidTypeChk !== false;
   nextConfig.deleteTargetPost = nextConfig.deleteTargetPost !== false;
 

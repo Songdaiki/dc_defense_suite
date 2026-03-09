@@ -81,7 +81,7 @@ id=thesingularity
 nos[]=1044265
 parent=
 avoid_hour=1
-avoid_reason=4
+avoid_reason=0
 avoid_reason_txt=
 del_chk=1
 _GALLTYPE_=M
@@ -408,7 +408,7 @@ v1 기본 실행 방식:
 - `del_chk=1`
 - `avoid_hour=6`
 - `avoid_type_chk=1`
-- `avoid_reason=4`
+- `avoid_reason=0`
 
 `avoid_type_chk=1`은 기존 관리자 UI에서 확인된 `식별 코드의 IP 차단` 체크값이며, 신문고 봇 v1 기본값으로 고정한다.
 
@@ -561,7 +561,7 @@ v1 권장 dedupe key:
   dailyLimitPerUser: 2,
   commandPrefix: '@특갤봇',
   avoidHour: '6',
-  avoidReason: '4',
+  avoidReason: '0',
   deleteTargetPost: true,
   avoidTypeChk: true,
 }

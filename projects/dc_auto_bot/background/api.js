@@ -9,7 +9,7 @@ const DEFAULT_CONFIG = {
   dailyLimitPerUser: 2,
   commandPrefix: '@특갤봇',
   avoidHour: '6',
-  avoidReason: '4',
+  avoidReason: '0',
   avoidTypeChk: true,
   deleteTargetPost: true,
   applyAuthorFilter: true,
