@@ -326,15 +326,16 @@ async function runLlmTest(targetUrl, reportReason) {
   llmState.lastTestResult = null;
   await saveLlmState();
 
+  const llmConfig = resolveConfig({
+    ...scheduler.config,
+    galleryId: parsedTarget.targetGalleryId || scheduler.config.galleryId,
+  });
   let responseSuccess = false;
   let responseMessage = '';
 
   try {
-    const llmConfig = resolveConfig({
-      ...scheduler.config,
-      galleryId: parsedTarget.targetGalleryId || scheduler.config.galleryId,
-    });
     const pageHtml = await fetchPostPage(llmConfig, parsedTarget.targetPostNo);
+    const content = extractPostContentForLlm(pageHtml, llmConfig.baseUrl);
     const authorCheck = await scheduler.evaluateTargetAuthorFromPageHtml(pageHtml, llmConfig);
     const authorFilter = mapAuthorFilterResult(authorCheck);
 
@@ -367,7 +368,6 @@ async function runLlmTest(targetUrl, reportReason) {
       await saveLlmState();
       responseMessage = message;
     } else {
-      const content = extractPostContentForLlm(pageHtml, llmConfig.baseUrl);
       const result = await callCliHelperJudge(llmConfig, {
         targetUrl,
         title: content.title,

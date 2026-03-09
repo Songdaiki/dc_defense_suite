@@ -4,5 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs"
+  },
+  "dependencies": {
+    "sharp": "^0.34.5"
   }
 }

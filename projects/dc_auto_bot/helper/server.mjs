@@ -1,9 +1,13 @@
 import http from 'node:http';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
-import { access } from 'node:fs/promises';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { readFileSync, constants as fsConstants } from 'node:fs';
+import { resolve, basename } from 'node:path';
+import sharp from 'sharp';
+import { createModerationRecordStore, maskPublicTitle } from './db.mjs';
+import { renderTransparencyDetailPage, renderTransparencyListPage } from './transparency.mjs';
 
 const DEFAULT_HOST = process.env.HOST || '127.0.0.1';
 const DEFAULT_PORT = normalizePort(process.env.PORT, 4317);
@@ -12,10 +16,16 @@ const DEFAULT_PROMPT_MODE = normalizePromptMode(process.env.GEMINI_PROMPT_MODE |
 const DEFAULT_PROMPT_FLAG = String(process.env.GEMINI_PROMPT_FLAG || '-p').trim() || '-p';
 const DEFAULT_GEMINI_COMMAND = String(process.env.GEMINI_COMMAND || getDefaultGeminiCommand()).trim() || getDefaultGeminiCommand();
 const MAX_REQUEST_BYTES = 512 * 1024;
+const MAX_IMAGE_DOWNLOAD_BYTES = 8 * 1024 * 1024;
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 10000;
 const MAX_TITLE_LENGTH = 300;
 const MAX_BODY_LENGTH = 4000;
 const MAX_REASON_LENGTH = 300;
 const MAX_IMAGE_URLS = 8;
+const DEFAULT_PUBLIC_TITLE_VISIBLE_CHARS = normalizePositiveInt(process.env.TRANSPARENCY_PUBLIC_TITLE_VISIBLE_CHARS, 18);
+const DEFAULT_THUMBNAIL_WIDTH = normalizePositiveInt(process.env.TRANSPARENCY_THUMBNAIL_WIDTH, 360);
+const DEFAULT_THUMBNAIL_BLUR_SIGMA = normalizePositiveInt(process.env.TRANSPARENCY_THUMBNAIL_BLUR_SIGMA, 18);
+const DEFAULT_THUMBNAIL_QUALITY = normalizePositiveInt(process.env.TRANSPARENCY_THUMBNAIL_WEBP_QUALITY, 64);
 const COMMAND_CHECK_CACHE_MS = 5000;
 const COMMAND_CHECK_TIMEOUT_MS = 2000;
 const VALID_DECISIONS = new Set(['allow', 'deny', 'review']);
@@ -61,6 +71,10 @@ const GALLERY_POLICY_SOURCE_TEXT = readFileSync(
   new URL('../docs/thesingularity_gallery_policy.md', import.meta.url),
   'utf8',
 ).trim();
+const TRANSPARENCY_CSS_TEXT = readFileSync(
+  new URL('./public/transparency.css', import.meta.url),
+  'utf8',
+);
 
 const commandAvailabilityCache = {
   key: '',
@@ -175,12 +189,10 @@ async function runGeminiCli(prompt, runtimeConfig = buildRuntimeConfig()) {
 }
 
 async function runGeminiCliOnce(prompt, runtimeConfig, commandToRun) {
-  const childArgs = [...runtimeConfig.args];
-  if (runtimeConfig.promptMode === 'arg') {
-    childArgs.push(runtimeConfig.promptFlag, prompt);
-  } else if (runtimeConfig.promptMode === 'stdin') {
-    childArgs.push(runtimeConfig.promptFlag, '');
-  }
+  const childArgs = [
+    ...runtimeConfig.args,
+    ...buildPromptInvocationArgs(runtimeConfig, prompt),
+  ];
 
   const child = spawn(commandToRun, childArgs, {
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -256,6 +268,31 @@ async function runGeminiCliOnce(prompt, runtimeConfig, commandToRun) {
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function buildPromptInvocationArgs(runtimeConfig, prompt) {
+  if (runtimeConfig.promptMode === 'arg') {
+    return [runtimeConfig.promptFlag, prompt];
+  }
+
+  if (runtimeConfig.promptMode === 'stdin') {
+    return [buildInlineEmptyPromptFlag(runtimeConfig.promptFlag)];
+  }
+
+  return [];
+}
+
+function buildInlineEmptyPromptFlag(promptFlag) {
+  const normalizedFlag = String(promptFlag || '').trim();
+  if (!normalizedFlag || normalizedFlag === '-p' || normalizedFlag === '--prompt') {
+    return '--prompt=';
+  }
+
+  if (normalizedFlag.endsWith('=')) {
+    return normalizedFlag;
+  }
+
+  return `${normalizedFlag}=`;
 }
 
 function parseGeminiCliJson(rawText) {
@@ -341,15 +378,19 @@ function validateJudgeDecision(data, rawText) {
   };
 }
 
-function createHelperServer(runtimeConfig = buildRuntimeConfig()) {
+function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies = {}) {
+  const store = dependencies.store || createModerationRecordStore(runtimeConfig.recordsFilePath);
   return http.createServer(async (request, response) => {
     try {
+      await store.init();
+      const requestUrl = new URL(request.url || '/', `http://${runtimeConfig.host}:${runtimeConfig.port}`);
+
       if (request.method === 'OPTIONS') {
         writeJson(response, 204, {});
         return;
       }
 
-      if (request.method === 'GET' && request.url === '/health') {
+      if (request.method === 'GET' && requestUrl.pathname === '/health') {
         const availability = await checkGeminiCommandAvailability(runtimeConfig);
         if (!availability.available) {
           writeJson(response, 200, {
@@ -379,7 +420,126 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig()) {
         return;
       }
 
-      if (request.method !== 'POST' || request.url !== '/judge') {
+      if (request.method === 'GET' && requestUrl.pathname === '/transparency.css') {
+        writeText(response, 200, TRANSPARENCY_CSS_TEXT, 'text/css; charset=utf-8');
+        return;
+      }
+
+      if ((request.method === 'GET' || request.method === 'HEAD') && requestUrl.pathname.startsWith('/transparency-assets/')) {
+        const assetName = sanitizeRequestedAssetFileName(requestUrl.pathname.replace(/^\/transparency-assets\//, ''));
+        if (!assetName) {
+          writeText(response, 404, renderNotFoundPage('이미지를 찾지 못했습니다.'), 'text/html; charset=utf-8');
+          return;
+        }
+
+        const assetPath = resolve(runtimeConfig.assetsDir, assetName);
+        if (!assetPath.startsWith(resolve(runtimeConfig.assetsDir))) {
+          writeText(response, 404, renderNotFoundPage('이미지를 찾지 못했습니다.'), 'text/html; charset=utf-8');
+          return;
+        }
+
+        try {
+          const assetBody = await readFile(assetPath);
+          response.writeHead(200, {
+            'Content-Type': 'image/webp',
+            'Cache-Control': 'public, max-age=300',
+            'Access-Control-Allow-Origin': '*',
+          });
+          response.end(request.method === 'HEAD' ? undefined : assetBody);
+        } catch {
+          writeText(response, 404, renderNotFoundPage('이미지를 찾지 못했습니다.'), 'text/html; charset=utf-8');
+        }
+        return;
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/transparency') {
+        const listResult = await store.listRecords({
+          decision: requestUrl.searchParams.get('decision') || '',
+          policyId: requestUrl.searchParams.get('policyId') || '',
+          limit: requestUrl.searchParams.get('limit') || '50',
+          cursor: requestUrl.searchParams.get('cursor') || '',
+        });
+        writeText(
+          response,
+          200,
+          renderTransparencyListPage({
+            records: listResult.records,
+            nextCursor: listResult.nextCursor,
+            total: listResult.total,
+          }),
+          'text/html; charset=utf-8',
+        );
+        return;
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname.startsWith('/transparency/')) {
+        const recordId = decodeURIComponent(requestUrl.pathname.replace(/^\/transparency\//, ''));
+        const record = await store.getRecord(recordId);
+        if (!record) {
+          writeText(response, 404, renderNotFoundPage('기록을 찾지 못했습니다.'), 'text/html; charset=utf-8');
+          return;
+        }
+
+        writeText(response, 200, renderTransparencyDetailPage(record), 'text/html; charset=utf-8');
+        return;
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/api/moderation-records') {
+        const listResult = await store.listRecords({
+          decision: requestUrl.searchParams.get('decision') || '',
+          policyId: requestUrl.searchParams.get('policyId') || '',
+          limit: requestUrl.searchParams.get('limit') || '50',
+          cursor: requestUrl.searchParams.get('cursor') || '',
+        });
+        writeJson(response, 200, {
+          success: true,
+          total: listResult.total,
+          records: listResult.records,
+          nextCursor: listResult.nextCursor,
+        });
+        return;
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname.startsWith('/api/moderation-records/')) {
+        const recordId = decodeURIComponent(requestUrl.pathname.replace(/^\/api\/moderation-records\//, ''));
+        const record = await store.getRecord(recordId);
+        if (!record) {
+          writeJson(response, 404, {
+            success: false,
+            message: '기록을 찾지 못했습니다.',
+          });
+          return;
+        }
+
+        writeJson(response, 200, {
+          success: true,
+          record,
+        });
+        return;
+      }
+
+      if (request.method === 'POST' && requestUrl.pathname === '/record') {
+        const requestBody = await readJsonBody(request);
+        const sanitized = sanitizeRecordRequest(requestBody);
+        if (!sanitized.success) {
+          writeJson(response, 400, {
+            success: false,
+            message: sanitized.message,
+          });
+          return;
+        }
+
+        const record = await preparePublicRecord(sanitized.recordInput, runtimeConfig);
+        const savedRecord = await store.upsertRecord(record);
+        writeJson(response, 200, {
+          success: true,
+          id: savedRecord.id,
+          record: savedRecord,
+        });
+        return;
+      }
+
+      if (request.method !== 'POST' || requestUrl.pathname !== '/judge') {
         writeJson(response, 404, {
           success: false,
           message: '지원하지 않는 endpoint입니다.',
@@ -444,6 +604,12 @@ function buildRuntimeConfig() {
     timeoutMs: DEFAULT_TIMEOUT_MS,
     promptMode: DEFAULT_PROMPT_MODE,
     promptFlag: DEFAULT_PROMPT_FLAG,
+    recordsFilePath: process.env.TRANSPARENCY_RECORDS_FILE || fileURLToPath(new URL('./data/moderation-records.jsonl', import.meta.url)),
+    assetsDir: process.env.TRANSPARENCY_ASSETS_DIR || fileURLToPath(new URL('./data/transparency-assets', import.meta.url)),
+    publicTitleVisibleChars: DEFAULT_PUBLIC_TITLE_VISIBLE_CHARS,
+    thumbnailWidth: DEFAULT_THUMBNAIL_WIDTH,
+    thumbnailBlurSigma: DEFAULT_THUMBNAIL_BLUR_SIGMA,
+    thumbnailWebpQuality: DEFAULT_THUMBNAIL_QUALITY,
   };
 }
 
@@ -473,6 +639,14 @@ function writeJson(response, statusCode, payload) {
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
   });
   response.end(JSON.stringify(payload));
+}
+
+function writeText(response, statusCode, body, contentType) {
+  response.writeHead(statusCode, {
+    'Content-Type': contentType,
+    'Access-Control-Allow-Origin': '*',
+  });
+  response.end(body);
 }
 
 function readJsonBody(request) {
@@ -603,6 +777,190 @@ function normalizePositiveInt(value, fallback) {
 
 function normalizePromptMode(value) {
   return String(value || '').trim().toLowerCase() === 'stdin' ? 'stdin' : 'arg';
+}
+
+function sanitizeRecordRequest(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return {
+      success: false,
+      message: 'record 요청 본문 형식이 올바르지 않습니다.',
+    };
+  }
+
+  const targetUrl = String(input.targetUrl || '').trim();
+  const targetPostNo = String(input.targetPostNo || '').trim();
+  if (!targetUrl && !targetPostNo) {
+    return {
+      success: false,
+      message: 'targetUrl 또는 targetPostNo 중 하나는 필요합니다.',
+    };
+  }
+
+  const source = String(input.source || 'auto_report').trim();
+  if (source !== 'auto_report') {
+    return {
+      success: false,
+      message: '공개 transparency record는 auto_report만 저장합니다.',
+    };
+  }
+
+  const validatedDecision = validateJudgeDecision({
+    decision: input.decision,
+    confidence: input.confidence,
+    policy_ids: Array.isArray(input.policyIds) ? input.policyIds : input.policy_ids,
+    reason: input.reason,
+  }, '');
+  if (!validatedDecision.success) {
+    return {
+      success: false,
+      message: validatedDecision.message,
+    };
+  }
+
+  return {
+    success: true,
+    recordInput: {
+      id: String(input.id || '').trim(),
+      targetUrl,
+      targetPostNo,
+      title: String(input.title || '').trim(),
+      reportReason: String(input.reportReason || '').trim(),
+      imageUrls: Array.isArray(input.imageUrls)
+        ? input.imageUrls.map((value) => String(value || '').trim()).filter(Boolean).slice(0, MAX_IMAGE_URLS)
+        : [],
+      decision: validatedDecision.decision,
+      confidence: validatedDecision.confidence,
+      policyIds: validatedDecision.policy_ids,
+      reason: validatedDecision.reason,
+    },
+  };
+}
+
+async function preparePublicRecord(input, runtimeConfig) {
+  const recordId = String(input.id || '').trim() || buildRecordId();
+  const blurredThumbnailPath = await createBlurredThumbnail({
+    recordId,
+    targetUrl: input.targetUrl,
+    imageUrls: input.imageUrls,
+    runtimeConfig,
+  });
+
+  return {
+    id: recordId,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    targetUrl: input.targetUrl,
+    targetPostNo: input.targetPostNo,
+    publicTitle: maskPublicTitle(input.title, runtimeConfig.publicTitleVisibleChars),
+    reportReason: input.reportReason,
+    decision: input.decision,
+    confidence: input.confidence,
+    policyIds: input.policyIds,
+    reason: input.reason,
+    blurredThumbnailPath,
+    imageCount: Array.isArray(input.imageUrls) ? input.imageUrls.length : 0,
+  };
+}
+
+async function createBlurredThumbnail({ recordId, targetUrl, imageUrls, runtimeConfig }) {
+  const candidateUrls = Array.isArray(imageUrls) ? imageUrls.map((value) => String(value || '').trim()).filter(Boolean) : [];
+  if (candidateUrls.length === 0) {
+    return '';
+  }
+
+  await mkdir(runtimeConfig.assetsDir, { recursive: true });
+  const assetName = `${sanitizeAssetBaseName(recordId) || buildRecordId()}.webp`;
+  const assetPath = resolve(runtimeConfig.assetsDir, assetName);
+
+  for (const imageUrl of candidateUrls) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, IMAGE_DOWNLOAD_TIMEOUT_MS);
+      const response = await fetch(imageUrl, {
+        method: 'GET',
+        headers: buildImageDownloadHeaders(targetUrl),
+        signal: controller.signal,
+      }).finally(() => {
+        clearTimeout(timeoutId);
+      });
+      if (!response.ok) {
+        continue;
+      }
+
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      if (!contentType.startsWith('image/')) {
+        continue;
+      }
+
+      const contentLength = Number(response.headers.get('content-length') || 0);
+      if (contentLength > MAX_IMAGE_DOWNLOAD_BYTES) {
+        continue;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      if (buffer.length === 0 || buffer.length > MAX_IMAGE_DOWNLOAD_BYTES) {
+        continue;
+      }
+
+      const output = await sharp(buffer)
+        .rotate()
+        .resize({
+          width: runtimeConfig.thumbnailWidth,
+          height: runtimeConfig.thumbnailWidth,
+          fit: 'cover',
+          withoutEnlargement: true,
+        })
+        .blur(runtimeConfig.thumbnailBlurSigma)
+        .webp({
+          quality: runtimeConfig.thumbnailWebpQuality,
+        })
+        .toBuffer();
+
+      await writeFile(assetPath, output);
+      return `/transparency-assets/${assetName}`;
+    } catch {
+      continue;
+    }
+  }
+
+  return '';
+}
+
+function buildImageDownloadHeaders(targetUrl) {
+  return {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+    Referer: String(targetUrl || '').trim(),
+  };
+}
+
+function sanitizeAssetBaseName(value) {
+  const normalized = basename(String(value || '').trim()).replace(/[^a-zA-Z0-9._-]/g, '_');
+  if (!normalized) {
+    return '';
+  }
+
+  return normalized.replace(/\.(webp|png|jpg|jpeg)$/i, '');
+}
+
+function sanitizeRequestedAssetFileName(value) {
+  const normalized = basename(String(value || '').trim()).replace(/[^a-zA-Z0-9._-]/g, '_');
+  if (!normalized || !normalized.toLowerCase().endsWith('.webp')) {
+    return '';
+  }
+
+  return normalized;
+}
+
+function buildRecordId() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `record_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
 }
 
 function getDefaultPromptMode() {
@@ -781,8 +1139,14 @@ function shouldUseShellExecution(commandPath) {
   return /\.(cmd|bat)$/i.test(String(commandPath || '').trim());
 }
 
-function startServer(runtimeConfig = buildRuntimeConfig()) {
-  const server = createHelperServer(runtimeConfig);
+function renderNotFoundPage(message) {
+  return `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>Not Found</title><link rel="stylesheet" href="/transparency.css"></head><body><main class="app"><section class="page-header"><h1>Not Found</h1><p>${message}</p><p><a href="/transparency">목록으로 돌아가기</a></p></section></main></body></html>`;
+}
+
+async function startServer(runtimeConfig = buildRuntimeConfig()) {
+  const store = createModerationRecordStore(runtimeConfig.recordsFilePath);
+  await store.init();
+  const server = createHelperServer(runtimeConfig, { store });
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(runtimeConfig.port, runtimeConfig.host, () => {
@@ -808,11 +1172,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 export {
   buildGeminiCliPrompt,
   buildRuntimeConfig,
-  pickBestCommandPath,
   createHelperServer,
+  pickBestCommandPath,
   parseGeminiCliJson,
   runGeminiCli,
   sanitizeJudgeRequest,
+  sanitizeRecordRequest,
   shouldUseShellExecution,
   startServer,
   validateJudgeDecision,

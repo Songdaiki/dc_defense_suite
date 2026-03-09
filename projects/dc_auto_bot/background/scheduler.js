@@ -1,4 +1,5 @@
 import {
+  callCliHelperRecord,
   callCliHelperJudge,
   DEFAULT_CONFIG,
   delay,
@@ -335,6 +336,8 @@ class Scheduler {
 
     const pageHtml = await fetchPostPage(this.config, parsedCommand.targetPostNo, signal);
     const authorCheck = await this.evaluateTargetAuthorFromPageHtml(pageHtml, this.config, signal);
+    const content = extractPostContentForLlm(pageHtml, this.config.baseUrl);
+
     if (!authorCheck.success) {
       this.totalFailedCommands += 1;
       this.addLog(`❌ [${trustedUser.label}] 작성자 판정 실패 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
@@ -376,7 +379,6 @@ class Scheduler {
       return;
     }
 
-    const content = extractPostContentForLlm(pageHtml, this.config.baseUrl);
     const helperResult = await callCliHelperJudge(
       this.config,
       {
@@ -396,6 +398,20 @@ class Scheduler {
       this.addLog(`❌ [${trustedUser.label}] LLM helper 실패 #${parsedCommand.targetPostNo} - ${helperResult.message || '응답 확인 실패'}`);
       return;
     }
+
+    await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+      id: createRecordId(),
+      source: 'auto_report',
+      targetUrl: parsedCommand.targetUrl,
+      targetPostNo: parsedCommand.targetPostNo,
+      reportReason: parsedCommand.reasonText,
+      title: content.title,
+      imageUrls: content.imageUrls,
+      decision: helperResult.decision,
+      confidence: helperResult.confidence,
+      policyIds: helperResult.policy_ids || [],
+      reason: helperResult.reason || '',
+    }), signal);
 
     if (helperResult.decision !== 'allow') {
       this.totalFailedCommands += 1;
@@ -648,6 +664,50 @@ function clampConfidenceThreshold(value) {
   }
 
   return Math.min(1, Math.max(0, numericValue));
+}
+
+function buildTransparencyRecord(input) {
+  return {
+    id: String(input.id || createRecordId()),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    targetUrl: String(input.targetUrl || ''),
+    targetPostNo: String(input.targetPostNo || ''),
+    reportReason: String(input.reportReason || ''),
+    title: String(input.title || ''),
+    imageUrls: Array.isArray(input.imageUrls) ? input.imageUrls : [],
+    source: 'auto_report',
+    decision: String(input.decision || ''),
+    confidence: input.confidence ?? null,
+    policyIds: Array.isArray(input.policyIds) ? input.policyIds : [],
+    reason: String(input.reason || ''),
+  };
+}
+
+async function persistTransparencyRecordBestEffort(config, record, signal) {
+  if (!record) {
+    return;
+  }
+
+  try {
+    const result = await callCliHelperRecord(config, record, signal);
+    if (!result.success) {
+      console.warn('[ReportBot] transparency record 저장 실패:', result.message);
+    }
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      return;
+    }
+    console.warn('[ReportBot] transparency record 저장 예외:', error.message);
+  }
+}
+
+function createRecordId() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `record_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
 }
 
 function normalizeStringArray(values = []) {

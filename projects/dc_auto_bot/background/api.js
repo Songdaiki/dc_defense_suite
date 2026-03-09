@@ -88,6 +88,22 @@ function normalizeCliHelperEndpoint(value) {
   };
 }
 
+function buildCliHelperUrl(endpoint, pathname) {
+  const normalized = normalizeCliHelperEndpoint(endpoint);
+  if (!normalized.success) {
+    return normalized;
+  }
+
+  const url = new URL(normalized.endpoint);
+  url.pathname = pathname;
+  url.search = '';
+  url.hash = '';
+  return {
+    success: true,
+    url: url.toString(),
+  };
+}
+
 async function dcFetch(url, options = {}) {
   return fetch(url, {
     credentials: 'include',
@@ -459,7 +475,7 @@ async function executeDeleteAndBan(config = {}, targetPostNo, label, rawReasonTe
 
 async function callCliHelperJudge(config = {}, input, signal) {
   const resolved = resolveConfig(config);
-  const endpointResult = normalizeCliHelperEndpoint(resolved.cliHelperEndpoint);
+  const endpointResult = buildCliHelperUrl(resolved.cliHelperEndpoint, '/judge');
   if (!endpointResult.success) {
     return {
       success: false,
@@ -502,7 +518,7 @@ async function callCliHelperJudge(config = {}, input, signal) {
 
   try {
     const response = await dcFetchWithRetry(
-      endpointResult.endpoint,
+      endpointResult.url,
       {
         method: 'POST',
         headers: {
@@ -564,6 +580,62 @@ async function callCliHelperJudge(config = {}, input, signal) {
     if (signal && abortListener) {
       signal.removeEventListener('abort', abortListener);
     }
+  }
+}
+
+async function callCliHelperRecord(config = {}, record, signal) {
+  const resolved = resolveConfig(config);
+  const endpointResult = buildCliHelperUrl(resolved.cliHelperEndpoint, '/record');
+  if (!endpointResult.success) {
+    return {
+      success: false,
+      message: endpointResult.message,
+    };
+  }
+
+  try {
+    const response = await dcFetchWithRetry(
+      endpointResult.url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(record || {}),
+        signal,
+      },
+      1,
+    );
+
+    const responseText = await response.text();
+    const parsed = safeParseJson(responseText);
+    if (!response.ok) {
+      return {
+        success: false,
+        message: summarizeResponse(parsed, responseText) || `HTTP ${response.status}`,
+      };
+    }
+
+    if (!parsed || parsed.success !== true) {
+      return {
+        success: false,
+        message: String(parsed?.message || 'CLI helper record 저장 실패'),
+      };
+    }
+
+    return {
+      success: true,
+      id: String(parsed.id || ''),
+    };
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw error;
+    }
+
+    return {
+      success: false,
+      message: `CLI helper record 연결 실패: ${error.message}`,
+    };
   }
 }
 
@@ -786,6 +858,7 @@ export {
   DEFAULT_CONFIG,
   buildReasonText,
   callCliHelperJudge,
+  callCliHelperRecord,
   delay,
   executeDeleteAndBan,
   extractEsno,

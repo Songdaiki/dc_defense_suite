@@ -13,6 +13,10 @@ npm run start
 - `GEMINI_PROMPT_MODE=arg` (`win32`에서는 내부 기본값 `stdin`)
 - `GEMINI_PROMPT_FLAG=-p`
 - `GEMINI_TIMEOUT_MS=90000`
+- `TRANSPARENCY_PUBLIC_TITLE_VISIBLE_CHARS=18`
+- `TRANSPARENCY_THUMBNAIL_WIDTH=360`
+- `TRANSPARENCY_THUMBNAIL_BLUR_SIGMA=18`
+- `TRANSPARENCY_THUMBNAIL_WEBP_QUALITY=64`
 
 선택 환경 변수:
 
@@ -20,11 +24,19 @@ npm run start
   - 예: `["--model","gemini-2.5-flash"]`
 - `GEMINI_PROMPT_MODE`
   - `arg` 또는 `stdin`
+- `TRANSPARENCY_RECORDS_FILE`
+- `TRANSPARENCY_ASSETS_DIR`
 
 endpoint:
 
 - `GET /health`
 - `POST /judge`
+- `POST /record`
+- `GET /api/moderation-records`
+- `GET /api/moderation-records/:id`
+- `GET /transparency`
+- `GET /transparency/:id`
+- `GET /transparency-assets/:filename`
 
 `POST /judge` 요청 예시:
 
@@ -39,3 +51,27 @@ endpoint:
   "authorFilter": "fluid"
 }
 ```
+
+`POST /record` 요청 예시:
+
+```json
+{
+  "source": "auto_report",
+  "targetUrl": "https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1044753",
+  "targetPostNo": "1044753",
+  "title": "홍보성 게시물 제목 예시",
+  "imageUrls": ["https://dcimg8.dcinside.co.kr/viewimage.php?id=..."],
+  "reportReason": "홍보",
+  "decision": "allow",
+  "confidence": 0.93,
+  "policyIds": ["P14"],
+  "reason": "갤러리 주제와 무관한 홍보성 게시물로 판단"
+}
+```
+
+공개 transparency 사이트 규칙:
+
+- manual test는 공개 기록으로 저장하지 않음
+- 제목은 helper가 일부 마스킹해서 저장
+- 이미지가 있으면 helper가 블러 썸네일만 저장
+- 원본 이미지 URL과 rawText는 공개하지 않음
