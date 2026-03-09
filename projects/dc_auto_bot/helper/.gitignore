@@ -1,3 +1,5 @@
 node_modules/
 data/
-gemini-inputs/
+# judge 임시 입력 파일은 Gemini CLI가 실제로 읽어야 하므로
+# gemini-inputs/ 자체를 ignore하면 안 된다.
+# 실제 파일은 helper cleanup 로직이 매 요청 후 삭제한다.

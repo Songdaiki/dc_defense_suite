@@ -540,6 +540,8 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
             port: runtimeConfig.port,
             geminiCommand: runtimeConfig.command,
             commandPath: availability.commandPath || '',
+            geminiArgs: runtimeConfig.args,
+            geminiModel: extractConfiguredModel(runtimeConfig.args),
             promptMode: runtimeConfig.promptMode,
             timeoutMs: runtimeConfig.timeoutMs,
           });
@@ -553,6 +555,8 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
           port: runtimeConfig.port,
           geminiCommand: runtimeConfig.command,
           commandPath: availability.commandPath || '',
+          geminiArgs: runtimeConfig.args,
+          geminiModel: extractConfiguredModel(runtimeConfig.args),
           promptMode: runtimeConfig.promptMode,
           timeoutMs: runtimeConfig.timeoutMs,
         });
@@ -828,6 +832,9 @@ function buildRuntimeConfig() {
     promptFlag: DEFAULT_PROMPT_FLAG,
     recordsFilePath: process.env.TRANSPARENCY_RECORDS_FILE || fileURLToPath(new URL('./data/moderation-records.jsonl', import.meta.url)),
     assetsDir: process.env.TRANSPARENCY_ASSETS_DIR || fileURLToPath(new URL('./data/transparency-assets', import.meta.url)),
+    // judge 임시 입력 파일은 Gemini CLI가 @경로로 직접 읽는다.
+    // 따라서 .gitignore 대상 경로(data/ 등)가 아닌, repo 내부의 유지되는 디렉터리를 사용한다.
+    // 실제 파일은 cleanupPreparedJudgeImageInputs()가 요청 후 삭제한다.
     judgeInputDir: process.env.TRANSPARENCY_JUDGE_INPUT_DIR || fileURLToPath(new URL('./gemini-inputs', import.meta.url)),
     helperRootDir: fileURLToPath(new URL('./', import.meta.url)),
     thumbnailWidth: DEFAULT_THUMBNAIL_WIDTH,
@@ -852,6 +859,21 @@ function parseArgsJson(value) {
   } catch {
     return [];
   }
+}
+
+function extractConfiguredModel(args = []) {
+  const values = Array.isArray(args) ? args.map((entry) => String(entry || '').trim()) : [];
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    if ((value === '--model' || value === '-m') && values[index + 1]) {
+      return values[index + 1];
+    }
+    if (value.startsWith('--model=')) {
+      return value.slice('--model='.length);
+    }
+  }
+
+  return '';
 }
 
 function buildCorsHeaders(request) {

@@ -3,10 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.mjs",
+    "start": "cross-env GEMINI_ARGS_JSON=[\\\"--model\\\",\\\"gemini-3.1-pro-preview\\\"] node server.mjs",
     "self-test:image": "node scripts/self_test_image_input.mjs"
   },
   "dependencies": {
     "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0"
   }
 }
