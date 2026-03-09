@@ -73,6 +73,15 @@ function renderTransparencyListPage({ records, nextCursor, total, healthStatus, 
 
 function renderTransparencyDetailPage(record, healthStatus) {
   const decision = getDecisionLabel(record.decision, record.status);
+  const autoRefreshScript = record.status === 'pending'
+    ? `
+      <script>
+        setTimeout(() => {
+          window.location.reload();
+        }, 5000);
+      </script>
+    `
+    : '';
 
   const thumbnailSection = record.blurredThumbnailPath
     ? `
@@ -143,6 +152,7 @@ function renderTransparencyDetailPage(record, healthStatus) {
       </div>
 
       <div class="sidebar"></div>
+      ${autoRefreshScript}
     `,
     healthStatus,
   );
