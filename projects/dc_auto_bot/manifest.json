@@ -1,15 +1,19 @@
 {
   "manifest_version": 3,
   "name": "DC Auto Bot",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "신문고 게시물 댓글 명령을 기반으로 삭제 및 차단을 수행하는 운영 보조 확장",
   "permissions": [
     "storage",
     "alarms",
-    "cookies"
+    "cookies",
+    "identity"
   ],
   "host_permissions": [
-    "https://gall.dcinside.com/*"
+    "https://gall.dcinside.com/*",
+    "https://*.dcinside.co.kr/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://www.googleapis.com/*"
   ],
   "background": {
     "service_worker": "background/background.js",

@@ -12,6 +12,9 @@ const galleryIdInput = document.getElementById('galleryIdInput');
 const reportTargetInput = document.getElementById('reportTargetInput');
 const pollIntervalInput = document.getElementById('pollIntervalInput');
 const dailyLimitInput = document.getElementById('dailyLimitInput');
+const googleOAuthClientIdInput = document.getElementById('googleOAuthClientIdInput');
+const googleCloudProjectIdInput = document.getElementById('googleCloudProjectIdInput');
+const geminiModelInput = document.getElementById('geminiModelInput');
 const saveConfigBtn = document.getElementById('saveConfigBtn');
 const trustedUserIdInput = document.getElementById('trustedUserIdInput');
 const trustedUserLabelInput = document.getElementById('trustedUserLabelInput');
@@ -19,6 +22,16 @@ const addTrustedUserBtn = document.getElementById('addTrustedUserBtn');
 const trustedUserList = document.getElementById('trustedUserList');
 const logList = document.getElementById('logList');
 const resetBtn = document.getElementById('resetBtn');
+const loginGoogleBtn = document.getElementById('loginGoogleBtn');
+const logoutGoogleBtn = document.getElementById('logoutGoogleBtn');
+const llmAuthStatus = document.getElementById('llmAuthStatus');
+const llmAuthEmail = document.getElementById('llmAuthEmail');
+const llmTestTargetInput = document.getElementById('llmTestTargetInput');
+const llmTestReasonInput = document.getElementById('llmTestReasonInput');
+const runLlmTestBtn = document.getElementById('runLlmTestBtn');
+const llmLastTestAt = document.getElementById('llmLastTestAt');
+const llmTestStatus = document.getElementById('llmTestStatus');
+const llmTestResult = document.getElementById('llmTestResult');
 
 let currentStatus = null;
 let configDirty = false;
@@ -52,6 +65,9 @@ function bindEvents() {
       reportTarget: reportTargetInput.value.trim(),
       pollIntervalMs: Math.max(1000, parseInt(pollIntervalInput.value || '60000', 10) || 60000),
       dailyLimitPerUser: Math.max(1, parseInt(dailyLimitInput.value || '2', 10) || 2),
+      googleOAuthClientId: googleOAuthClientIdInput.value.trim(),
+      googleCloudProjectId: googleCloudProjectIdInput.value.trim(),
+      geminiModel: geminiModelInput.value.trim(),
     };
 
     if (!config.galleryId) {
@@ -100,12 +116,7 @@ function bindEvents() {
       return;
     }
 
-    const response = await sendMessage({
-      action: 'addTrustedUser',
-      userId,
-      label,
-    });
-
+    const response = await sendMessage({ action: 'addTrustedUser', userId, label });
     if (!response?.success) {
       alert(response?.message || '신뢰 사용자 등록에 실패했습니다.');
       await refreshStatus();
@@ -115,6 +126,48 @@ function bindEvents() {
     trustedUserIdInput.value = '';
     trustedUserLabelInput.value = '';
     applyStatus(response.status);
+  });
+
+  loginGoogleBtn.addEventListener('click', async () => {
+    const response = await sendMessage({ action: 'loginGoogle' });
+    if (!response?.success) {
+      alert(response?.message || 'Google 로그인에 실패했습니다.');
+      await refreshStatus();
+      return;
+    }
+    applyStatus(response.status);
+  });
+
+  logoutGoogleBtn.addEventListener('click', async () => {
+    const response = await sendMessage({ action: 'logoutGoogle' });
+    if (!response?.success) {
+      alert(response?.message || '로그아웃에 실패했습니다.');
+      await refreshStatus();
+      return;
+    }
+    applyStatus(response.status);
+  });
+
+  runLlmTestBtn.addEventListener('click', async () => {
+    const targetUrl = llmTestTargetInput.value.trim();
+    const reportReason = llmTestReasonInput.value.trim();
+    if (!targetUrl) {
+      alert('테스트 링크를 입력하세요.');
+      llmTestTargetInput.focus();
+      return;
+    }
+
+    const response = await sendMessage({ action: 'runLlmTest', targetUrl, reportReason });
+    if (!response?.success && !response?.status) {
+      alert(response?.message || 'LLM 테스트 실행에 실패했습니다.');
+      await refreshStatus();
+      return;
+    }
+
+    applyStatus(response.status || currentStatus);
+    if (!response?.success && response?.message) {
+      alert(response.message);
+    }
   });
 
   resetBtn.addEventListener('click', async () => {
@@ -145,6 +198,7 @@ function applyStatus(status) {
 
   currentStatus = status;
   const config = status.config || {};
+  const llm = status.llm || {};
 
   toggleBtn.checked = Boolean(status.isRunning);
   toggleLabel.textContent = status.isRunning ? 'ON' : 'OFF';
@@ -163,11 +217,20 @@ function applyStatus(status) {
     reportTargetInput.value = config.reportTarget || '';
     pollIntervalInput.value = String(config.pollIntervalMs || 60000);
     dailyLimitInput.value = String(config.dailyLimitPerUser || 2);
+    googleOAuthClientIdInput.value = llm.config?.googleOAuthClientId || '';
+    googleCloudProjectIdInput.value = llm.config?.googleCloudProjectId || '';
+    geminiModelInput.value = llm.config?.geminiModel || 'gemini-2.5-flash';
   }
+
+  llmAuthStatus.textContent = llm.isAuthenticated ? '🟢 로그인됨' : '⚪ 로그인 안 됨';
+  llmAuthEmail.textContent = llm.accountEmail || '-';
+  llmLastTestAt.textContent = formatTimestamp(llm.lastTestAt);
+  llmTestStatus.textContent = llm.isTesting ? '실행 중' : (llm.lastTestResult ? (llm.lastTestResult.success ? '완료' : '실패') : '대기');
+  llmTestResult.textContent = llm.lastTestResult ? JSON.stringify(llm.lastTestResult, null, 2) : '결과가 없습니다.';
 
   renderTrustedUsers(config.trustedUsers || []);
   renderLogs(status.logs || []);
-  applyRunningLocks(Boolean(status.isRunning));
+  applyRunningLocks(Boolean(status.isRunning), Boolean(llm.isTesting));
 }
 
 function renderTrustedUsers(users) {
@@ -196,17 +259,12 @@ function renderTrustedUsers(users) {
     removeBtn.className = 'remove-btn';
     removeBtn.textContent = '삭제';
     removeBtn.addEventListener('click', async () => {
-      const response = await sendMessage({
-        action: 'removeTrustedUser',
-        userId: user.userId,
-      });
-
+      const response = await sendMessage({ action: 'removeTrustedUser', userId: user.userId });
       if (!response?.success) {
         alert(response?.message || '신뢰 사용자 삭제에 실패했습니다.');
         await refreshStatus();
         return;
       }
-
       applyStatus(response.status);
     });
 
@@ -233,13 +291,24 @@ function renderLogs(logs) {
   }
 }
 
-function applyRunningLocks(isRunning) {
-  resetBtn.disabled = isRunning;
-  saveConfigBtn.disabled = isRunning;
+function applyRunningLocks(isRunning, isTesting) {
+  resetBtn.disabled = isRunning || isTesting;
+  saveConfigBtn.disabled = isRunning || isTesting;
+  runLlmTestBtn.disabled = isTesting;
+  loginGoogleBtn.disabled = isTesting;
+  logoutGoogleBtn.disabled = isTesting;
 }
 
 function bindConfigDirtyHandlers() {
-  const inputs = [galleryIdInput, reportTargetInput, pollIntervalInput, dailyLimitInput];
+  const inputs = [
+    galleryIdInput,
+    reportTargetInput,
+    pollIntervalInput,
+    dailyLimitInput,
+    googleOAuthClientIdInput,
+    googleCloudProjectIdInput,
+    geminiModelInput,
+  ];
   for (const input of inputs) {
     input.addEventListener('input', () => {
       configDirty = true;
@@ -253,7 +322,7 @@ function flashSaved(button) {
   button.disabled = true;
   setTimeout(() => {
     button.textContent = originalText;
-    button.disabled = Boolean(currentStatus?.isRunning);
+    button.disabled = Boolean(currentStatus?.isRunning) || Boolean(currentStatus?.llm?.isTesting);
   }, 1200);
 }
 

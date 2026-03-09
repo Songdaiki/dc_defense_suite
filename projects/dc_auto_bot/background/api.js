@@ -14,6 +14,9 @@ const DEFAULT_CONFIG = {
   deleteTargetPost: true,
   applyAuthorFilter: true,
   lowActivityThreshold: 100,
+  googleOAuthClientId: '',
+  googleCloudProjectId: '',
+  geminiModel: 'gemini-2.5-flash',
 };
 
 function resolveConfig(config = {}) {
@@ -378,6 +381,200 @@ async function executeDeleteAndBan(config = {}, targetPostNo, label, rawReasonTe
   };
 }
 
+function buildGeminiModerationPrompt(input) {
+  const title = String(input?.title || '').trim();
+  const body = String(input?.bodyText || '').trim();
+  const reason = String(input?.reportReason || '').trim();
+  const imageUrls = Array.isArray(input?.imageUrls) ? input.imageUrls.filter(Boolean) : [];
+  const authorFilter = String(input?.authorFilter || '').trim() || 'unknown';
+  const requestLabel = String(input?.requestLabel || '').trim();
+  const targetUrl = String(input?.targetUrl || '').trim();
+
+  const imageSection = imageUrls.length
+    ? imageUrls.map((url, index) => `${index + 1}. ${url}`).join('\n')
+    : '없음';
+
+  return [
+    '다음 게시물 정보를 보고, 디시 운영 규정 P1~P15 중 어떤 정책에 해당하는지 JSON으로만 답해줘.',
+    '',
+    '규정 분류:',
+    '- P1: 디시 이용약관, 법률, 건전한 사회 통념 위반',
+    '- P2: 닉언, 친목질, 사칭',
+    '- P3: 분탕/어그로',
+    '- P4: 종교/음모론',
+    '- P5: 반과학/유사과학/직업 비하',
+    '- P6: 레퍼런스 없는 선형글',
+    '- P7: 설교성/일침성',
+    '- P8: 팬보이/갈드컵/무인증 권위 주장',
+    '- P9: 투자/주식/코인',
+    '- P10: 국뽕/일뽕/중뽕/혐한/국까',
+    '- P11: 정치/성별혐오/지역드립',
+    '- P12: 타 갤러리/타 커뮤니티 언급',
+    '- P13: 맥락 없는 욕설/싸움',
+    '- P14: 금지 떡밥',
+    '- P15: 개념글 제한',
+    '- NONE: 해당 없음',
+    '',
+    '중요:',
+    '- "allow"는 자동 삭제/차단을 진행해도 되는 경우에만 사용한다.',
+    '- 운영 규정 위반이 아니면 반드시 "deny"를 사용한다.',
+    '- 애매하거나 확신이 낮으면 "review"를 사용한다.',
+    '- policy_ids가 ["NONE"]이면 decision은 반드시 "deny"여야 한다.',
+    '- allow는 최소 1개 이상의 정책 위반이 명확히 성립할 때만 허용된다.',
+    '',
+    '출력 JSON:',
+    '{',
+    '  "decision": "allow|deny|review",',
+    '  "confidence": 0.0,',
+    '  "policy_ids": [],',
+    '  "reason": ""',
+    '}',
+    '',
+    `대상 게시물 URL:\n${targetUrl || '없음'}`,
+    '',
+    `작성자 필터 결과:\n${authorFilter}`,
+    '',
+    `신고자 label:\n${requestLabel || '없음'}`,
+    '',
+    `신고 사유:\n${reason || '없음'}`,
+    '',
+    `제목:\n${title || '없음'}`,
+    '',
+    `본문:\n${body || '없음'}`,
+    '',
+    `이미지 URL:\n${imageSection}`,
+  ].join('\n');
+}
+
+async function callGeminiModeration(config = {}, accessToken, input, signal) {
+  const resolved = resolveConfig(config);
+  const token = String(accessToken || '').trim();
+  if (!token) {
+    throw new Error('Google OAuth access token이 없습니다.');
+  }
+
+  const model = String(resolved.geminiModel || 'gemini-2.5-flash').trim();
+  const prompt = buildGeminiModerationPrompt(input);
+  const requestBody = {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.1,
+    },
+  };
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+  };
+  const projectId = String(resolved.googleCloudProjectId || '').trim();
+  if (projectId) {
+    headers['x-goog-user-project'] = projectId;
+  }
+
+  const response = await dcFetchWithRetry(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody),
+      signal,
+    },
+    1,
+  );
+
+  const responseText = await response.text();
+  const raw = safeParseJson(responseText);
+  if (!response.ok) {
+    return {
+      success: false,
+      message: summarizeResponse(raw, responseText),
+      rawText: responseText,
+    };
+  }
+
+  const parsed = parseGeminiDecisionResponse(raw, responseText);
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.message,
+      rawText: responseText,
+    };
+  }
+
+  return {
+    success: true,
+    ...parsed,
+    rawText: responseText,
+  };
+}
+
+function parseGeminiDecisionResponse(data, responseText) {
+  const text = extractGeminiText(data) || responseText;
+  const cleaned = stripJsonFences(String(text || '').trim());
+  const parsed = safeParseJson(cleaned);
+  if (!parsed || typeof parsed !== 'object') {
+    return {
+      success: false,
+      message: 'Gemini 응답 JSON 파싱 실패',
+    };
+  }
+
+  const decision = String(parsed.decision || '').trim();
+  const confidence = Number(parsed.confidence);
+  const policyIds = Array.isArray(parsed.policy_ids)
+    ? parsed.policy_ids.map((value) => String(value || '').trim()).filter(Boolean)
+    : [];
+  const reason = String(parsed.reason || '').trim();
+
+  if (!['allow', 'deny', 'review'].includes(decision)) {
+    return {
+      success: false,
+      message: 'decision 값이 올바르지 않습니다.',
+    };
+  }
+
+  if (!Number.isFinite(confidence)) {
+    return {
+      success: false,
+      message: 'confidence 값이 올바르지 않습니다.',
+    };
+  }
+
+  if (policyIds.length === 0) {
+    return {
+      success: false,
+      message: 'policy_ids가 비어 있습니다.',
+    };
+  }
+
+  return {
+    success: true,
+    decision,
+    confidence,
+    policyIds,
+    reason,
+    parsed,
+  };
+}
+
+function extractGeminiText(data) {
+  const parts = data?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) {
+    return '';
+  }
+
+  return parts.map((part) => String(part?.text || '')).join('\n').trim();
+}
+
+function stripJsonFences(text) {
+  return String(text || '')
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
+}
+
 function isAvoidResponseSuccessful(response, data, responseText) {
   if (!response.ok) {
     return false;
@@ -488,4 +685,6 @@ export {
   getCiToken,
   parseActivityStatsResponse,
   resolveConfig,
+  callGeminiModeration,
+  buildGeminiModerationPrompt,
 };

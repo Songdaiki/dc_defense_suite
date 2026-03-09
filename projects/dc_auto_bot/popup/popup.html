@@ -81,6 +81,18 @@
           <label for="dailyLimitInput">일일 사용 제한</label>
           <input type="number" id="dailyLimitInput" min="1" max="20" value="2">
         </div>
+        <div class="setting-item">
+          <label for="googleOAuthClientIdInput">Google OAuth Client ID</label>
+          <input type="text" id="googleOAuthClientIdInput" placeholder="xxxx.apps.googleusercontent.com">
+        </div>
+        <div class="setting-item">
+          <label for="googleCloudProjectIdInput">Google Cloud Project ID</label>
+          <input type="text" id="googleCloudProjectIdInput" placeholder="your-project-id">
+        </div>
+        <div class="setting-item">
+          <label for="geminiModelInput">Gemini 모델</label>
+          <input type="text" id="geminiModelInput" value="gemini-2.5-flash">
+        </div>
         <button id="saveConfigBtn" class="btn btn-primary">설정 저장</button>
       </div>
     </details>
@@ -106,6 +118,48 @@
       <div id="trustedUserList" class="trusted-user-list">
         <div class="list-empty">등록된 신뢰 사용자가 없습니다.</div>
       </div>
+    </section>
+
+    <section class="llm-section">
+      <div class="section-header">
+        <h3>Gemini 테스트</h3>
+        <p>Google 로그인 후 링크를 넣어 수동 판정 결과를 확인합니다.</p>
+      </div>
+
+      <div class="llm-auth-box">
+        <span id="llmAuthStatus" class="llm-auth-status">⚪ 로그인 안 됨</span>
+        <span id="llmAuthEmail" class="llm-auth-email">-</span>
+      </div>
+
+      <div class="llm-button-row">
+        <button id="loginGoogleBtn" class="btn btn-primary">Google 로그인</button>
+        <button id="logoutGoogleBtn" class="btn btn-secondary">로그아웃</button>
+      </div>
+
+      <div class="settings-grid llm-test-grid">
+        <div class="setting-item">
+          <label for="llmTestTargetInput">테스트 링크</label>
+          <input type="text" id="llmTestTargetInput" placeholder="https://gall.dcinside.com/...">
+        </div>
+        <div class="setting-item">
+          <label for="llmTestReasonInput">신고 사유</label>
+          <input type="text" id="llmTestReasonInput" placeholder="예: 분탕, 광고, 금지 떡밥">
+        </div>
+        <button id="runLlmTestBtn" class="btn btn-primary">LLM 테스트 실행</button>
+      </div>
+
+      <div class="llm-meta-grid">
+        <div class="status-item compact">
+          <span class="status-label">최근 테스트</span>
+          <span id="llmLastTestAt" class="status-value small">-</span>
+        </div>
+        <div class="status-item compact">
+          <span class="status-label">테스트 상태</span>
+          <span id="llmTestStatus" class="status-value small">대기</span>
+        </div>
+      </div>
+
+      <pre id="llmTestResult" class="llm-result">결과가 없습니다.</pre>
     </section>
 
     <section class="log-section">

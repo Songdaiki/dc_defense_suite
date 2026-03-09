@@ -232,6 +232,101 @@ function decodeHtml(text) {
     .replace(/&#x2F;/g, '/');
 }
 
+function extractPostContentForLlm(html, baseUrl = 'https://gall.dcinside.com') {
+  const htmlText = String(html || '');
+  const titleMatch = htmlText.match(/<span class="title_subject">([\s\S]*?)<\/span>/i);
+  const title = decodeHtml(stripTags((titleMatch && titleMatch[1]) || '')).replace(/\s+/g, ' ').trim();
+
+  const writeDivHtml = extractWriteDivHtml(htmlText);
+  const imageUrls = extractImageUrls(writeDivHtml, baseUrl);
+  const bodyText = decodeHtml(stripTags(writeDivHtml))
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return {
+    title,
+    bodyText,
+    imageUrls,
+  };
+}
+
+function extractWriteDivHtml(htmlText) {
+  const startMatch = htmlText.match(/<div class="write_div"[^>]*>/i);
+  if (!startMatch) {
+    return '';
+  }
+
+  let index = startMatch.index + startMatch[0].length;
+  let depth = 1;
+  const tagPattern = /<\/?div\b[^>]*>/ig;
+  tagPattern.lastIndex = index;
+  let match = null;
+
+  while ((match = tagPattern.exec(htmlText)) !== null) {
+    if (match[0].startsWith('</div')) {
+      depth -= 1;
+      if (depth === 0) {
+        return htmlText.slice(index, match.index);
+      }
+    } else {
+      depth += 1;
+    }
+  }
+
+  return '';
+}
+
+function extractImageUrls(htmlText, baseUrl) {
+  const urls = [];
+  const seen = new Set();
+  const imgPattern = /<img[^>]+src="([^"]+)"[^>]*>/ig;
+  let match = null;
+
+  while ((match = imgPattern.exec(String(htmlText || ''))) !== null) {
+    const rawUrl = decodeHtml(match[1] || '').trim();
+    if (!rawUrl) {
+      continue;
+    }
+
+    const absoluteUrl = normalizeAbsoluteUrl(rawUrl, baseUrl);
+    if (!absoluteUrl || seen.has(absoluteUrl)) {
+      continue;
+    }
+
+    seen.add(absoluteUrl);
+    urls.push(absoluteUrl);
+  }
+
+  return urls;
+}
+
+function normalizeAbsoluteUrl(url, baseUrl) {
+  const raw = String(url || '').trim();
+  if (!raw) {
+    return '';
+  }
+
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return raw;
+  }
+
+  if (raw.startsWith('//')) {
+    return `https:${raw}`;
+  }
+
+  if (raw.startsWith('/')) {
+    return `${String(baseUrl || '').replace(/\/$/, '')}${raw}`;
+  }
+
+  return raw;
+}
+
+function stripTags(text) {
+  return String(text || '')
+    .replace(/<br\s*\/?\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ');
+}
+
 export {
   buildCommandKey,
   isDeletedComment,
@@ -242,4 +337,5 @@ export {
   parseTargetUrl,
   sortCommentsByNo,
   extractPostAuthorMeta,
+  extractPostContentForLlm,
 };
