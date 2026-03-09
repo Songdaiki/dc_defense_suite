@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=380">
+  <title>신문고 봇</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>신문고 봇</h1>
+      <p>신뢰 사용자 댓글 명령 기반 삭제 + 6시간 차단</p>
+    </header>
+
+    <section class="feature-header">
+      <div>
+        <h2>봇 제어</h2>
+        <p>신문고 게시물 댓글을 1분마다 확인합니다.</p>
+      </div>
+      <div class="toggle-section">
+        <label class="toggle-switch">
+          <input type="checkbox" id="toggleBtn">
+          <span class="slider"></span>
+        </label>
+        <span id="toggleLabel" class="toggle-label">OFF</span>
+      </div>
+    </section>
+
+    <div class="status-grid">
+      <div class="status-item">
+        <span class="status-label">상태</span>
+        <span id="statusText" class="status-value status-off">🔴 정지</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">현재 단계</span>
+        <span id="phaseText" class="status-value">IDLE</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">최근 폴링</span>
+        <span id="lastPollAtText" class="status-value">-</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">신뢰 사용자</span>
+        <span id="trustedUserCountText" class="status-value">0명</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">처리 시도</span>
+        <span id="totalAttemptedText" class="status-value">0회</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">처리 성공</span>
+        <span id="totalSucceededText" class="status-value">0회</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">처리 실패</span>
+        <span id="totalFailedText" class="status-value">0회</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">중복 링크 수</span>
+        <span id="processedTargetCountText" class="status-value">0건</span>
+      </div>
+    </div>
+
+    <details class="settings-section" open>
+      <summary>설정</summary>
+      <div class="settings-grid">
+        <div class="setting-item">
+          <label for="galleryIdInput">갤러리 ID</label>
+          <input type="text" id="galleryIdInput" value="thesingularity">
+        </div>
+        <div class="setting-item">
+          <label for="reportTargetInput">신문고 링크/번호</label>
+          <input type="text" id="reportTargetInput" placeholder="https://... 또는 1044313">
+        </div>
+        <div class="setting-item">
+          <label for="pollIntervalInput">폴링 시간 (ms)</label>
+          <input type="number" id="pollIntervalInput" min="1000" max="600000" step="1000" value="60000">
+        </div>
+        <div class="setting-item">
+          <label for="dailyLimitInput">일일 사용 제한</label>
+          <input type="number" id="dailyLimitInput" min="1" max="20" value="2">
+        </div>
+        <button id="saveConfigBtn" class="btn btn-primary">설정 저장</button>
+      </div>
+    </details>
+
+    <section class="trusted-users-section">
+      <div class="section-header">
+        <h3>신뢰 사용자</h3>
+        <p>`user_id + label`을 직접 등록합니다.</p>
+      </div>
+
+      <div class="settings-grid">
+        <div class="setting-item">
+          <label for="trustedUserIdInput">user_id</label>
+          <input type="text" id="trustedUserIdInput" placeholder="exercens02">
+        </div>
+        <div class="setting-item">
+          <label for="trustedUserLabelInput">label</label>
+          <input type="text" id="trustedUserLabelInput" maxlength="20" placeholder="EXERCENS">
+        </div>
+        <button id="addTrustedUserBtn" class="btn btn-primary">신뢰 사용자 추가</button>
+      </div>
+
+      <div id="trustedUserList" class="trusted-user-list">
+        <div class="list-empty">등록된 신뢰 사용자가 없습니다.</div>
+      </div>
+    </section>
+
+    <section class="log-section">
+      <h3>최근 로그</h3>
+      <div id="logList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+    </section>
+
+    <button id="resetBtn" class="btn btn-secondary">통계 초기화</button>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
