@@ -13,7 +13,6 @@ npm run start
 - `GEMINI_PROMPT_MODE=arg` (`win32`에서는 내부 기본값 `stdin`)
 - `GEMINI_PROMPT_FLAG=-p`
 - `GEMINI_TIMEOUT_MS=90000`
-- `TRANSPARENCY_PUBLIC_TITLE_VISIBLE_CHARS=18`
 - `TRANSPARENCY_THUMBNAIL_WIDTH=360`
 - `TRANSPARENCY_THUMBNAIL_BLUR_SIGMA=18`
 - `TRANSPARENCY_THUMBNAIL_WEBP_QUALITY=64`
@@ -71,7 +70,8 @@ endpoint:
 
 공개 transparency 사이트 규칙:
 
-- manual test는 공개 기록으로 저장하지 않음
-- 제목은 helper가 일부 마스킹해서 저장
+- auto_report와 manual_test 둘 다 공개 기록으로 저장 가능
+- 제목은 helper가 `말머리 + 제목` 표시값 그대로 저장
+- 본문은 helper가 공개용 `publicBody`로 저장해 상세 페이지에 표시
 - 이미지가 있으면 helper가 블러 썸네일만 저장
 - 원본 이미지 URL과 rawText는 공개하지 않음

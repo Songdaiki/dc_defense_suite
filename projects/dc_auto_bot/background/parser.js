@@ -328,8 +328,11 @@ function decodeHtml(text) {
 
 function extractPostContentForLlm(html, baseUrl = 'https://gall.dcinside.com') {
   const htmlText = String(html || '');
+  const titleHeadMatch = htmlText.match(/<span class="title_headtext">([\s\S]*?)<\/span>/i);
   const titleMatch = htmlText.match(/<span class="title_subject">([\s\S]*?)<\/span>/i);
-  const title = decodeHtml(stripTags((titleMatch && titleMatch[1]) || '')).replace(/\s+/g, ' ').trim();
+  const titleHead = decodeHtml(stripTags((titleHeadMatch && titleHeadMatch[1]) || '')).replace(/\s+/g, ' ').trim();
+  const titleSubject = decodeHtml(stripTags((titleMatch && titleMatch[1]) || '')).replace(/\s+/g, ' ').trim();
+  const title = [titleHead, titleSubject].filter(Boolean).join(' ').trim();
 
   const writeDivHtml = extractWriteDivHtml(htmlText);
   const imageUrls = extractImageUrls(writeDivHtml, baseUrl);

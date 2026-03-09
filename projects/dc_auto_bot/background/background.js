@@ -1,5 +1,5 @@
 import { Scheduler } from './scheduler.js';
-import { callCliHelperJudge, fetchPostPage, normalizeCliHelperEndpoint, resolveConfig } from './api.js';
+import { callCliHelperJudge, callCliHelperRecord, fetchPostPage, normalizeCliHelperEndpoint, resolveConfig } from './api.js';
 import { extractPostContentForLlm, normalizeReportTarget, parseTargetUrl } from './parser.js';
 
 const scheduler = new Scheduler();
@@ -394,6 +394,26 @@ async function runLlmTest(targetUrl, reportReason) {
       if (!result.success) {
         responseMessage = result.message || 'CLI helper 판정 실패';
       } else {
+        const recordSaveResult = await persistTransparencyRecordBestEffort(llmConfig, buildTransparencyRecord({
+          source: 'manual_test',
+          targetUrl,
+          targetPostNo: parsedTarget.targetPostNo,
+          reportReason,
+          title: content.title,
+          bodyText: content.bodyText,
+          imageUrls: content.imageUrls,
+          decision: result.decision || '',
+          confidence: result.confidence ?? null,
+          policyIds: result.policy_ids || [],
+          reason: result.reason || '',
+        }));
+        llmState.lastTestResult = {
+          ...llmState.lastTestResult,
+          transparencyRecordSaved: recordSaveResult.success,
+          transparencyRecordMessage: recordSaveResult.success ? '' : recordSaveResult.message,
+        };
+        llmState.lastTestAt = new Date().toISOString();
+        await saveLlmState();
         responseSuccess = true;
       }
     }
@@ -432,6 +452,57 @@ function clampConfidenceThreshold(value) {
 function getConfidenceThresholdValue(value) {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : 0.85;
+}
+
+function buildTransparencyRecord(input) {
+  return {
+    id: createRecordId(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    source: String(input.source || 'manual_test'),
+    targetUrl: String(input.targetUrl || ''),
+    targetPostNo: String(input.targetPostNo || ''),
+    reportReason: String(input.reportReason || ''),
+    title: String(input.title || ''),
+    bodyText: String(input.bodyText || ''),
+    imageUrls: Array.isArray(input.imageUrls) ? input.imageUrls : [],
+    decision: String(input.decision || ''),
+    confidence: input.confidence ?? null,
+    policyIds: Array.isArray(input.policyIds) ? input.policyIds : [],
+    reason: String(input.reason || ''),
+  };
+}
+
+async function persistTransparencyRecordBestEffort(config, record) {
+  if (!record) {
+    return { success: false, message: '저장할 transparency record가 없습니다.' };
+  }
+
+  try {
+    const result = await callCliHelperRecord(config, record);
+    if (!result.success) {
+      console.warn('[ReportBot] transparency record 저장 실패:', result.message);
+      return {
+        success: false,
+        message: result.message || 'transparency record 저장 실패',
+      };
+    }
+    return { success: true, id: result.id || '' };
+  } catch (error) {
+    console.warn('[ReportBot] transparency record 저장 예외:', error.message);
+    return {
+      success: false,
+      message: error.message,
+    };
+  }
+}
+
+function createRecordId() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `record_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
 }
 
 function getHelperHealthSnapshot() {

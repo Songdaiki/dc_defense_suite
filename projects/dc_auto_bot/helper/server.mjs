@@ -2,11 +2,11 @@ import http from 'node:http';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { readFileSync, constants as fsConstants } from 'node:fs';
-import { resolve, basename } from 'node:path';
+import { basename, relative, resolve } from 'node:path';
 import sharp from 'sharp';
-import { createModerationRecordStore, maskPublicTitle } from './db.mjs';
+import { createModerationRecordStore } from './db.mjs';
 import { renderTransparencyDetailPage, renderTransparencyListPage } from './transparency.mjs';
 
 const DEFAULT_HOST = process.env.HOST || '127.0.0.1';
@@ -22,9 +22,8 @@ const MAX_TITLE_LENGTH = 300;
 const MAX_BODY_LENGTH = 4000;
 const MAX_REASON_LENGTH = 300;
 const MAX_IMAGE_URLS = 8;
-const DEFAULT_PUBLIC_TITLE_VISIBLE_CHARS = normalizePositiveInt(process.env.TRANSPARENCY_PUBLIC_TITLE_VISIBLE_CHARS, 18);
 const DEFAULT_THUMBNAIL_WIDTH = normalizePositiveInt(process.env.TRANSPARENCY_THUMBNAIL_WIDTH, 360);
-const DEFAULT_THUMBNAIL_BLUR_SIGMA = normalizePositiveInt(process.env.TRANSPARENCY_THUMBNAIL_BLUR_SIGMA, 18);
+const DEFAULT_THUMBNAIL_BLUR_SIGMA = normalizePositiveInt(process.env.TRANSPARENCY_THUMBNAIL_BLUR_SIGMA, 5);
 const DEFAULT_THUMBNAIL_QUALITY = normalizePositiveInt(process.env.TRANSPARENCY_THUMBNAIL_WEBP_QUALITY, 64);
 const COMMAND_CHECK_CACHE_MS = 5000;
 const COMMAND_CHECK_TIMEOUT_MS = 2000;
@@ -75,6 +74,12 @@ const TRANSPARENCY_CSS_TEXT = readFileSync(
   new URL('./public/transparency.css', import.meta.url),
   'utf8',
 );
+const BOT_ICON_BUFFER = readFileSync(
+  new URL('./public/bot-icon.png', import.meta.url),
+);
+const GEMINI_ICON_BUFFER = readFileSync(
+  new URL('./public/gemini-icon.webp', import.meta.url),
+);
 
 const commandAvailabilityCache = {
   key: '',
@@ -89,8 +94,17 @@ function buildGeminiCliPrompt(input) {
   const requestLabel = truncateText(input.requestLabel, 40);
   const authorFilter = truncateText(input.authorFilter, 40) || 'unknown';
   const imageUrls = input.imageUrls.slice(0, MAX_IMAGE_URLS);
-  const imageSection = imageUrls.length
-    ? imageUrls.map((url, index) => `${index + 1}. ${url}`).join('\n')
+  const imageFileRefs = Array.isArray(input.imageFileRefs) ? input.imageFileRefs.slice(0, MAX_IMAGE_URLS) : [];
+  const imageSection = imageFileRefs.length > 0
+    ? '생략 (로컬 첨부 이미지 파일을 우선 사용)'
+    : imageUrls.length
+      ? imageUrls.map((url, index) => `${index + 1}. ${url}`).join('\n')
+      : '없음';
+  const imageFileSection = imageFileRefs.length
+    ? imageFileRefs.map((fileRef) => `@${fileRef}`).join('\n')
+    : '없음';
+  const readManyFilesInstruction = imageFileRefs.length > 0
+    ? `read_many_files(paths=[${imageFileRefs.map((fileRef) => `"${fileRef}"`).join(', ')}], useDefaultExcludes=false, respect_git_ignore=false)`
     : '없음';
 
   return [
@@ -111,10 +125,26 @@ function buildGeminiCliPrompt(input) {
     '- policy_ids가 ["NONE"]이면 decision은 반드시 "deny"여야 한다.',
     '- allow는 최소 1개 이상의 P1~P15 위반이 명확할 때만 사용한다.',
     '- 개념글 제한만 필요한 경우처럼 삭제/차단 자동화와 맞지 않는 경우는 review를 사용한다.',
+    '- 독립 위반 정책이 3개 이상 동시에 성립하면 review보다 allow를 우선 고려해라.',
     '- 원문에 명시된 허용 예외(사실에 기반한 완장 비판, 현재 기술에 대한 비판, 단순 욕설)는 삭제/차단 사유로 분류하지 마라.',
     '- P6는 원문에 적힌 레퍼런스 기준을 따라 판정해라.',
     '- P11은 원문에 적힌 허용 예시와 금지 예시를 구분해라.',
     '- P14는 원문에 적힌 금지 떡밥 예시를 기준으로 판정해라.',
+    '- 제목과 본문에 충분한 문맥이 있으면 텍스트 맥락을 우선하고, 이미지는 보조 근거로만 사용해라.',
+    '- 본문이 비어 있거나 매우 짧고 이미지가 실제 핵심 내용을 담고 있을 때만 이미지 비중을 높여라.',
+    '- 제목/본문이 정상적인 사용 후기, 정보 공유, 링크 소개라면 이미지가 다소 자극적이거나 썸네일 성격이어도 낚시글로 과잉 판정하지 마라.',
+    '- 존재 여부가 불명확한 모델명, 버전명, 과장된 제목, 드립성 표현만으로 허위사실이나 낚시글로 단정하지 마라. 본문과 이미지 맥락까지 함께 확인해라.',
+    '- 이미지 URL이 1개 이상 있으면 제목/본문과 함께 보조 근거로 확인해라.',
+    '- 첨부 이미지 파일 경로가 제공되면 URL보다 파일 입력을 우선 확인해라.',
+    '- 첨부 이미지 파일 경로가 제공되면 먼저 아래 read_many_files 호출 예시와 같은 방식으로 로컬 파일을 읽어라.',
+    `- 이미지 파일 읽기 예시: ${readManyFilesInstruction}`,
+    '- 첨부 이미지 파일 경로가 제공되면 외부 web_fetch 같은 도구를 쓰지 말고, 제공된 로컬 파일만 기준으로 이미지 내용을 판단해라.',
+    '- 제목/본문이 명확하게 정상 정보 공유인데, 이미지가 단순 썸네일·프로필 사진·홍보 배너 수준이면 이미지 단독으로 과잉 판정하지 마라.',
+    '- 인물 사진, 썸네일, 장식 이미지 자체만으로는 낚시/어그로로 단정하지 마라.',
+    '- 이미지에 위반 근거가 있더라도 제목/본문 맥락과 함께 종합 판단해라.',
+    '- 텍스트와 이미지가 충돌하면 곧바로 allow/deny로 단정하지 말고 review를 우선 고려해라.',
+    '- 위반 근거가 이미지에만 있으면 reason에 반드시 "이미지" 또는 "첨부 이미지"를 직접 언급해라.',
+    '- 이미지 내용을 충분히 확인하지 못해 판단이 애매하면 deny로 넘기지 말고 review를 사용해라.',
     '',
     '출력 형식:',
     '{',
@@ -136,7 +166,35 @@ function buildGeminiCliPrompt(input) {
     '',
     `본문:\n${bodyText || '없음'}`,
     '',
-    `이미지 URL:\n${imageSection}`,
+    `첨부 이미지 판독 결과:\n${String(input.imageAnalysis || '').trim() || '없음'}`,
+    '',
+    `첨부 이미지 파일 (멀티모달 입력, 있으면 반드시 확인):\n${imageFileSection}`,
+    '',
+    `첨부 이미지 URL (있으면 반드시 확인):\n${imageSection}`,
+  ].join('\n');
+}
+
+function buildImageAnalysisPrompt(imageFileRefs = []) {
+  const fileSection = Array.isArray(imageFileRefs) && imageFileRefs.length > 0
+    ? imageFileRefs.map((fileRef) => `@${fileRef}`).join('\n')
+    : '없음';
+
+  return [
+    '첨부 이미지의 내용을 직접 읽고, 판정에 필요한 텍스트/핵심 장면만 짧게 정리해라.',
+    '추측하지 말고 실제로 보이는 내용만 적어라.',
+    '특히 이미지 안의 텍스트, 고유명사, 숫자, 슬로건, 정치/혐오/광고/망상성 표현이 있으면 반드시 적어라.',
+    '반드시 JSON object 하나만 출력해라.',
+    '',
+    '출력 형식:',
+    '{',
+    '  "visible_text": ["보이는 문구1", "보이는 문구2"],',
+    '  "summary": "이미지 핵심 내용 요약",',
+    '  "contains_policy_signal": true,',
+    '  "notes": "판정에 참고할 점"',
+    '}',
+    '',
+    '첨부 이미지 파일:',
+    fileSection,
   ].join('\n');
 }
 
@@ -158,6 +216,29 @@ function sanitizeJudgeRequest(input) {
       reportReason: String(input?.reportReason || '').trim(),
       requestLabel: String(input?.requestLabel || '').trim(),
       authorFilter: String(input?.authorFilter || '').trim() || 'unknown',
+      imageFileRefs: [],
+    },
+  };
+}
+
+function sanitizeSelfTestImageRequest(input) {
+  const targetUrl = String(input?.targetUrl || '').trim();
+  const imageUrls = Array.isArray(input?.imageUrls)
+    ? input.imageUrls.map((value) => String(value || '').trim()).filter(Boolean).slice(0, MAX_IMAGE_URLS)
+    : [];
+
+  if (!targetUrl) {
+    return { success: false, message: 'targetUrl이 필요합니다.' };
+  }
+  if (imageUrls.length === 0) {
+    return { success: false, message: 'imageUrls가 필요합니다.' };
+  }
+
+  return {
+    success: true,
+    payload: {
+      targetUrl,
+      imageUrls,
     },
   };
 }
@@ -198,6 +279,7 @@ async function runGeminiCliOnce(prompt, runtimeConfig, commandToRun) {
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
     shell: shouldUseShellExecution(commandToRun),
+    cwd: runtimeConfig.helperRootDir,
   });
 
   const stdoutChunks = [];
@@ -235,8 +317,9 @@ async function runGeminiCliOnce(prompt, runtimeConfig, commandToRun) {
     const stdout = Buffer.concat(stdoutChunks).toString('utf8').trim();
     const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
     const rawText = [stdout, stderr].filter(Boolean).join('\n').trim();
+    const hasUsableDecisionOutput = hasUsableGeminiDecisionOutput(rawText);
 
-    if (didTimeout) {
+    if (didTimeout && !hasUsableDecisionOutput) {
       return {
         success: false,
         message: `Gemini CLI 응답 대기 시간이 초과되었습니다. (${runtimeConfig.timeoutMs}ms)`,
@@ -244,7 +327,7 @@ async function runGeminiCliOnce(prompt, runtimeConfig, commandToRun) {
       };
     }
 
-    if (result.code !== 0) {
+    if (result.code !== 0 && !hasUsableDecisionOutput) {
       return {
         success: false,
         message: `Gemini CLI 종료 코드가 비정상입니다. (${result.code ?? 'null'})`,
@@ -268,6 +351,10 @@ async function runGeminiCliOnce(prompt, runtimeConfig, commandToRun) {
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function hasUsableGeminiDecisionOutput(rawText) {
+  return parseGeminiCliJson(rawText).success === true;
 }
 
 function buildPromptInvocationArgs(runtimeConfig, prompt) {
@@ -378,12 +465,60 @@ function validateJudgeDecision(data, rawText) {
   };
 }
 
+function normalizeJudgeDecisionForAutomation(result) {
+  if (!result || result.success !== true) {
+    return result;
+  }
+
+  if (result.decision !== 'review') {
+    return result;
+  }
+
+  const policyIds = Array.isArray(result.policy_ids)
+    ? result.policy_ids.map((value) => String(value || '').trim().toUpperCase()).filter(Boolean)
+    : [];
+  const promotablePolicyIds = policyIds.filter((policyId) => policyId !== 'NONE');
+
+  if (promotablePolicyIds.length < 3) {
+    return result;
+  }
+
+  return {
+    ...result,
+    decision: 'allow',
+  };
+}
+
 function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies = {}) {
   const store = dependencies.store || createModerationRecordStore(runtimeConfig.recordsFilePath);
   return http.createServer(async (request, response) => {
     try {
       await store.init();
       const requestUrl = new URL(request.url || '/', `http://${runtimeConfig.host}:${runtimeConfig.port}`);
+
+      // ── Cloudflare Tunnel 보안 게이트 ──
+      // CF-Connecting-IP 헤더가 있으면 Cloudflare Tunnel 경유 (외부 요청)
+      // 외부 요청은 공개 읽기 전용 경로만 허용, 나머지 차단
+      const isExternalRequest = Boolean(request.headers['cf-connecting-ip']);
+      if (isExternalRequest) {
+        const pathname = requestUrl.pathname;
+        const isPublicRoute = request.method === 'GET' && (
+          pathname === '/transparency'
+          || pathname === '/transparency.css'
+          || pathname === '/bot-icon.png'
+          || pathname === '/gemini-icon.webp'
+          || pathname.startsWith('/transparency/')
+          || pathname.startsWith('/transparency-assets/')
+        );
+
+        if (!isPublicRoute) {
+          writeJson(response, 403, {
+            success: false,
+            message: 'This endpoint is not available on the public site.',
+          }, request);
+          return;
+        }
+      }
 
       if (request.method === 'OPTIONS') {
         writeJson(response, 204, {});
@@ -420,21 +555,41 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
         return;
       }
 
+      const pageHealthStatus = await buildTransparencyHealthStatus(runtimeConfig);
+
       if (request.method === 'GET' && requestUrl.pathname === '/transparency.css') {
-        writeText(response, 200, TRANSPARENCY_CSS_TEXT, 'text/css; charset=utf-8');
+        writeText(response, 200, TRANSPARENCY_CSS_TEXT, 'text/css; charset=utf-8', request);
+        return;
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/bot-icon.png') {
+        response.writeHead(200, {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=86400',
+        });
+        response.end(BOT_ICON_BUFFER);
+        return;
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/gemini-icon.webp') {
+        response.writeHead(200, {
+          'Content-Type': 'image/webp',
+          'Cache-Control': 'public, max-age=86400',
+        });
+        response.end(GEMINI_ICON_BUFFER);
         return;
       }
 
       if ((request.method === 'GET' || request.method === 'HEAD') && requestUrl.pathname.startsWith('/transparency-assets/')) {
         const assetName = sanitizeRequestedAssetFileName(requestUrl.pathname.replace(/^\/transparency-assets\//, ''));
         if (!assetName) {
-          writeText(response, 404, renderNotFoundPage('이미지를 찾지 못했습니다.'), 'text/html; charset=utf-8');
+          writeText(response, 404, renderNotFoundPage('이미지를 찾지 못했습니다.', pageHealthStatus), 'text/html; charset=utf-8', request);
           return;
         }
 
         const assetPath = resolve(runtimeConfig.assetsDir, assetName);
         if (!assetPath.startsWith(resolve(runtimeConfig.assetsDir))) {
-          writeText(response, 404, renderNotFoundPage('이미지를 찾지 못했습니다.'), 'text/html; charset=utf-8');
+          writeText(response, 404, renderNotFoundPage('이미지를 찾지 못했습니다.', pageHealthStatus), 'text/html; charset=utf-8', request);
           return;
         }
 
@@ -443,21 +598,22 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
           response.writeHead(200, {
             'Content-Type': 'image/webp',
             'Cache-Control': 'public, max-age=300',
-            'Access-Control-Allow-Origin': '*',
+            ...buildCorsHeaders(request),
           });
           response.end(request.method === 'HEAD' ? undefined : assetBody);
         } catch {
-          writeText(response, 404, renderNotFoundPage('이미지를 찾지 못했습니다.'), 'text/html; charset=utf-8');
+          writeText(response, 404, renderNotFoundPage('이미지를 찾지 못했습니다.', pageHealthStatus), 'text/html; charset=utf-8', request);
         }
         return;
       }
 
       if (request.method === 'GET' && requestUrl.pathname === '/transparency') {
+        const cursor = Math.max(0, Number(requestUrl.searchParams.get('cursor') || 0));
         const listResult = await store.listRecords({
           decision: requestUrl.searchParams.get('decision') || '',
           policyId: requestUrl.searchParams.get('policyId') || '',
           limit: requestUrl.searchParams.get('limit') || '50',
-          cursor: requestUrl.searchParams.get('cursor') || '',
+          cursor,
         });
         writeText(
           response,
@@ -466,8 +622,11 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
             records: listResult.records,
             nextCursor: listResult.nextCursor,
             total: listResult.total,
+            cursor,
+            healthStatus: pageHealthStatus,
           }),
           'text/html; charset=utf-8',
+          request,
         );
         return;
       }
@@ -476,11 +635,11 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
         const recordId = decodeURIComponent(requestUrl.pathname.replace(/^\/transparency\//, ''));
         const record = await store.getRecord(recordId);
         if (!record) {
-          writeText(response, 404, renderNotFoundPage('기록을 찾지 못했습니다.'), 'text/html; charset=utf-8');
+          writeText(response, 404, renderNotFoundPage('기록을 찾지 못했습니다.', pageHealthStatus), 'text/html; charset=utf-8', request);
           return;
         }
 
-        writeText(response, 200, renderTransparencyDetailPage(record), 'text/html; charset=utf-8');
+        writeText(response, 200, renderTransparencyDetailPage(record, pageHealthStatus), 'text/html; charset=utf-8', request);
         return;
       }
 
@@ -539,6 +698,25 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
         return;
       }
 
+      if (request.method === 'POST' && requestUrl.pathname === '/self-test-image') {
+        const requestBody = await readJsonBody(request);
+        const sanitized = sanitizeSelfTestImageRequest(requestBody);
+        if (!sanitized.success) {
+          writeJson(response, 400, {
+            success: false,
+            message: sanitized.message,
+          });
+          return;
+        }
+
+        const result = await runImageRecognitionSelfTest(sanitized.payload, runtimeConfig);
+        writeJson(response, 200, {
+          success: true,
+          ...result,
+        });
+        return;
+      }
+
       if (request.method !== 'POST' || requestUrl.pathname !== '/judge') {
         writeJson(response, 404, {
           success: false,
@@ -557,8 +735,22 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
         return;
       }
 
-      const prompt = buildGeminiCliPrompt(sanitized.payload);
-      const cliResult = await runGeminiCli(prompt, runtimeConfig);
+      const preparedInputs = await prepareJudgeImageInputs(sanitized.payload, runtimeConfig);
+      let cliResult = null;
+      let imageAnalysisText = '';
+      try {
+        imageAnalysisText = await runImageAnalysis(preparedInputs.imageFileRefs, runtimeConfig);
+        cliResult = await runGeminiCli(
+          buildGeminiCliPrompt({
+            ...sanitized.payload,
+            imageFileRefs: preparedInputs.imageFileRefs,
+            imageAnalysis: imageAnalysisText,
+          }),
+          runtimeConfig,
+        );
+      } finally {
+        await cleanupPreparedJudgeImageInputs(preparedInputs);
+      }
       if (!cliResult.success) {
         writeJson(response, 200, {
           success: false,
@@ -578,13 +770,15 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
         return;
       }
 
+      const normalizedDecision = normalizeJudgeDecisionForAutomation(parsed);
+
       writeJson(response, 200, {
         success: true,
-        decision: parsed.decision,
-        confidence: parsed.confidence,
-        policy_ids: parsed.policy_ids,
-        reason: parsed.reason,
-        rawText: parsed.rawText,
+        decision: normalizedDecision.decision,
+        confidence: normalizedDecision.confidence,
+        policy_ids: normalizedDecision.policy_ids,
+        reason: normalizedDecision.reason,
+        rawText: normalizedDecision.rawText,
       });
     } catch (error) {
       writeJson(response, 500, {
@@ -606,7 +800,8 @@ function buildRuntimeConfig() {
     promptFlag: DEFAULT_PROMPT_FLAG,
     recordsFilePath: process.env.TRANSPARENCY_RECORDS_FILE || fileURLToPath(new URL('./data/moderation-records.jsonl', import.meta.url)),
     assetsDir: process.env.TRANSPARENCY_ASSETS_DIR || fileURLToPath(new URL('./data/transparency-assets', import.meta.url)),
-    publicTitleVisibleChars: DEFAULT_PUBLIC_TITLE_VISIBLE_CHARS,
+    judgeInputDir: process.env.TRANSPARENCY_JUDGE_INPUT_DIR || fileURLToPath(new URL('./gemini-inputs', import.meta.url)),
+    helperRootDir: fileURLToPath(new URL('./', import.meta.url)),
     thumbnailWidth: DEFAULT_THUMBNAIL_WIDTH,
     thumbnailBlurSigma: DEFAULT_THUMBNAIL_BLUR_SIGMA,
     thumbnailWebpQuality: DEFAULT_THUMBNAIL_QUALITY,
@@ -631,20 +826,31 @@ function parseArgsJson(value) {
   }
 }
 
-function writeJson(response, statusCode, payload) {
-  response.writeHead(statusCode, {
-    'Content-Type': 'application/json; charset=utf-8',
+function buildCorsHeaders(request) {
+  // 외부 요청(Cloudflare Tunnel 경유)이면 CORS 헤더를 붙이지 않음
+  // 로컬 익스텐션 요청에만 CORS 허용 (크롬 확장 프로그램은 CORS 필요)
+  if (request && request.headers && request.headers['cf-connecting-ip']) {
+    return {};
+  }
+  return {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  };
+}
+
+function writeJson(response, statusCode, payload, request) {
+  response.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    ...buildCorsHeaders(request),
   });
   response.end(JSON.stringify(payload));
 }
 
-function writeText(response, statusCode, body, contentType) {
+function writeText(response, statusCode, body, contentType, request) {
   response.writeHead(statusCode, {
     'Content-Type': contentType,
-    'Access-Control-Allow-Origin': '*',
+    ...buildCorsHeaders(request),
   });
   response.end(body);
 }
@@ -748,6 +954,21 @@ function safeParseJson(value) {
   }
 }
 
+async function buildTransparencyHealthStatus(runtimeConfig) {
+  const availability = await checkGeminiCommandAvailability(runtimeConfig);
+  return availability.available
+    ? {
+      isHealthy: true,
+      label: '서버 상태',
+      emoji: '🟢',
+    }
+    : {
+      isHealthy: false,
+      label: '서버 상태',
+      emoji: '🔴',
+    };
+}
+
 function truncateText(value, maxLength) {
   const normalized = String(value || '').replace(/\s+/g, ' ').trim();
   if (normalized.length <= maxLength) {
@@ -797,10 +1018,10 @@ function sanitizeRecordRequest(input) {
   }
 
   const source = String(input.source || 'auto_report').trim();
-  if (source !== 'auto_report') {
+  if (source !== 'auto_report' && source !== 'manual_test') {
     return {
       success: false,
-      message: '공개 transparency record는 auto_report만 저장합니다.',
+      message: '공개 transparency record는 auto_report 또는 manual_test만 저장합니다.',
     };
   }
 
@@ -821,9 +1042,11 @@ function sanitizeRecordRequest(input) {
     success: true,
     recordInput: {
       id: String(input.id || '').trim(),
+      source,
       targetUrl,
       targetPostNo,
       title: String(input.title || '').trim(),
+      bodyText: String(input.bodyText || '').trim(),
       reportReason: String(input.reportReason || '').trim(),
       imageUrls: Array.isArray(input.imageUrls)
         ? input.imageUrls.map((value) => String(value || '').trim()).filter(Boolean).slice(0, MAX_IMAGE_URLS)
@@ -849,9 +1072,11 @@ async function preparePublicRecord(input, runtimeConfig) {
     id: recordId,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    source: input.source,
     targetUrl: input.targetUrl,
     targetPostNo: input.targetPostNo,
-    publicTitle: maskPublicTitle(input.title, runtimeConfig.publicTitleVisibleChars),
+    publicTitle: String(input.title || '').trim(),
+    publicBody: String(input.bodyText || '').trim(),
     reportReason: input.reportReason,
     decision: input.decision,
     confidence: input.confidence,
@@ -890,7 +1115,7 @@ async function createBlurredThumbnail({ recordId, targetUrl, imageUrls, runtimeC
       }
 
       const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-      if (!contentType.startsWith('image/')) {
+      if (isClearlyNonImageContentType(contentType)) {
         continue;
       }
 
@@ -929,12 +1154,235 @@ async function createBlurredThumbnail({ recordId, targetUrl, imageUrls, runtimeC
   return '';
 }
 
+async function prepareJudgeImageInputs(input, runtimeConfig) {
+  const imageUrls = Array.isArray(input?.imageUrls) ? input.imageUrls.map((value) => String(value || '').trim()).filter(Boolean).slice(0, MAX_IMAGE_URLS) : [];
+  if (imageUrls.length === 0) {
+    return {
+      imageFileRefs: [],
+      cleanupPaths: [],
+    };
+  }
+
+  await mkdir(runtimeConfig.judgeInputDir, { recursive: true });
+  const cleanupPaths = [];
+  const imageFileRefs = [];
+
+  for (let index = 0; index < imageUrls.length; index += 1) {
+    const imageUrl = imageUrls[index];
+    const downloaded = await downloadJudgeImageInput({
+      imageUrl,
+      targetUrl: input.targetUrl,
+      runtimeConfig,
+      index,
+    });
+    if (!downloaded.success) {
+      continue;
+    }
+
+    cleanupPaths.push(downloaded.filePath);
+    imageFileRefs.push(downloaded.promptPath);
+  }
+
+  return {
+    imageFileRefs,
+    cleanupPaths,
+  };
+}
+
+async function downloadJudgeImageInput({ imageUrl, targetUrl, runtimeConfig, index }) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, IMAGE_DOWNLOAD_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(imageUrl, {
+      method: 'GET',
+      headers: buildImageDownloadHeaders(targetUrl),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      return { success: false };
+    }
+
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    if (isClearlyNonImageContentType(contentType)) {
+      return { success: false };
+    }
+
+    const contentLength = Number(response.headers.get('content-length') || 0);
+    if (contentLength > MAX_IMAGE_DOWNLOAD_BYTES) {
+      return { success: false };
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    if (buffer.length === 0 || buffer.length > MAX_IMAGE_DOWNLOAD_BYTES) {
+      return { success: false };
+    }
+
+    const normalizedBuffer = await normalizeJudgeImageBuffer(buffer);
+    const fileName = `${buildRecordId()}_${index + 1}.png`;
+    const filePath = resolve(runtimeConfig.judgeInputDir, fileName);
+    await writeFile(filePath, normalizedBuffer);
+
+    return {
+      success: true,
+      filePath,
+      promptPath: toPromptRelativePath(runtimeConfig.helperRootDir, filePath),
+    };
+  } catch {
+    return { success: false };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function cleanupPreparedJudgeImageInputs(preparedInputs) {
+  const cleanupPaths = Array.isArray(preparedInputs?.cleanupPaths) ? preparedInputs.cleanupPaths : [];
+  for (const filePath of cleanupPaths) {
+    try {
+      await rm(filePath, { force: true });
+    } catch {
+      continue;
+    }
+  }
+}
+
+async function runImageAnalysis(imageFileRefs, runtimeConfig) {
+  if (!Array.isArray(imageFileRefs) || imageFileRefs.length === 0) {
+    return '';
+  }
+
+  const analysisResult = await runGeminiCli(
+    buildImageAnalysisPrompt(imageFileRefs),
+    {
+      ...runtimeConfig,
+      timeoutMs: Math.min(runtimeConfig.timeoutMs, 30000),
+    },
+  );
+
+  if (!analysisResult.success) {
+    return '';
+  }
+
+  const parsed = safeParseJson(String(analysisResult.rawText || '').trim());
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return '';
+  }
+
+  const visibleText = Array.isArray(parsed.visible_text)
+    ? parsed.visible_text.map((value) => String(value || '').trim()).filter(Boolean).slice(0, 20)
+    : [];
+  const summary = String(parsed.summary || '').trim();
+  const notes = String(parsed.notes || '').trim();
+  const containsPolicySignal = parsed.contains_policy_signal === true ? '예' : '아니오';
+
+  return [
+    `visible_text: ${visibleText.length > 0 ? visibleText.join(' | ') : '없음'}`,
+    `summary: ${summary || '없음'}`,
+    `contains_policy_signal: ${containsPolicySignal}`,
+    `notes: ${notes || '없음'}`,
+  ].join('\n');
+}
+
+async function runImageRecognitionSelfTest(input, runtimeConfig) {
+  const preparedInputs = await prepareJudgeImageInputs(input, runtimeConfig);
+  const fileRefs = preparedInputs.imageFileRefs;
+  const reports = [];
+  const strategies = [
+    {
+      name: 'file_ref_only',
+      prompt: buildImageRecognitionSelfTestPrompt(fileRefs),
+      runtimeConfig: {
+        ...runtimeConfig,
+        timeoutMs: Math.min(runtimeConfig.timeoutMs, 30000),
+      },
+    },
+    {
+      name: 'read_many_files_explicit',
+      prompt: buildImageRecognitionSelfTestPrompt(
+        fileRefs,
+        `먼저 read_many_files(include=[${fileRefs.map((fileRef) => `"${fileRef}"`).join(', ')}], useDefaultExcludes=false, file_filtering_options={respect_git_ignore:false, respect_gemini_ignore:false}) 를 호출해 이미지를 읽어라.`,
+      ),
+      runtimeConfig: {
+        ...runtimeConfig,
+        timeoutMs: Math.min(runtimeConfig.timeoutMs, 30000),
+      },
+    },
+    {
+      name: 'read_many_files_yolo',
+      prompt: buildImageRecognitionSelfTestPrompt(
+        fileRefs,
+        `먼저 read_many_files(include=[${fileRefs.map((fileRef) => `"${fileRef}"`).join(', ')}], useDefaultExcludes=false, file_filtering_options={respect_git_ignore:false, respect_gemini_ignore:false}) 를 호출해 이미지를 읽어라.`,
+      ),
+      runtimeConfig: {
+        ...runtimeConfig,
+        timeoutMs: Math.min(runtimeConfig.timeoutMs, 30000),
+        args: [...runtimeConfig.args, '--approval-mode', 'yolo'],
+      },
+    },
+  ];
+
+  try {
+    for (const strategy of strategies) {
+      const result = await runGeminiCli(strategy.prompt, strategy.runtimeConfig);
+      reports.push({
+        name: strategy.name,
+        success: Boolean(result?.success),
+        message: String(result?.message || ''),
+        rawText: String(result?.rawText || ''),
+      });
+    }
+  } finally {
+    await cleanupPreparedJudgeImageInputs(preparedInputs);
+  }
+
+  return {
+    imageFileRefs: fileRefs,
+    reports,
+  };
+}
+
+function buildImageRecognitionSelfTestPrompt(imageFileRefs, extraInstruction = '') {
+  return [
+    '첨부 이미지를 직접 읽고 아주 짧게 답해라.',
+    '반드시 다음 2가지를 답해라.',
+    '1. 상단 프로필명',
+    '2. 카드 이미지 속 숫자 쌍',
+    extraInstruction || '',
+    '',
+    '첨부 이미지 파일:',
+    imageFileRefs.map((fileRef) => `@${fileRef}`).join('\n'),
+  ].filter(Boolean).join('\n');
+}
+
 function buildImageDownloadHeaders(targetUrl) {
   return {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
     Referer: String(targetUrl || '').trim(),
   };
+}
+
+function isClearlyNonImageContentType(contentType) {
+  const normalized = String(contentType || '').toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  if (normalized.startsWith('image/')) {
+    return false;
+  }
+
+  if (normalized === 'application/octet-stream') {
+    return false;
+  }
+
+  return normalized.startsWith('text/')
+    || normalized.includes('html')
+    || normalized.includes('json')
+    || normalized.includes('xml');
 }
 
 function sanitizeAssetBaseName(value) {
@@ -953,6 +1401,22 @@ function sanitizeRequestedAssetFileName(value) {
   }
 
   return normalized;
+}
+
+async function normalizeJudgeImageBuffer(buffer) {
+  return sharp(buffer, { animated: true })
+    .rotate()
+    .png()
+    .toBuffer();
+}
+
+function toPromptRelativePath(rootDir, filePath) {
+  const relativePath = relative(rootDir, filePath).replace(/\\/g, '/');
+  if (!relativePath || relativePath.startsWith('../')) {
+    return filePath.replace(/\\/g, '/');
+  }
+
+  return relativePath.startsWith('./') ? relativePath : `./${relativePath}`;
 }
 
 function buildRecordId() {
@@ -1144,6 +1608,19 @@ function renderNotFoundPage(message) {
 }
 
 async function startServer(runtimeConfig = buildRuntimeConfig()) {
+  // ── 보안: loopback 전용 바인딩 강제 ──
+  // Cloudflare Tunnel 보안 게이트는 loopback 바인딩을 전제로 동작합니다.
+  // 127.0.0.1 또는 ::1 외의 주소로 바인딩하면 외부에서 CF 헤더 없이
+  // 직접 접근이 가능해져 보안 게이트가 우회됩니다.
+  const ALLOWED_HOSTS = ['127.0.0.1', '::1', 'localhost'];
+  if (!ALLOWED_HOSTS.includes(runtimeConfig.host)) {
+    throw new Error(
+      `[보안 오류] HOST=${runtimeConfig.host} 바인딩은 금지됩니다. `
+      + 'Cloudflare Tunnel 보안 게이트가 우회될 수 있습니다. '
+      + 'HOST=127.0.0.1 (기본값)으로 실행하세요.'
+    );
+  }
+
   const store = createModerationRecordStore(runtimeConfig.recordsFilePath);
   await store.init();
   const server = createHelperServer(runtimeConfig, { store });
@@ -1171,10 +1648,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 
 export {
   buildGeminiCliPrompt,
+  buildImageAnalysisPrompt,
   buildRuntimeConfig,
+  cleanupPreparedJudgeImageInputs,
   createHelperServer,
+  normalizeJudgeDecisionForAutomation,
+  prepareJudgeImageInputs,
   pickBestCommandPath,
   parseGeminiCliJson,
+  runImageAnalysis,
   runGeminiCli,
   sanitizeJudgeRequest,
   sanitizeRecordRequest,

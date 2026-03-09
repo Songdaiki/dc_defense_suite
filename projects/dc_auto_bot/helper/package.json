@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "self-test:image": "node scripts/self_test_image_input.mjs"
   },
   "dependencies": {
     "sharp": "^0.34.5"

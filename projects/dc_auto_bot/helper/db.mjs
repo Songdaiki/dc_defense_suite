@@ -3,8 +3,6 @@ import { dirname, resolve } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
 const VALID_DECISIONS = new Set(['allow', 'deny', 'review']);
-const DEFAULT_PUBLIC_TITLE_VISIBLE_CHARS = 18;
-
 function createModerationRecordStore(filePath) {
   return new ModerationRecordStore(filePath);
 }
@@ -119,21 +117,23 @@ class ModerationRecordStore {
 
 function normalizePublicModerationRecord(input) {
   const source = normalizeOptionalString(input.source);
-  if (source && source !== 'auto_report') {
+  if (source && source !== 'auto_report' && source !== 'manual_test') {
     return null;
   }
 
   const createdAt = normalizeIsoDate(input.createdAt) || new Date().toISOString();
   const updatedAt = normalizeIsoDate(input.updatedAt) || new Date().toISOString();
-  const rawTitle = normalizeOptionalString(input.publicTitle) || maskPublicTitle(input.title, input.publicTitleVisibleChars);
+  const rawTitle = normalizeOptionalString(input.publicTitle) || normalizeOptionalString(input.title);
 
   return {
     id: String(input.id || randomUUID()).trim() || randomUUID(),
     createdAt,
     updatedAt,
+    source: source || 'auto_report',
     targetUrl: normalizeOptionalString(input.targetUrl),
     targetPostNo: normalizeOptionalString(input.targetPostNo),
     publicTitle: rawTitle || '(제목 없음)',
+    publicBody: normalizeOptionalString(input.publicBody) || '',
     reportReason: normalizeOptionalString(input.reportReason),
     decision: normalizeDecision(input.decision),
     confidence: normalizeNullableNumber(input.confidence),
@@ -142,20 +142,6 @@ function normalizePublicModerationRecord(input) {
     blurredThumbnailPath: normalizePublicAssetPath(input.blurredThumbnailPath),
     imageCount: normalizeImageCount(input.imageCount ?? input.imageUrls?.length),
   };
-}
-
-function maskPublicTitle(value, visibleChars = DEFAULT_PUBLIC_TITLE_VISIBLE_CHARS) {
-  const normalized = normalizeOptionalString(value);
-  if (!normalized) {
-    return '';
-  }
-
-  const safeVisibleChars = Math.max(1, Math.min(60, Number(visibleChars) || DEFAULT_PUBLIC_TITLE_VISIBLE_CHARS));
-  if (normalized.length <= safeVisibleChars) {
-    return normalized;
-  }
-
-  return `${normalized.slice(0, safeVisibleChars)}...`;
 }
 
 function normalizeIsoDate(value) {
@@ -237,6 +223,5 @@ function sortRecordsDescending(records) {
 
 export {
   createModerationRecordStore,
-  maskPublicTitle,
   normalizePublicModerationRecord,
 };

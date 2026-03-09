@@ -4,6 +4,8 @@
 
 이 문서는 신문고 봇 v2에서 **공개형 투명성 웹사이트**를 구축할 때 필요한 스펙을 정리한다.
 
+무료 공개 배포 방식은 별도 문서 [sinmungo_bot_v2_transparency_public_deploy.md](./sinmungo_bot_v2_transparency_public_deploy.md)를 따른다.
+
 목표는 아래와 같다.
 
 - 신고받은 게시물이 어떤 이유로 삭제 승인/반려/검토 판정을 받았는지 공개한다.
@@ -20,7 +22,7 @@
 - 공개 사이트에는 **공개용 레코드만** 노출한다.
 - helper는 내부 snapshot을 받아도, 공개 사이트에는 비공개 필드를 제거한 **공개용 projection**만 저장/노출한다.
 - `Gemini reason`과 `reportReason`은 공개한다.
-- 제목은 일부 마스킹한다.
+- 제목은 갤러리에서 보이는 표시값 그대로 공개한다.
 - 원본 이미지 URL은 공개하지 않는다.
 - 원본 이미지 파일도 공개하지 않는다.
 - 공개용 이미지는 **블러/모자이크 처리된 썸네일**만 사용한다.
@@ -76,7 +78,8 @@ helper는 아래를 담당한다.
 - 시간
 - 게시물 번호
 - 게시물 링크
-- 제목 일부 마스킹 값
+- 게시물 표시 제목
+- 게시물 본문
 - `reportReason`
 - `decision`
   - 삭제 승인 / 삭제 반려 / 검토 필요
@@ -110,7 +113,9 @@ helper는 아래를 담당한다.
   "createdAt": "2026-03-09T12:34:56.000Z",
   "targetUrl": "https://gall.dcinside.com/...",
   "targetPostNo": "1045190",
-  "publicTitle": "애초에 디시 전체에서 GPT빠는갤이 여...",
+  "source": "auto_report",
+  "publicTitle": "[일반] 애초에 디시 전체에서 GPT빠는갤이 여기뿐임",
+  "publicBody": "게시물 본문 텍스트",
   "reportReason": "홍보",
   "decision": "allow | deny | review",
   "confidence": 0.91,
@@ -123,8 +128,12 @@ helper는 아래를 담당한다.
 
 ### 6.1 필드 의미
 
+- `source`
+  - `auto_report | manual_test`
 - `publicTitle`
-  - 원문 제목을 일부 마스킹한 공개용 제목
+  - 갤러리에서 보이는 말머리 포함 표시 제목
+- `publicBody`
+  - 상세 페이지에서 보여주는 공개용 본문 텍스트
 - `reportReason`
   - 사람이 신고할 때 넣은 사유
 - `reason`
@@ -146,15 +155,15 @@ helper는 입력으로 full snapshot을 받을 수 있다.
 - requestLabel
 - rawText
 
-하지만 공개 사이트에는 이를 그대로 쓰지 않는다.
+현재 구현에서는 제목/본문을 공개용 필드로 재매핑해서 사용한다.
 
 원칙:
 
 1. helper는 full snapshot을 받는다.
-2. helper는 공개용 record를 별도로 만든다.
+2. helper는 공개용 record를 별도로 만들고, 제목/본문은 `publicTitle`, `publicBody`로 저장한다.
 3. 공개 사이트와 공개 API는 공개용 record만 사용한다.
 
-즉 **공개 사이트가 내부 snapshot 원문을 직접 읽으면 안 된다.**
+즉 **공개 사이트가 내부 snapshot 전체나 운영 메타를 직접 노출하면 안 된다.**
 
 ## 8. 이미지 처리 정책
 
@@ -242,8 +251,8 @@ POST /record
 
 - helper가 full snapshot을 받아 공개용 record를 생성/저장
 - 또는 `/judge` 내부에서 판정 후 공개용 record를 저장
-- 공개 대상은 실제 신고 자동 처리(`auto_report`)에서 생성된 Gemini 판정 레코드로 한정한다.
-- 수동 `LLM 테스트` 결과는 공개 transparency 사이트에 저장하지 않는다.
+- 공개 대상은 실제 신고 자동 처리(`auto_report`)와 수동 `LLM 테스트`(`manual_test`)에서 생성된 Gemini 판정 레코드다.
+- 단, Gemini 판정 결과가 실제로 나온 경우만 공개 transparency 사이트에 저장한다.
 
 ### 10.3 공개 record 목록 API
 
@@ -283,7 +292,7 @@ GET /transparency
 표시 항목:
 
 - 시간
-- 일부 마스킹된 제목
+- 말머리 포함 표시 제목
 - 블러 썸네일
 - `decision`
   - 삭제 승인 / 삭제 반려 / 검토 필요
@@ -311,7 +320,7 @@ GET /transparency/:id
 
 - 게시물 링크
 - 게시물 번호
-- 일부 마스킹된 제목
+- 말머리 포함 표시 제목
 - 블러 썸네일
 - `reportReason`
 - `decision`
@@ -346,6 +355,8 @@ UI는 단순해야 한다.
 
 공개 허용:
 
+- publicTitle
+- publicBody
 - reportReason
 - Gemini reason
 - decision
@@ -364,16 +375,16 @@ UI는 단순해야 한다.
 
 ## 14. 구현 전 최종 확인 필요 사항
 
-- 제목 마스킹 길이를 몇 자로 할지
-- 본문은 공개하지 않을지
+- 제목을 말머리 포함 표시값으로 저장할지
+- 본문을 `publicBody`로 공개할지
 - 블러 강도를 어느 정도로 할지
 - 썸네일 크기를 몇 px로 할지
 - 공개 record와 내부 원문 데이터를 완전히 분리 저장할지
 
 현재 기준 권장:
 
-- 제목 일부 마스킹
-- 본문 비공개
+- 말머리 포함 표시 제목 공개
+- `publicBody` 공개
 - reportReason 공개
 - Gemini reason 공개
 - 블러 썸네일 공개
