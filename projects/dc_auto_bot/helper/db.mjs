@@ -130,6 +130,7 @@ function normalizePublicModerationRecord(input) {
     createdAt,
     updatedAt,
     source: source || 'auto_report',
+    decisionSource: normalizeOptionalString(input.decisionSource) || 'gemini',
     targetUrl: normalizeOptionalString(input.targetUrl),
     targetPostNo: normalizeOptionalString(input.targetPostNo),
     publicTitle: rawTitle || '(제목 없음)',

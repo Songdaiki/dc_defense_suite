@@ -15,7 +15,7 @@ const DEFAULT_CONFIG = {
   applyAuthorFilter: true,
   lowActivityThreshold: 100,
   cliHelperEndpoint: 'http://127.0.0.1:4317/judge',
-  cliHelperTimeoutMs: 90000,
+  cliHelperTimeoutMs: 240000,
   llmConfidenceThreshold: 0.85,
 };
 
@@ -654,6 +654,7 @@ function parseCliHelperJudgeResponse(data, responseText) {
     return {
       success: false,
       message: String(data.message || 'CLI helper 판정 실패'),
+      failureType: String(data.failure_type || data.failureType || ''),
       rawText,
     };
   }

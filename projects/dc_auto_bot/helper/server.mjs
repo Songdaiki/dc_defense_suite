@@ -11,7 +11,7 @@ import { renderTransparencyDetailPage, renderTransparencyListPage } from './tran
 
 const DEFAULT_HOST = process.env.HOST || '127.0.0.1';
 const DEFAULT_PORT = normalizePort(process.env.PORT, 4317);
-const DEFAULT_TIMEOUT_MS = normalizePositiveInt(process.env.GEMINI_TIMEOUT_MS, 90000);
+const DEFAULT_TIMEOUT_MS = normalizePositiveInt(process.env.GEMINI_TIMEOUT_MS, 240000);
 const DEFAULT_PROMPT_MODE = normalizePromptMode(process.env.GEMINI_PROMPT_MODE || getDefaultPromptMode());
 const DEFAULT_PROMPT_FLAG = String(process.env.GEMINI_PROMPT_FLAG || '-p').trim() || '-p';
 const DEFAULT_GEMINI_COMMAND = String(process.env.GEMINI_COMMAND || getDefaultGeminiCommand()).trim() || getDefaultGeminiCommand();
@@ -28,6 +28,7 @@ const DEFAULT_THUMBNAIL_QUALITY = normalizePositiveInt(process.env.TRANSPARENCY_
 const COMMAND_CHECK_CACHE_MS = 5000;
 const COMMAND_CHECK_TIMEOUT_MS = 2000;
 const VALID_DECISIONS = new Set(['allow', 'deny', 'review']);
+const IMAGE_ANALYSIS_TIMEOUT_FAILURE_TYPE = 'image_analysis_timeout';
 const VALID_POLICY_IDS = new Set([
   'NONE',
   'P1',
@@ -751,18 +752,29 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
         return;
       }
 
+      const judgeStartedAtMs = Date.now();
       const preparedInputs = await prepareJudgeImageInputs(sanitized.payload, runtimeConfig);
       let cliResult = null;
       let imageAnalysisText = '';
       try {
-        imageAnalysisText = await runImageAnalysis(preparedInputs.imageFileRefs, runtimeConfig);
+        const imageAnalysisResult = await runImageAnalysis(preparedInputs.imageFileRefs, runtimeConfig, judgeStartedAtMs);
+        if (imageAnalysisResult.timedOut) {
+          writeJson(response, 200, {
+            success: false,
+            failure_type: IMAGE_ANALYSIS_TIMEOUT_FAILURE_TYPE,
+            message: 'Gemini 이미지 분석 시간 초과',
+            rawText: imageAnalysisResult.rawText || '',
+          }, request);
+          return;
+        }
+        imageAnalysisText = imageAnalysisResult.text;
         cliResult = await runGeminiCli(
           buildGeminiCliPrompt({
             ...sanitized.payload,
             imageFileRefs: preparedInputs.imageFileRefs,
             imageAnalysis: imageAnalysisText,
           }),
-          runtimeConfig,
+          withRemainingJudgeBudget(runtimeConfig, judgeStartedAtMs),
         );
       } finally {
         await cleanupPreparedJudgeImageInputs(preparedInputs);
@@ -1041,6 +1053,46 @@ function sanitizeRecordRequest(input) {
     };
   }
 
+  const decisionSource = String(input.decisionSource || 'gemini').trim();
+  if (decisionSource === 'image_analysis_timeout_fallback') {
+    const targetUrl = String(input.targetUrl || '').trim();
+    const targetPostNo = String(input.targetPostNo || '').trim();
+    const reason = String(input.reason || '').trim();
+    if (!targetUrl && !targetPostNo) {
+      return {
+        success: false,
+        message: 'targetUrl 또는 targetPostNo 중 하나는 필요합니다.',
+      };
+    }
+    if (!reason) {
+      return {
+        success: false,
+        message: 'reason 값이 비어 있습니다.',
+      };
+    }
+
+    return {
+      success: true,
+      recordInput: {
+        id: String(input.id || '').trim(),
+        source,
+        decisionSource,
+        targetUrl,
+        targetPostNo,
+        title: String(input.title || '').trim(),
+        bodyText: String(input.bodyText || '').trim(),
+        reportReason: String(input.reportReason || '').trim(),
+        imageUrls: Array.isArray(input.imageUrls)
+          ? input.imageUrls.map((value) => String(value || '').trim()).filter(Boolean).slice(0, MAX_IMAGE_URLS)
+          : [],
+        decision: 'allow',
+        confidence: null,
+        policyIds: [],
+        reason,
+      },
+    };
+  }
+
   const validatedDecision = validateJudgeDecision({
     decision: input.decision,
     confidence: input.confidence,
@@ -1059,6 +1111,7 @@ function sanitizeRecordRequest(input) {
     recordInput: {
       id: String(input.id || '').trim(),
       source,
+      decisionSource,
       targetUrl,
       targetPostNo,
       title: String(input.title || '').trim(),
@@ -1089,6 +1142,7 @@ async function preparePublicRecord(input, runtimeConfig) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     source: input.source,
+    decisionSource: input.decisionSource,
     targetUrl: input.targetUrl,
     targetPostNo: input.targetPostNo,
     publicTitle: String(input.title || '').trim(),
@@ -1265,26 +1319,35 @@ async function cleanupPreparedJudgeImageInputs(preparedInputs) {
   }
 }
 
-async function runImageAnalysis(imageFileRefs, runtimeConfig) {
+async function runImageAnalysis(imageFileRefs, runtimeConfig, judgeStartedAtMs = Date.now()) {
   if (!Array.isArray(imageFileRefs) || imageFileRefs.length === 0) {
-    return '';
+    return {
+      text: '',
+      timedOut: false,
+      rawText: '',
+    };
   }
 
   const analysisResult = await runGeminiCli(
     buildImageAnalysisPrompt(imageFileRefs),
-    {
-      ...runtimeConfig,
-      timeoutMs: Math.min(runtimeConfig.timeoutMs, 30000),
-    },
+    withRemainingJudgeBudget(runtimeConfig, judgeStartedAtMs),
   );
 
   if (!analysisResult.success) {
-    return '';
+    return {
+      text: '',
+      timedOut: String(analysisResult.message || '').includes('시간 초과'),
+      rawText: String(analysisResult.rawText || ''),
+    };
   }
 
   const parsed = safeParseJson(String(analysisResult.rawText || '').trim());
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return '';
+    return {
+      text: '',
+      timedOut: false,
+      rawText: String(analysisResult.rawText || ''),
+    };
   }
 
   const visibleText = Array.isArray(parsed.visible_text)
@@ -1294,12 +1357,25 @@ async function runImageAnalysis(imageFileRefs, runtimeConfig) {
   const notes = String(parsed.notes || '').trim();
   const containsPolicySignal = parsed.contains_policy_signal === true ? '예' : '아니오';
 
-  return [
-    `visible_text: ${visibleText.length > 0 ? visibleText.join(' | ') : '없음'}`,
-    `summary: ${summary || '없음'}`,
-    `contains_policy_signal: ${containsPolicySignal}`,
-    `notes: ${notes || '없음'}`,
-  ].join('\n');
+  return {
+    text: [
+      `visible_text: ${visibleText.length > 0 ? visibleText.join(' | ') : '없음'}`,
+      `summary: ${summary || '없음'}`,
+      `contains_policy_signal: ${containsPolicySignal}`,
+      `notes: ${notes || '없음'}`,
+    ].join('\n'),
+    timedOut: false,
+    rawText: String(analysisResult.rawText || ''),
+  };
+}
+
+function withRemainingJudgeBudget(runtimeConfig, startedAtMs) {
+  const elapsedMs = Math.max(0, Date.now() - Number(startedAtMs || 0));
+  const remainingMs = Math.max(1000, Number(runtimeConfig.timeoutMs || DEFAULT_TIMEOUT_MS) - elapsedMs);
+  return {
+    ...runtimeConfig,
+    timeoutMs: remainingMs,
+  };
 }
 
 async function runImageRecognitionSelfTest(input, runtimeConfig) {

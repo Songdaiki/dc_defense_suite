@@ -64,7 +64,7 @@ function bindEvents() {
       pollIntervalMs: Math.max(1000, parseInt(pollIntervalInput.value || '60000', 10) || 60000),
       dailyLimitPerUser: Math.max(1, parseInt(dailyLimitInput.value || '2', 10) || 2),
       cliHelperEndpoint: cliHelperEndpointInput.value.trim(),
-      cliHelperTimeoutMs: Math.max(1000, parseInt(cliHelperTimeoutInput.value || '90000', 10) || 90000),
+      cliHelperTimeoutMs: Math.max(1000, parseInt(cliHelperTimeoutInput.value || '240000', 10) || 240000),
       llmConfidenceThreshold: Math.min(1, Math.max(0, Number(llmConfidenceThresholdInput.value || '0.85'))),
     };
 
@@ -197,7 +197,7 @@ function applyStatus(status) {
     pollIntervalInput.value = String(config.pollIntervalMs || 60000);
     dailyLimitInput.value = String(config.dailyLimitPerUser || 2);
     cliHelperEndpointInput.value = llm.config?.cliHelperEndpoint || '';
-    cliHelperTimeoutInput.value = String(llm.config?.cliHelperTimeoutMs || 90000);
+    cliHelperTimeoutInput.value = String(llm.config?.cliHelperTimeoutMs || 240000);
     llmConfidenceThresholdInput.value = String(
       Number.isFinite(Number(llm.config?.llmConfidenceThreshold))
         ? Number(llm.config.llmConfidenceThreshold)

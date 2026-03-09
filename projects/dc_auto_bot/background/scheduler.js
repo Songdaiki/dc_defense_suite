@@ -26,6 +26,7 @@ import {
 
 const STORAGE_KEY = 'reportBotSchedulerState';
 const LEGACY_DEFAULT_HELPER_TIMEOUT_MS = 20000;
+const PREVIOUS_DEFAULT_HELPER_TIMEOUT_MS = 90000;
 const POST_DOMINANT_RATIO_THRESHOLD = 0.9;
 const RECENT_REGULAR_POST_LIMIT = 100;
 const RECENT_REGULAR_POST_CACHE_MS = 5000;
@@ -395,6 +396,42 @@ class Scheduler {
     );
 
     if (!helperResult.success) {
+      if (shouldUseImageAnalysisTimeoutFallback(helperResult, content)) {
+        const fallbackReason = 'Gemini 이미지 분석 시간 초과로 인한 삭제';
+        const actionResult = await executeDeleteAndBan(
+          this.config,
+          parsedCommand.targetPostNo,
+          trustedUser.label,
+          parsedCommand.reasonText,
+          signal,
+        );
+
+        if (actionResult.success) {
+          this.totalSucceededCommands += 1;
+          this.addLog(`✅ [${trustedUser.label}] 이미지 분석 timeout fallback 처리 #${parsedCommand.targetPostNo}`);
+          await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+            id: createRecordId(),
+            source: 'auto_report',
+            decisionSource: 'image_analysis_timeout_fallback',
+            targetUrl: parsedCommand.targetUrl,
+            targetPostNo: parsedCommand.targetPostNo,
+            reportReason: parsedCommand.reasonText,
+            title: content.title,
+            bodyText: content.bodyText,
+            imageUrls: content.imageUrls,
+            decision: 'allow',
+            confidence: null,
+            policyIds: [],
+            reason: fallbackReason,
+          }), signal);
+          return;
+        }
+
+        this.totalFailedCommands += 1;
+        this.addLog(`❌ [${trustedUser.label}] 이미지 분석 timeout fallback 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`);
+        return;
+      }
+
       this.totalFailedCommands += 1;
       this.addLog(`❌ [${trustedUser.label}] LLM helper 실패 #${parsedCommand.targetPostNo} - ${helperResult.message || '응답 확인 실패'}`);
       return;
@@ -689,6 +726,7 @@ function buildTransparencyRecord(input) {
     id: String(input.id || createRecordId()),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    decisionSource: String(input.decisionSource || 'gemini'),
     targetUrl: String(input.targetUrl || ''),
     targetPostNo: String(input.targetPostNo || ''),
     reportReason: String(input.reportReason || ''),
@@ -739,11 +777,24 @@ function migrateLegacyHelperTimeout(value) {
     return DEFAULT_CONFIG.cliHelperTimeoutMs;
   }
 
-  if (numericValue === LEGACY_DEFAULT_HELPER_TIMEOUT_MS) {
+  if (numericValue === LEGACY_DEFAULT_HELPER_TIMEOUT_MS || numericValue === PREVIOUS_DEFAULT_HELPER_TIMEOUT_MS) {
     return DEFAULT_CONFIG.cliHelperTimeoutMs;
   }
 
   return numericValue;
+}
+
+function shouldUseImageAnalysisTimeoutFallback(helperResult, content) {
+  if (!helperResult || helperResult.success !== false) {
+    return false;
+  }
+
+  if (!Array.isArray(content?.imageUrls) || content.imageUrls.length === 0) {
+    return false;
+  }
+
+  return String(helperResult.failureType || '') === 'image_analysis_timeout'
+    || String(helperResult.message || '').includes('이미지 분석 시간 초과');
 }
 
 function normalizeDailyUsage(dailyUsage) {

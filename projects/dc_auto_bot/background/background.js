@@ -132,11 +132,11 @@ function buildCombinedStatus() {
       lastTestResult: llmState.lastTestResult,
       isTesting: llmState.isTesting,
       helperEndpoint: scheduler.config.cliHelperEndpoint || '',
-      helperTimeoutMs: scheduler.config.cliHelperTimeoutMs || 90000,
+      helperTimeoutMs: scheduler.config.cliHelperTimeoutMs || 240000,
       helperHealth: getHelperHealthSnapshot(),
       config: {
         cliHelperEndpoint: scheduler.config.cliHelperEndpoint || '',
-        cliHelperTimeoutMs: scheduler.config.cliHelperTimeoutMs || 90000,
+        cliHelperTimeoutMs: scheduler.config.cliHelperTimeoutMs || 240000,
         llmConfidenceThreshold: getConfidenceThresholdValue(scheduler.config.llmConfidenceThreshold),
       },
     },
@@ -207,7 +207,7 @@ async function updateConfig(config) {
   nextConfig.deleteTargetPost = nextConfig.deleteTargetPost !== false;
   nextConfig.applyAuthorFilter = nextConfig.applyAuthorFilter !== false;
   nextConfig.lowActivityThreshold = Math.max(1, Number(nextConfig.lowActivityThreshold) || 100);
-  nextConfig.cliHelperTimeoutMs = Math.max(1000, Number(nextConfig.cliHelperTimeoutMs) || 90000);
+  nextConfig.cliHelperTimeoutMs = Math.max(1000, Number(nextConfig.cliHelperTimeoutMs) || 240000);
   nextConfig.llmConfidenceThreshold = clampConfidenceThreshold(nextConfig.llmConfidenceThreshold);
 
   const helperEndpoint = normalizeCliHelperEndpoint(nextConfig.cliHelperEndpoint);
