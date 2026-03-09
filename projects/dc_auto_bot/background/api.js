@@ -14,15 +14,77 @@ const DEFAULT_CONFIG = {
   deleteTargetPost: true,
   applyAuthorFilter: true,
   lowActivityThreshold: 100,
-  googleOAuthClientId: '',
-  googleCloudProjectId: '',
-  geminiModel: 'gemini-2.5-flash',
+  cliHelperEndpoint: 'http://127.0.0.1:4317/judge',
+  cliHelperTimeoutMs: 90000,
+  llmConfidenceThreshold: 0.85,
 };
+
+const VALID_DECISIONS = new Set(['allow', 'deny', 'review']);
+const VALID_POLICY_IDS = new Set([
+  'NONE',
+  'P1',
+  'P2',
+  'P3',
+  'P4',
+  'P5',
+  'P6',
+  'P7',
+  'P8',
+  'P9',
+  'P10',
+  'P11',
+  'P12',
+  'P13',
+  'P14',
+  'P15',
+]);
 
 function resolveConfig(config = {}) {
   return {
     ...DEFAULT_CONFIG,
     ...config,
+  };
+}
+
+function normalizeCliHelperEndpoint(value) {
+  const rawValue = String(value || '').trim();
+  const candidate = rawValue || DEFAULT_CONFIG.cliHelperEndpoint;
+
+  let url = null;
+  try {
+    url = new URL(candidate);
+  } catch {
+    return {
+      success: false,
+      message: 'CLI helper endpoint 형식이 올바르지 않습니다.',
+    };
+  }
+
+  if (url.protocol !== 'http:') {
+    return {
+      success: false,
+      message: 'CLI helper endpoint는 http://localhost 또는 http://127.0.0.1 주소만 허용됩니다.',
+    };
+  }
+
+  const normalizedHost = String(url.hostname || '').replace(/^\[|\]$/g, '').toLowerCase();
+  if (!['127.0.0.1', 'localhost', '::1'].includes(normalizedHost)) {
+    return {
+      success: false,
+      message: 'CLI helper endpoint는 localhost 계열 주소만 허용됩니다.',
+    };
+  }
+
+  if (!url.pathname || url.pathname === '/') {
+    url.pathname = '/judge';
+  }
+
+  url.search = '';
+  url.hash = '';
+
+  return {
+    success: true,
+    endpoint: url.toString(),
   };
 }
 
@@ -381,163 +443,164 @@ async function executeDeleteAndBan(config = {}, targetPostNo, label, rawReasonTe
   };
 }
 
-function buildGeminiModerationPrompt(input) {
-  const title = String(input?.title || '').trim();
-  const body = String(input?.bodyText || '').trim();
-  const reason = String(input?.reportReason || '').trim();
-  const imageUrls = Array.isArray(input?.imageUrls) ? input.imageUrls.filter(Boolean) : [];
-  const authorFilter = String(input?.authorFilter || '').trim() || 'unknown';
-  const requestLabel = String(input?.requestLabel || '').trim();
-  const targetUrl = String(input?.targetUrl || '').trim();
-
-  const imageSection = imageUrls.length
-    ? imageUrls.map((url, index) => `${index + 1}. ${url}`).join('\n')
-    : '없음';
-
-  return [
-    '다음 게시물 정보를 보고, 디시 운영 규정 P1~P15 중 어떤 정책에 해당하는지 JSON으로만 답해줘.',
-    '',
-    '규정 분류:',
-    '- P1: 디시 이용약관, 법률, 건전한 사회 통념 위반',
-    '- P2: 닉언, 친목질, 사칭',
-    '- P3: 분탕/어그로',
-    '- P4: 종교/음모론',
-    '- P5: 반과학/유사과학/직업 비하',
-    '- P6: 레퍼런스 없는 선형글',
-    '- P7: 설교성/일침성',
-    '- P8: 팬보이/갈드컵/무인증 권위 주장',
-    '- P9: 투자/주식/코인',
-    '- P10: 국뽕/일뽕/중뽕/혐한/국까',
-    '- P11: 정치/성별혐오/지역드립',
-    '- P12: 타 갤러리/타 커뮤니티 언급',
-    '- P13: 맥락 없는 욕설/싸움',
-    '- P14: 금지 떡밥',
-    '- P15: 개념글 제한',
-    '- NONE: 해당 없음',
-    '',
-    '중요:',
-    '- "allow"는 자동 삭제/차단을 진행해도 되는 경우에만 사용한다.',
-    '- 운영 규정 위반이 아니면 반드시 "deny"를 사용한다.',
-    '- 애매하거나 확신이 낮으면 "review"를 사용한다.',
-    '- policy_ids가 ["NONE"]이면 decision은 반드시 "deny"여야 한다.',
-    '- allow는 최소 1개 이상의 정책 위반이 명확히 성립할 때만 허용된다.',
-    '',
-    '출력 JSON:',
-    '{',
-    '  "decision": "allow|deny|review",',
-    '  "confidence": 0.0,',
-    '  "policy_ids": [],',
-    '  "reason": ""',
-    '}',
-    '',
-    `대상 게시물 URL:\n${targetUrl || '없음'}`,
-    '',
-    `작성자 필터 결과:\n${authorFilter}`,
-    '',
-    `신고자 label:\n${requestLabel || '없음'}`,
-    '',
-    `신고 사유:\n${reason || '없음'}`,
-    '',
-    `제목:\n${title || '없음'}`,
-    '',
-    `본문:\n${body || '없음'}`,
-    '',
-    `이미지 URL:\n${imageSection}`,
-  ].join('\n');
-}
-
-async function callGeminiModeration(config = {}, accessToken, input, signal) {
+async function callCliHelperJudge(config = {}, input, signal) {
   const resolved = resolveConfig(config);
-  const token = String(accessToken || '').trim();
-  if (!token) {
-    throw new Error('Google OAuth access token이 없습니다.');
+  const endpointResult = normalizeCliHelperEndpoint(resolved.cliHelperEndpoint);
+  if (!endpointResult.success) {
+    return {
+      success: false,
+      message: endpointResult.message,
+      rawText: '',
+    };
   }
 
-  const model = String(resolved.geminiModel || 'gemini-2.5-flash').trim();
-  const prompt = buildGeminiModerationPrompt(input);
   const requestBody = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: 0.1,
-    },
+    targetUrl: String(input?.targetUrl || '').trim(),
+    title: String(input?.title || '').trim(),
+    bodyText: String(input?.bodyText || '').trim(),
+    imageUrls: Array.isArray(input?.imageUrls)
+      ? input.imageUrls.map((value) => String(value || '').trim()).filter(Boolean)
+      : [],
+    reportReason: String(input?.reportReason || '').trim(),
+    requestLabel: String(input?.requestLabel || '').trim(),
+    authorFilter: String(input?.authorFilter || '').trim() || 'unknown',
   };
 
-  const headers = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
-  };
-  const projectId = String(resolved.googleCloudProjectId || '').trim();
-  if (projectId) {
-    headers['x-goog-user-project'] = projectId;
+  const timeoutMs = Math.max(1000, Number(resolved.cliHelperTimeoutMs) || DEFAULT_CONFIG.cliHelperTimeoutMs);
+  const requestController = new AbortController();
+  let didTimeout = false;
+  let timeoutId = 0;
+  let abortListener = null;
+
+  if (signal) {
+    if (signal.aborted) {
+      requestController.abort();
+    } else {
+      abortListener = () => requestController.abort();
+      signal.addEventListener('abort', abortListener, { once: true });
+    }
   }
 
-  const response = await dcFetchWithRetry(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(requestBody),
-      signal,
-    },
-    1,
-  );
+  timeoutId = setTimeout(() => {
+    didTimeout = true;
+    requestController.abort();
+  }, timeoutMs);
 
-  const responseText = await response.text();
-  const raw = safeParseJson(responseText);
-  if (!response.ok) {
+  try {
+    const response = await dcFetchWithRetry(
+      endpointResult.endpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+        signal: requestController.signal,
+      },
+      1,
+    );
+
+    const responseText = await response.text();
+    const raw = safeParseJson(responseText);
+    if (!response.ok) {
+      return {
+        success: false,
+        message: summarizeResponse(raw, responseText) || `HTTP ${response.status}`,
+        rawText: responseText,
+      };
+    }
+
+    const parsed = parseCliHelperJudgeResponse(raw, responseText);
+    if (!parsed.success) {
+      return {
+        success: false,
+        message: parsed.message,
+        rawText: parsed.rawText || responseText,
+      };
+    }
+
+    return {
+      success: true,
+      decision: parsed.decision,
+      confidence: parsed.confidence,
+      policy_ids: parsed.policy_ids,
+      reason: parsed.reason,
+      rawText: parsed.rawText || responseText,
+    };
+  } catch (error) {
+    if (error?.name === 'AbortError' && didTimeout) {
+      return {
+        success: false,
+        message: 'CLI helper 응답 대기 시간이 초과되었습니다.',
+        rawText: '',
+      };
+    }
+
+    if (error?.name === 'AbortError') {
+      throw error;
+    }
+
     return {
       success: false,
-      message: summarizeResponse(raw, responseText),
-      rawText: responseText,
+      message: `CLI helper 연결 실패: ${error.message}`,
+      rawText: '',
     };
+  } finally {
+    clearTimeout(timeoutId);
+    if (signal && abortListener) {
+      signal.removeEventListener('abort', abortListener);
+    }
   }
-
-  const parsed = parseGeminiDecisionResponse(raw, responseText);
-  if (!parsed.success) {
-    return {
-      success: false,
-      message: parsed.message,
-      rawText: responseText,
-    };
-  }
-
-  return {
-    success: true,
-    ...parsed,
-    rawText: responseText,
-  };
 }
 
-function parseGeminiDecisionResponse(data, responseText) {
-  const text = extractGeminiText(data) || responseText;
-  const cleaned = stripJsonFences(String(text || '').trim());
-  const parsed = safeParseJson(cleaned);
-  if (!parsed || typeof parsed !== 'object') {
+function parseCliHelperJudgeResponse(data, responseText) {
+  if (!data || typeof data !== 'object') {
     return {
       success: false,
-      message: 'Gemini 응답 JSON 파싱 실패',
+      message: 'CLI helper 응답 JSON 파싱 실패',
+      rawText: String(responseText || ''),
     };
   }
 
-  const decision = String(parsed.decision || '').trim();
-  const confidence = Number(parsed.confidence);
-  const policyIds = Array.isArray(parsed.policy_ids)
-    ? parsed.policy_ids.map((value) => String(value || '').trim()).filter(Boolean)
-    : [];
-  const reason = String(parsed.reason || '').trim();
+  const success = data.success;
+  const rawText = data.rawText == null ? String(responseText || '') : String(data.rawText);
+  if (success !== true) {
+    return {
+      success: false,
+      message: String(data.message || 'CLI helper 판정 실패'),
+      rawText,
+    };
+  }
 
-  if (!['allow', 'deny', 'review'].includes(decision)) {
+  return parseModerationDecisionPayload(data, rawText);
+}
+
+function parseModerationDecisionPayload(data, rawText = '') {
+  const decision = String(data.decision || '').trim().toLowerCase();
+  const confidence = Number(data.confidence);
+  const rawPolicyIds = Array.isArray(data.policy_ids)
+    ? data.policy_ids
+    : (Array.isArray(data.policyIds) ? data.policyIds : []);
+  const policyIds = [...new Set(
+    rawPolicyIds
+      .map((value) => String(value || '').trim().toUpperCase())
+      .filter(Boolean),
+  )];
+  const reason = String(data.reason || '').trim();
+
+  if (!VALID_DECISIONS.has(decision)) {
     return {
       success: false,
       message: 'decision 값이 올바르지 않습니다.',
+      rawText,
     };
   }
 
-  if (!Number.isFinite(confidence)) {
+  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
     return {
       success: false,
       message: 'confidence 값이 올바르지 않습니다.',
+      rawText,
     };
   }
 
@@ -545,6 +608,56 @@ function parseGeminiDecisionResponse(data, responseText) {
     return {
       success: false,
       message: 'policy_ids가 비어 있습니다.',
+      rawText,
+    };
+  }
+
+  if (policyIds.some((policyId) => !VALID_POLICY_IDS.has(policyId))) {
+    return {
+      success: false,
+      message: 'policy_ids에 허용되지 않은 값이 포함되어 있습니다.',
+      rawText,
+    };
+  }
+
+  if (!reason) {
+    return {
+      success: false,
+      message: 'reason 값이 비어 있습니다.',
+      rawText,
+    };
+  }
+
+  const hasNone = policyIds.includes('NONE');
+  if (hasNone && policyIds.length > 1) {
+    return {
+      success: false,
+      message: 'policy_ids에 NONE과 다른 정책이 동시에 포함될 수 없습니다.',
+      rawText,
+    };
+  }
+
+  if (hasNone && decision !== 'deny') {
+    return {
+      success: false,
+      message: 'policy_ids가 ["NONE"]이면 decision은 deny여야 합니다.',
+      rawText,
+    };
+  }
+
+  if (decision === 'allow' && policyIds.length === 1 && policyIds[0] === 'P15') {
+    return {
+      success: false,
+      message: 'P15 단독 allow는 자동 삭제/차단 대상으로 처리할 수 없습니다.',
+      rawText,
+    };
+  }
+
+  if (!hasNone && decision === 'allow' && policyIds.length < 1) {
+    return {
+      success: false,
+      message: 'allow 결정에는 최소 1개 이상의 정책 ID가 필요합니다.',
+      rawText,
     };
   }
 
@@ -553,26 +666,10 @@ function parseGeminiDecisionResponse(data, responseText) {
     decision,
     confidence,
     policyIds,
+    policy_ids: policyIds,
     reason,
-    parsed,
+    rawText,
   };
-}
-
-function extractGeminiText(data) {
-  const parts = data?.candidates?.[0]?.content?.parts;
-  if (!Array.isArray(parts)) {
-    return '';
-  }
-
-  return parts.map((part) => String(part?.text || '')).join('\n').trim();
-}
-
-function stripJsonFences(text) {
-  return String(text || '')
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```$/i, '')
-    .trim();
 }
 
 function isAvoidResponseSuccessful(response, data, responseText) {
@@ -674,6 +771,7 @@ function createAbortError() {
 export {
   DEFAULT_CONFIG,
   buildReasonText,
+  callCliHelperJudge,
   delay,
   executeDeleteAndBan,
   extractEsno,
@@ -683,8 +781,9 @@ export {
   fetchPostPage,
   fetchUserActivityStats,
   getCiToken,
+  normalizeCliHelperEndpoint,
   parseActivityStatsResponse,
+  parseCliHelperJudgeResponse,
+  parseModerationDecisionPayload,
   resolveConfig,
-  callGeminiModeration,
-  buildGeminiModerationPrompt,
 };

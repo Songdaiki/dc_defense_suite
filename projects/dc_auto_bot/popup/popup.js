@@ -12,9 +12,9 @@ const galleryIdInput = document.getElementById('galleryIdInput');
 const reportTargetInput = document.getElementById('reportTargetInput');
 const pollIntervalInput = document.getElementById('pollIntervalInput');
 const dailyLimitInput = document.getElementById('dailyLimitInput');
-const googleOAuthClientIdInput = document.getElementById('googleOAuthClientIdInput');
-const googleCloudProjectIdInput = document.getElementById('googleCloudProjectIdInput');
-const geminiModelInput = document.getElementById('geminiModelInput');
+const cliHelperEndpointInput = document.getElementById('cliHelperEndpointInput');
+const cliHelperTimeoutInput = document.getElementById('cliHelperTimeoutInput');
+const llmConfidenceThresholdInput = document.getElementById('llmConfidenceThresholdInput');
 const saveConfigBtn = document.getElementById('saveConfigBtn');
 const trustedUserIdInput = document.getElementById('trustedUserIdInput');
 const trustedUserLabelInput = document.getElementById('trustedUserLabelInput');
@@ -22,8 +22,6 @@ const addTrustedUserBtn = document.getElementById('addTrustedUserBtn');
 const trustedUserList = document.getElementById('trustedUserList');
 const logList = document.getElementById('logList');
 const resetBtn = document.getElementById('resetBtn');
-const loginGoogleBtn = document.getElementById('loginGoogleBtn');
-const logoutGoogleBtn = document.getElementById('logoutGoogleBtn');
 const llmAuthStatus = document.getElementById('llmAuthStatus');
 const llmAuthEmail = document.getElementById('llmAuthEmail');
 const llmTestTargetInput = document.getElementById('llmTestTargetInput');
@@ -65,9 +63,9 @@ function bindEvents() {
       reportTarget: reportTargetInput.value.trim(),
       pollIntervalMs: Math.max(1000, parseInt(pollIntervalInput.value || '60000', 10) || 60000),
       dailyLimitPerUser: Math.max(1, parseInt(dailyLimitInput.value || '2', 10) || 2),
-      googleOAuthClientId: googleOAuthClientIdInput.value.trim(),
-      googleCloudProjectId: googleCloudProjectIdInput.value.trim(),
-      geminiModel: geminiModelInput.value.trim(),
+      cliHelperEndpoint: cliHelperEndpointInput.value.trim(),
+      cliHelperTimeoutMs: Math.max(1000, parseInt(cliHelperTimeoutInput.value || '90000', 10) || 90000),
+      llmConfidenceThreshold: Math.min(1, Math.max(0, Number(llmConfidenceThresholdInput.value || '0.85'))),
     };
 
     if (!config.galleryId) {
@@ -128,26 +126,6 @@ function bindEvents() {
     applyStatus(response.status);
   });
 
-  loginGoogleBtn.addEventListener('click', async () => {
-    const response = await sendMessage({ action: 'loginGoogle' });
-    if (!response?.success) {
-      alert(response?.message || 'Google 로그인에 실패했습니다.');
-      await refreshStatus();
-      return;
-    }
-    applyStatus(response.status);
-  });
-
-  logoutGoogleBtn.addEventListener('click', async () => {
-    const response = await sendMessage({ action: 'logoutGoogle' });
-    if (!response?.success) {
-      alert(response?.message || '로그아웃에 실패했습니다.');
-      await refreshStatus();
-      return;
-    }
-    applyStatus(response.status);
-  });
-
   runLlmTestBtn.addEventListener('click', async () => {
     const targetUrl = llmTestTargetInput.value.trim();
     const reportReason = llmTestReasonInput.value.trim();
@@ -199,6 +177,7 @@ function applyStatus(status) {
   currentStatus = status;
   const config = status.config || {};
   const llm = status.llm || {};
+  const helperHealth = llm.helperHealth || {};
 
   toggleBtn.checked = Boolean(status.isRunning);
   toggleLabel.textContent = status.isRunning ? 'ON' : 'OFF';
@@ -217,13 +196,17 @@ function applyStatus(status) {
     reportTargetInput.value = config.reportTarget || '';
     pollIntervalInput.value = String(config.pollIntervalMs || 60000);
     dailyLimitInput.value = String(config.dailyLimitPerUser || 2);
-    googleOAuthClientIdInput.value = llm.config?.googleOAuthClientId || '';
-    googleCloudProjectIdInput.value = llm.config?.googleCloudProjectId || '';
-    geminiModelInput.value = llm.config?.geminiModel || 'gemini-2.5-flash';
+    cliHelperEndpointInput.value = llm.config?.cliHelperEndpoint || '';
+    cliHelperTimeoutInput.value = String(llm.config?.cliHelperTimeoutMs || 90000);
+    llmConfidenceThresholdInput.value = String(
+      Number.isFinite(Number(llm.config?.llmConfidenceThreshold))
+        ? Number(llm.config.llmConfidenceThreshold)
+        : 0.85,
+    );
   }
 
-  llmAuthStatus.textContent = llm.isAuthenticated ? '🟢 로그인됨' : '⚪ 로그인 안 됨';
-  llmAuthEmail.textContent = llm.accountEmail || '-';
+  llmAuthStatus.textContent = formatHelperHealthStatus(helperHealth, llm.config?.cliHelperEndpoint);
+  llmAuthEmail.textContent = formatHelperHealthDetail(helperHealth, llm.config?.cliHelperEndpoint);
   llmLastTestAt.textContent = formatTimestamp(llm.lastTestAt);
   llmTestStatus.textContent = llm.isTesting ? '실행 중' : (llm.lastTestResult ? (llm.lastTestResult.success ? '완료' : '실패') : '대기');
   llmTestResult.textContent = llm.lastTestResult ? JSON.stringify(llm.lastTestResult, null, 2) : '결과가 없습니다.';
@@ -295,8 +278,6 @@ function applyRunningLocks(isRunning, isTesting) {
   resetBtn.disabled = isRunning || isTesting;
   saveConfigBtn.disabled = isRunning || isTesting;
   runLlmTestBtn.disabled = isTesting;
-  loginGoogleBtn.disabled = isTesting;
-  logoutGoogleBtn.disabled = isTesting;
 }
 
 function bindConfigDirtyHandlers() {
@@ -305,9 +286,9 @@ function bindConfigDirtyHandlers() {
     reportTargetInput,
     pollIntervalInput,
     dailyLimitInput,
-    googleOAuthClientIdInput,
-    googleCloudProjectIdInput,
-    geminiModelInput,
+    cliHelperEndpointInput,
+    cliHelperTimeoutInput,
+    llmConfidenceThresholdInput,
   ];
   for (const input of inputs) {
     input.addEventListener('input', () => {
@@ -344,6 +325,47 @@ function formatTimestamp(value) {
   } catch {
     return value;
   }
+}
+
+function formatHelperHealthStatus(helperHealth, endpoint) {
+  if (!endpoint) {
+    return '⚪ localhost helper 미설정';
+  }
+
+  switch (helperHealth.status) {
+    case 'healthy':
+      return '🟢 helper 실행 중';
+    case 'misconfigured':
+      return '⚪ helper 설정 오류';
+    case 'invalid_response':
+      return '🟠 helper 응답 이상';
+    case 'gemini_unavailable':
+      return '🟠 Gemini CLI 확인 필요';
+    case 'dependency_error':
+      return '🟠 helper 의존성 오류';
+    case 'unreachable':
+      return '🔴 helper 연결 실패';
+    default:
+      return '🟡 helper 상태 확인 중';
+  }
+}
+
+function formatHelperHealthDetail(helperHealth, endpoint) {
+  if (!endpoint) {
+    return '-';
+  }
+
+  const parts = [endpoint];
+  if (helperHealth.checkedAt) {
+    parts.push(`확인 ${formatTimestamp(helperHealth.checkedAt)}`);
+  }
+  if (Number.isFinite(Number(helperHealth.responseTimeMs)) && Number(helperHealth.responseTimeMs) > 0) {
+    parts.push(`${Math.round(Number(helperHealth.responseTimeMs))}ms`);
+  }
+  if (helperHealth.message) {
+    parts.push(helperHealth.message);
+  }
+  return parts.join(' / ');
 }
 
 async function sendMessage(message) {

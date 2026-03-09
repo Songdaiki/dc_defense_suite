@@ -1,4 +1,5 @@
 import {
+  callCliHelperJudge,
   DEFAULT_CONFIG,
   delay,
   executeDeleteAndBan,
@@ -9,6 +10,7 @@ import {
 } from './api.js';
 import {
   buildCommandKey,
+  extractPostContentForLlm,
   isDeletedComment,
   isTrustedUser,
   normalizeReportTarget,
@@ -19,6 +21,7 @@ import {
 } from './parser.js';
 
 const STORAGE_KEY = 'reportBotSchedulerState';
+const LEGACY_DEFAULT_HELPER_TIMEOUT_MS = 20000;
 const PHASE = {
   IDLE: 'IDLE',
   SEEDING: 'SEEDING',
@@ -58,6 +61,7 @@ class Scheduler {
       ...(state.config || {}),
       trustedUsers: normalizeTrustedUsers(state.config?.trustedUsers || []),
     };
+    this.config.cliHelperTimeoutMs = migrateLegacyHelperTimeout(this.config.cliHelperTimeoutMs);
     this.isRunning = Boolean(state.isRunning);
     this.phase = state.phase || (this.isRunning ? PHASE.SEEDING : PHASE.IDLE);
     this.lastPollAt = state.lastPollAt || '';
@@ -317,7 +321,8 @@ class Scheduler {
       return;
     }
 
-    const authorCheck = await this.evaluateTargetAuthor(parsedCommand.targetPostNo, signal);
+    const pageHtml = await fetchPostPage(this.config, parsedCommand.targetPostNo, signal);
+    const authorCheck = await this.evaluateTargetAuthorFromPageHtml(pageHtml, this.config, signal);
     if (!authorCheck.success) {
       this.totalFailedCommands += 1;
       this.addLog(`❌ [${trustedUser.label}] 작성자 판정 실패 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
@@ -327,6 +332,40 @@ class Scheduler {
     if (!authorCheck.allowed) {
       this.totalFailedCommands += 1;
       this.addLog(`⏭️ [${trustedUser.label}] 자동 처리 제외 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
+      return;
+    }
+
+    const content = extractPostContentForLlm(pageHtml, this.config.baseUrl);
+    const helperResult = await callCliHelperJudge(
+      this.config,
+      {
+        targetUrl: parsedCommand.targetUrl,
+        title: content.title,
+        bodyText: content.bodyText,
+        imageUrls: content.imageUrls,
+        reportReason: parsedCommand.reasonText,
+        requestLabel: trustedUser.label,
+        authorFilter: mapAuthorFilterResult(authorCheck),
+      },
+      signal,
+    );
+
+    if (!helperResult.success) {
+      this.totalFailedCommands += 1;
+      this.addLog(`❌ [${trustedUser.label}] LLM helper 실패 #${parsedCommand.targetPostNo} - ${helperResult.message || '응답 확인 실패'}`);
+      return;
+    }
+
+    if (helperResult.decision !== 'allow') {
+      this.totalFailedCommands += 1;
+      this.addLog(`⏭️ [${trustedUser.label}] LLM 보류 #${parsedCommand.targetPostNo} - ${formatLlmDecisionSummary(helperResult)}`);
+      return;
+    }
+
+    const confidenceThreshold = clampConfidenceThreshold(this.config.llmConfidenceThreshold);
+    if (helperResult.confidence < confidenceThreshold) {
+      this.totalFailedCommands += 1;
+      this.addLog(`⏭️ [${trustedUser.label}] LLM 신뢰도 부족 #${parsedCommand.targetPostNo} - ${formatLlmDecisionSummary(helperResult)} / threshold=${confidenceThreshold.toFixed(2)}`);
       return;
     }
 
@@ -340,7 +379,7 @@ class Scheduler {
 
     if (actionResult.success) {
       this.totalSucceededCommands += 1;
-      this.addLog(`✅ [${trustedUser.label}] 처리 완료 #${parsedCommand.targetPostNo} (${authorCheck.message} / ${actionResult.reasonText})`);
+      this.addLog(`✅ [${trustedUser.label}] 처리 완료 #${parsedCommand.targetPostNo} (${authorCheck.message} / ${formatLlmDecisionSummary(helperResult)} / ${actionResult.reasonText})`);
       return;
     }
 
@@ -348,12 +387,30 @@ class Scheduler {
     this.addLog(`❌ [${trustedUser.label}] 처리 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`);
   }
 
-  async evaluateTargetAuthor(targetPostNo, signal) {
-    if (this.config.applyAuthorFilter === false) {
+  async evaluateTargetAuthor(targetPostNo, signal, config = this.config) {
+    const evaluationConfig = {
+      ...this.config,
+      ...(config || {}),
+    };
+
+    if (evaluationConfig.applyAuthorFilter === false) {
       return { success: true, allowed: true, message: '작성자 필터 비활성화' };
     }
 
-    const pageHtml = await fetchPostPage(this.config, targetPostNo, signal);
+    const pageHtml = await fetchPostPage(evaluationConfig, targetPostNo, signal);
+    return this.evaluateTargetAuthorFromPageHtml(pageHtml, evaluationConfig, signal);
+  }
+
+  async evaluateTargetAuthorFromPageHtml(pageHtml, config = this.config, signal) {
+    const evaluationConfig = {
+      ...this.config,
+      ...(config || {}),
+    };
+
+    if (evaluationConfig.applyAuthorFilter === false) {
+      return { success: true, allowed: true, message: '작성자 필터 비활성화' };
+    }
+
     const authorMeta = extractPostAuthorMeta(pageHtml);
     if (!authorMeta.success) {
       return { success: false, message: authorMeta.message };
@@ -367,12 +424,12 @@ class Scheduler {
       return { success: false, message: '작성자 uid/ip를 모두 확인하지 못했습니다.' };
     }
 
-    const stats = await fetchUserActivityStats(this.config, authorMeta.uid, signal);
+    const stats = await fetchUserActivityStats(evaluationConfig, authorMeta.uid, signal);
     if (!stats.success) {
       return { success: false, message: `활동 통계 조회 실패: ${stats.message}` };
     }
 
-    const threshold = Math.max(1, Number(this.config.lowActivityThreshold) || 100);
+    const threshold = Math.max(1, Number(evaluationConfig.lowActivityThreshold) || 100);
     if (stats.totalActivityCount < threshold) {
       return {
         success: true,
@@ -458,8 +515,58 @@ class Scheduler {
   }
 }
 
+function mapAuthorFilterResult(authorCheck) {
+  if (!authorCheck || authorCheck.success === false) {
+    return 'unknown';
+  }
+
+  const message = String(authorCheck.message || '');
+  if (message.startsWith('유동(')) {
+    return 'fluid';
+  }
+  if (message.startsWith('깡계(')) {
+    return 'low_activity';
+  }
+  if (message.startsWith('일반 계정(')) {
+    return 'normal';
+  }
+
+  return authorCheck.allowed ? 'allowed' : 'review';
+}
+
+function formatLlmDecisionSummary(result) {
+  const decision = String(result?.decision || '').trim() || 'unknown';
+  const confidence = Number(result?.confidence);
+  const confidenceText = Number.isFinite(confidence) ? confidence.toFixed(2) : 'n/a';
+  const policyIds = Array.isArray(result?.policy_ids) ? result.policy_ids.join(',') : '';
+  const reason = String(result?.reason || '').replace(/\s+/g, ' ').trim();
+  return `${decision} ${confidenceText}${policyIds ? ` [${policyIds}]` : ''}${reason ? ` ${reason}` : ''}`;
+}
+
+function clampConfidenceThreshold(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return 0.85;
+  }
+
+  return Math.min(1, Math.max(0, numericValue));
+}
+
 function normalizeStringArray(values = []) {
   return [...new Set((Array.isArray(values) ? values : []).map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
+function migrateLegacyHelperTimeout(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return DEFAULT_CONFIG.cliHelperTimeoutMs;
+  }
+
+  if (numericValue === LEGACY_DEFAULT_HELPER_TIMEOUT_MS) {
+    return DEFAULT_CONFIG.cliHelperTimeoutMs;
+  }
+
+  return numericValue;
 }
 
 function normalizeDailyUsage(dailyUsage) {

@@ -27,6 +27,18 @@
       </div>
     </section>
 
+    <section class="helper-status-section">
+      <div class="section-header">
+        <h3>Helper 상태</h3>
+        <p>로컬 CLI helper와 Gemini CLI 연동 상태를 확인합니다.</p>
+      </div>
+
+      <div class="llm-auth-box">
+        <span id="llmAuthStatus" class="llm-auth-status">⚪ localhost helper 미설정</span>
+        <span id="llmAuthEmail" class="llm-auth-email">-</span>
+      </div>
+    </section>
+
     <div class="status-grid">
       <div class="status-item">
         <span class="status-label">상태</span>
@@ -62,7 +74,7 @@
       </div>
     </div>
 
-    <details class="settings-section" open>
+    <details class="settings-section">
       <summary>설정</summary>
       <div class="settings-grid">
         <div class="setting-item">
@@ -82,24 +94,24 @@
           <input type="number" id="dailyLimitInput" min="1" max="20" value="2">
         </div>
         <div class="setting-item">
-          <label for="googleOAuthClientIdInput">Google OAuth Client ID</label>
-          <input type="text" id="googleOAuthClientIdInput" placeholder="xxxx.apps.googleusercontent.com">
+          <label for="cliHelperEndpointInput">CLI helper endpoint</label>
+          <input type="text" id="cliHelperEndpointInput" value="http://127.0.0.1:4317/judge">
         </div>
         <div class="setting-item">
-          <label for="googleCloudProjectIdInput">Google Cloud Project ID</label>
-          <input type="text" id="googleCloudProjectIdInput" placeholder="your-project-id">
+          <label for="cliHelperTimeoutInput">Helper timeout (ms)</label>
+          <input type="number" id="cliHelperTimeoutInput" min="1000" max="180000" step="1000" value="90000">
         </div>
         <div class="setting-item">
-          <label for="geminiModelInput">Gemini 모델</label>
-          <input type="text" id="geminiModelInput" value="gemini-2.5-flash">
+          <label for="llmConfidenceThresholdInput">LLM confidence threshold</label>
+          <input type="number" id="llmConfidenceThresholdInput" min="0" max="1" step="0.01" value="0.85">
         </div>
         <button id="saveConfigBtn" class="btn btn-primary">설정 저장</button>
       </div>
     </details>
 
-    <section class="trusted-users-section">
+    <details class="trusted-users-section">
+      <summary>신뢰 사용자</summary>
       <div class="section-header">
-        <h3>신뢰 사용자</h3>
         <p>`user_id + label`을 직접 등록합니다.</p>
       </div>
 
@@ -118,22 +130,12 @@
       <div id="trustedUserList" class="trusted-user-list">
         <div class="list-empty">등록된 신뢰 사용자가 없습니다.</div>
       </div>
-    </section>
+    </details>
 
-    <section class="llm-section">
+    <details class="llm-section">
+      <summary>LLM 테스트</summary>
       <div class="section-header">
-        <h3>Gemini 테스트</h3>
-        <p>Google 로그인 후 링크를 넣어 수동 판정 결과를 확인합니다.</p>
-      </div>
-
-      <div class="llm-auth-box">
-        <span id="llmAuthStatus" class="llm-auth-status">⚪ 로그인 안 됨</span>
-        <span id="llmAuthEmail" class="llm-auth-email">-</span>
-      </div>
-
-      <div class="llm-button-row">
-        <button id="loginGoogleBtn" class="btn btn-primary">Google 로그인</button>
-        <button id="logoutGoogleBtn" class="btn btn-secondary">로그아웃</button>
+        <p>로컬 CLI helper + Gemini CLI를 통해 수동 판정 결과를 확인합니다.</p>
       </div>
 
       <div class="settings-grid llm-test-grid">
@@ -160,12 +162,48 @@
       </div>
 
       <pre id="llmTestResult" class="llm-result">결과가 없습니다.</pre>
-    </section>
+    </details>
 
     <section class="log-section">
       <h3>최근 로그</h3>
       <div id="logList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
     </section>
+
+    <details class="helper-guide-section">
+      <summary>Helper 사용법</summary>
+      <div class="section-header">
+        <p>PowerShell에서 아래 명령을 그대로 복붙해서 helper를 실행하거나 상태를 확인합니다.</p>
+      </div>
+
+      <div class="helper-guide-block">
+        <span class="status-label">1. helper 실행</span>
+        <textarea class="helper-guide-textarea" readonly>cd C:\Users\eorb9\projects\dc_defense_suite_repo\projects\dc_auto_bot\helper
+npm run start</textarea>
+      </div>
+
+      <div class="helper-guide-block">
+        <span class="status-label">2. helper 상태 확인</span>
+        <textarea class="helper-guide-textarea" readonly>Invoke-WebRequest http://127.0.0.1:4317/health | Select-Object -Expand Content</textarea>
+      </div>
+
+      <div class="helper-guide-block">
+        <span class="status-label">3. Windows에서 여전히 Gemini CLI를 못 찾을 때</span>
+        <textarea class="helper-guide-textarea" readonly>$env:GEMINI_COMMAND="gemini.cmd"
+cd C:\Users\eorb9\projects\dc_defense_suite_repo\projects\dc_auto_bot\helper
+npm run start</textarea>
+      </div>
+
+      <div class="helper-guide-block">
+        <span class="status-label">메모</span>
+        <div class="helper-guide-note">
+          Gemini CLI가 설치되어 있고 로그인된 상태여야 판정이 동작합니다.
+          helper를 끄려면 실행 중인 PowerShell 창에서 Ctrl+C를 누르면 됩니다.
+          `Gemini CLI 실행 파일을 찾지 못했습니다`가 뜨면 PowerShell에서 `gemini --version`이 되는지 먼저 확인하세요.
+          Gemini CLI를 방금 설치했다면 helper를 완전히 껐다가 다시 켜서 새 PATH를 읽게 해야 합니다.
+          `Cannot use both a positional prompt and the --prompt (-p) flag together`가 떴다면 helper를 껐다가 다시 켜서 새 `stdin` 모드가 반영되게 하세요.
+        </div>
+      </div>
+    </details>
 
     <button id="resetBtn" class="btn btn-secondary">통계 초기화</button>
   </div>

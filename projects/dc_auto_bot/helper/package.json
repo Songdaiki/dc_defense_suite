@@ -1,0 +1,8 @@
+{
+  "name": "dc-auto-bot-cli-helper",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}
