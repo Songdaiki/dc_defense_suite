@@ -1,3 +1,5 @@
+const TRANSPARENCY_AUTO_REFRESH_MS = 10000;
+
 function renderTransparencyListPage({ records, nextCursor, total, healthStatus, currentFilter = '' }) {
   const stats = countDecisions(records);
 
@@ -64,7 +66,7 @@ function renderTransparencyListPage({ records, nextCursor, total, healthStatus, 
       <script>
         setTimeout(() => {
           window.location.reload();
-        }, 5000);
+        }, ${TRANSPARENCY_AUTO_REFRESH_MS});
       </script>
     `,
     healthStatus,
@@ -78,7 +80,7 @@ function renderTransparencyDetailPage(record, healthStatus) {
       <script>
         setTimeout(() => {
           window.location.reload();
-        }, 5000);
+        }, ${TRANSPARENCY_AUTO_REFRESH_MS});
       </script>
     `
     : '';
