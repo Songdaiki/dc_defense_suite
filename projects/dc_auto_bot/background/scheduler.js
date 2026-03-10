@@ -60,6 +60,8 @@ class Scheduler {
       fetchedAtMs: 0,
       posts: [],
     };
+    this.ensureLoginSession = null;
+    this.handleLoginAccessFailure = null;
   }
 
   async loadState() {
@@ -482,6 +484,13 @@ class Scheduler {
 
     if (!helperResult.success) {
       if (shouldUseImageAnalysisTimeoutFallback(helperResult, content)) {
+        const loginSessionResult = await this.ensureLoginSessionForAction();
+        if (!loginSessionResult.success) {
+          this.totalFailedCommands += 1;
+          this.addLog(`❌ [${trustedUser.label}] 로그인 세션 실패 #${parsedCommand.targetPostNo} - ${loginSessionResult.message}`);
+          return;
+        }
+
         const fallbackReason = 'Gemini 이미지 분석 시간 초과로 인한 삭제';
         const actionResult = await executeDeleteAndBan(
           this.config,
@@ -515,6 +524,7 @@ class Scheduler {
 
         this.totalFailedCommands += 1;
         this.addLog(`❌ [${trustedUser.label}] 이미지 분석 timeout fallback 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`);
+        await this.notifyLoginAccessFailure(actionResult.message || '');
         return;
       }
 
@@ -564,6 +574,13 @@ class Scheduler {
       return;
     }
 
+    const loginSessionResult = await this.ensureLoginSessionForAction();
+    if (!loginSessionResult.success) {
+      this.totalFailedCommands += 1;
+      this.addLog(`❌ [${trustedUser.label}] 로그인 세션 실패 #${parsedCommand.targetPostNo} - ${loginSessionResult.message}`);
+      return;
+    }
+
     const actionResult = await executeDeleteAndBan(
       this.config,
       parsedCommand.targetPostNo,
@@ -580,6 +597,23 @@ class Scheduler {
 
     this.totalFailedCommands += 1;
     this.addLog(`❌ [${trustedUser.label}] 처리 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`);
+    await this.notifyLoginAccessFailure(actionResult.message || '');
+  }
+
+  async ensureLoginSessionForAction() {
+    if (typeof this.ensureLoginSession !== 'function') {
+      return { success: true };
+    }
+
+    return this.ensureLoginSession();
+  }
+
+  async notifyLoginAccessFailure(message) {
+    if (typeof this.handleLoginAccessFailure !== 'function') {
+      return;
+    }
+
+    await this.handleLoginAccessFailure(message);
   }
 
   async evaluateTargetAuthor(targetPostNo, signal, config = this.config) {

@@ -1,5 +1,7 @@
 const toggleBtn = document.getElementById('toggleBtn');
 const toggleLabel = document.getElementById('toggleLabel');
+const loginAutomationToggle = document.getElementById('loginAutomationToggle');
+const loginAutomationLabel = document.getElementById('loginAutomationLabel');
 const statusText = document.getElementById('statusText');
 const phaseText = document.getElementById('phaseText');
 const lastPollAtText = document.getElementById('lastPollAtText');
@@ -15,7 +17,10 @@ const dailyLimitInput = document.getElementById('dailyLimitInput');
 const cliHelperEndpointInput = document.getElementById('cliHelperEndpointInput');
 const cliHelperTimeoutInput = document.getElementById('cliHelperTimeoutInput');
 const llmConfidenceThresholdInput = document.getElementById('llmConfidenceThresholdInput');
+const dcLoginUserIdInput = document.getElementById('dcLoginUserIdInput');
+const dcLoginPasswordInput = document.getElementById('dcLoginPasswordInput');
 const saveConfigBtn = document.getElementById('saveConfigBtn');
+const saveLoginAutomationBtn = document.getElementById('saveLoginAutomationBtn');
 const trustedUserIdInput = document.getElementById('trustedUserIdInput');
 const trustedUserLabelInput = document.getElementById('trustedUserLabelInput');
 const addTrustedUserBtn = document.getElementById('addTrustedUserBtn');
@@ -24,6 +29,8 @@ const logList = document.getElementById('logList');
 const resetBtn = document.getElementById('resetBtn');
 const llmAuthStatus = document.getElementById('llmAuthStatus');
 const llmAuthEmail = document.getElementById('llmAuthEmail');
+const loginAuthStatus = document.getElementById('loginAuthStatus');
+const loginAuthDetail = document.getElementById('loginAuthDetail');
 const llmTestTargetInput = document.getElementById('llmTestTargetInput');
 const llmTestReasonInput = document.getElementById('llmTestReasonInput');
 const runLlmTestBtn = document.getElementById('runLlmTestBtn');
@@ -33,6 +40,7 @@ const llmTestResult = document.getElementById('llmTestResult');
 
 let currentStatus = null;
 let configDirty = false;
+let loginConfigDirty = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
   bindEvents();
@@ -46,6 +54,23 @@ function bindEvents() {
   toggleBtn.addEventListener('change', async () => {
     const action = toggleBtn.checked ? 'start' : 'stop';
     const response = await sendMessage({ action });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshStatus();
+      return;
+    }
+
+    loginConfigDirty = false;
+    applyStatus(response.status);
+  });
+
+  loginAutomationToggle.addEventListener('change', async () => {
+    const response = await sendMessage({
+      action: 'updateLoginAutomation',
+      config: buildLoginAutomationConfig(loginAutomationToggle.checked),
+    });
     if (!response?.success) {
       if (response?.message) {
         alert(response.message);
@@ -89,6 +114,22 @@ function bindEvents() {
 
     configDirty = false;
     flashSaved(saveConfigBtn);
+    applyStatus(response.status);
+  });
+
+  saveLoginAutomationBtn.addEventListener('click', async () => {
+    const response = await sendMessage({
+      action: 'updateLoginAutomation',
+      config: buildLoginAutomationConfig(loginAutomationToggle.checked),
+    });
+    if (!response?.success) {
+      alert(response?.message || '로그인 자동화 저장에 실패했습니다.');
+      await refreshStatus();
+      return;
+    }
+
+    loginConfigDirty = false;
+    flashSaved(saveLoginAutomationBtn);
     applyStatus(response.status);
   });
 
@@ -178,9 +219,13 @@ function applyStatus(status) {
   const config = status.config || {};
   const llm = status.llm || {};
   const helperHealth = llm.helperHealth || {};
+  const login = status.login || {};
+  const loginHealth = login.health || {};
 
   toggleBtn.checked = Boolean(status.isRunning);
   toggleLabel.textContent = status.isRunning ? 'ON' : 'OFF';
+  loginAutomationToggle.checked = login.enabled === true;
+  loginAutomationLabel.textContent = login.enabled === true ? 'ON' : 'OFF';
   statusText.textContent = status.isRunning ? '🟢 실행 중' : '🔴 정지';
   statusText.classList.toggle('status-off', !status.isRunning);
   phaseText.textContent = status.phase || 'IDLE';
@@ -205,8 +250,15 @@ function applyStatus(status) {
     );
   }
 
+  if (!loginConfigDirty) {
+    dcLoginUserIdInput.value = login.userId || '';
+    dcLoginPasswordInput.value = login.password || '';
+  }
+
   llmAuthStatus.textContent = formatHelperHealthStatus(helperHealth, llm.config?.cliHelperEndpoint);
   llmAuthEmail.textContent = formatHelperHealthDetail(helperHealth, llm.config?.cliHelperEndpoint);
+  loginAuthStatus.textContent = formatLoginHealthStatus(loginHealth, login.enabled, login.credentialsConfigured);
+  loginAuthDetail.textContent = formatLoginHealthDetail(loginHealth, login.enabled, login.credentialsConfigured);
   llmLastTestAt.textContent = formatTimestamp(llm.lastTestAt);
   llmTestStatus.textContent = llm.isTesting ? '실행 중' : (llm.lastTestResult ? (llm.lastTestResult.success ? '완료' : '실패') : '대기');
   llmTestResult.textContent = llm.lastTestResult ? JSON.stringify(llm.lastTestResult, null, 2) : '결과가 없습니다.';
@@ -295,6 +347,12 @@ function bindConfigDirtyHandlers() {
       configDirty = true;
     });
   }
+
+  for (const input of [dcLoginUserIdInput, dcLoginPasswordInput]) {
+    input.addEventListener('input', () => {
+      loginConfigDirty = true;
+    });
+  }
 }
 
 function flashSaved(button) {
@@ -303,6 +361,11 @@ function flashSaved(button) {
   button.disabled = true;
   setTimeout(() => {
     button.textContent = originalText;
+    if (button === saveLoginAutomationBtn) {
+      button.disabled = false;
+      return;
+    }
+
     button.disabled = Boolean(currentStatus?.isRunning) || Boolean(currentStatus?.llm?.isTesting);
   }, 1200);
 }
@@ -360,6 +423,54 @@ function formatHelperHealthDetail(helperHealth, endpoint) {
   }
 
   return helperHealth.message || '';
+}
+
+function formatLoginHealthStatus(loginHealth, enabled, credentialsConfigured) {
+  if (!enabled) {
+    return '⚪ login 자동화 비활성화';
+  }
+
+  if (!credentialsConfigured) {
+    return '⚪ login 계정 미설정';
+  }
+
+  switch (loginHealth.status) {
+    case 'healthy':
+      return '🟢 login 연결 정상';
+    case 'checking':
+      return '🟡 login 상태 확인 중';
+    case 'retrying':
+      return '🟡 login 자동 재로그인 중';
+    case 'disabled':
+      return '⚪ login 자동화 비활성화';
+    default:
+      return '🔴 login 연결실패';
+  }
+}
+
+function formatLoginHealthDetail(loginHealth, enabled, credentialsConfigured) {
+  if (!enabled) {
+    return '자동화 OFF';
+  }
+
+  if (!credentialsConfigured) {
+    return '디시 아이디/비밀번호를 입력하세요.';
+  }
+
+  const detail = String(loginHealth.detail || '').trim();
+  if (detail) {
+    return detail;
+  }
+
+  return String(loginHealth.message || '').trim() || '-';
+}
+
+function buildLoginAutomationConfig(enabled) {
+  return {
+    loginAutomationEnabled: enabled === true,
+    dcLoginUserId: dcLoginUserIdInput.value.trim(),
+    dcLoginPassword: dcLoginPasswordInput.value,
+  };
 }
 
 async function sendMessage(message) {

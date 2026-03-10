@@ -17,6 +17,9 @@ const DEFAULT_CONFIG = {
   cliHelperEndpoint: 'http://127.0.0.1:4317/judge',
   cliHelperTimeoutMs: 240000,
   llmConfidenceThreshold: 0.85,
+  loginAutomationEnabled: false,
+  dcLoginUserId: '',
+  dcLoginPassword: '',
 };
 
 const VALID_DECISIONS = new Set(['allow', 'deny', 'review']);

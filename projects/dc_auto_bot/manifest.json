@@ -6,11 +6,15 @@
   "permissions": [
     "storage",
     "alarms",
-    "cookies"
+    "cookies",
+    "tabs",
+    "scripting",
+    "notifications"
   ],
   "host_permissions": [
     "https://gall.dcinside.com/*",
     "https://*.dcinside.co.kr/*",
+    "https://sign.dcinside.com/*",
     "http://127.0.0.1/*",
     "http://localhost/*",
     "http://[::1]/*"

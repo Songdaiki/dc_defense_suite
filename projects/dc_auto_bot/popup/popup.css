@@ -54,6 +54,36 @@ body {
   margin-bottom: 14px;
 }
 
+.sub-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -4px 0 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(84, 129, 170, 0.2);
+  background: rgba(9, 18, 30, 0.78);
+}
+
+.sub-toggle-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sub-toggle-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #dfeaf5;
+}
+
+.sub-toggle-description {
+  font-size: 11px;
+  line-height: 1.45;
+  color: #86a0ba;
+}
+
 .feature-header h2,
 .section-header h3,
 .log-section h3 {
@@ -117,6 +147,29 @@ body {
 .toggle-label {
   min-width: 32px;
   font-weight: 700;
+}
+
+.toggle-label.small {
+  min-width: 24px;
+  font-size: 12px;
+}
+
+.toggle-section.compact {
+  gap: 8px;
+}
+
+.toggle-switch.small {
+  width: 44px;
+  height: 24px;
+}
+
+.toggle-switch.small .slider::before {
+  width: 16px;
+  height: 16px;
+}
+
+.toggle-switch.small input:checked + .slider::before {
+  transform: translateX(20px);
 }
 
 .status-grid,

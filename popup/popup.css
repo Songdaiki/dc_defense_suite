@@ -188,7 +188,7 @@ body {
   border-radius: 10px;
 }
 
-.feature-header > div:first-child {
+.feature-header>div:first-child {
   flex: 1;
   min-width: 0;
 }
@@ -269,11 +269,11 @@ body {
   transition: transform 0.2s ease;
 }
 
-.toggle-switch input:checked + .slider {
+.toggle-switch input:checked+.slider {
   background: #6b7c99;
 }
 
-.toggle-switch input:checked + .slider::before {
+.toggle-switch input:checked+.slider::before {
   transform: translateX(28px);
 }
 
