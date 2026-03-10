@@ -72,7 +72,7 @@ function normalizeReportTarget(reportTarget) {
 }
 
 function parseTargetUrl(targetUrl) {
-  const rawValue = String(targetUrl || '').trim();
+  const rawValue = sanitizeExtractedUrl(targetUrl);
   if (!rawValue) {
     return {
       success: false,
@@ -189,6 +189,7 @@ function normalizeCommandMemo(memo) {
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
+    .replace(/[「」『』＂]/g, '"')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -196,20 +197,28 @@ function normalizeCommandMemo(memo) {
 function extractCommandUrl(memo) {
   const hrefMatch = memo.match(/href\s*=\s*["']([^"']+)["']/i);
   if (hrefMatch && hrefMatch[1]) {
-    return hrefMatch[1].trim();
+    return sanitizeExtractedUrl(hrefMatch[1]);
   }
 
   const quotedMatch = memo.match(/["'](https?:\/\/[^"']+)["']/i);
   if (quotedMatch && quotedMatch[1]) {
-    return quotedMatch[1].trim();
+    return sanitizeExtractedUrl(quotedMatch[1]);
   }
 
-  const rawMatch = memo.match(/https?:\/\/[^\s<>'"]+/i);
+  const rawMatch = memo.match(/https?:\/\/[^\s<>'"“”‘’「」『』]+/i);
   if (rawMatch && rawMatch[0]) {
-    return rawMatch[0].trim();
+    return sanitizeExtractedUrl(rawMatch[0]);
   }
 
   return '';
+}
+
+function sanitizeExtractedUrl(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^[\"'“”‘’「」『』＂]+/, '')
+    .replace(/[\"'“”‘’「」『』＂),.;!?]+$/, '')
+    .trim();
 }
 
 function isTrustedUser(comment, trustedUsers) {
