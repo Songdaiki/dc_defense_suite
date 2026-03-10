@@ -7,6 +7,7 @@
   --muted: #9ba6ba;
   --comment: #4fd18b;
   --comment-monitor: #7ac5ff;
+  --concept-monitor: #ff9f9f;
   --post: #ffb84f;
   --ip: #63d8e6;
   --monitor: #9cc2ff;
@@ -118,7 +119,7 @@ body {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 6px;
   margin-bottom: 12px;
 }
@@ -216,6 +217,10 @@ body {
 
 .feature-post {
   background: linear-gradient(180deg, rgba(255, 184, 79, 0.16), rgba(46, 33, 16, 0.95));
+}
+
+.feature-concept-monitor {
+  background: linear-gradient(180deg, rgba(255, 159, 159, 0.16), rgba(49, 24, 24, 0.95));
 }
 
 .feature-semi-post {
@@ -368,6 +373,12 @@ body {
   color: var(--text);
   text-align: center;
   padding: 5px 8px;
+}
+
+.setting-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #ffb2b2;
 }
 
 .shared-settings .setting-item input {

@@ -1,5 +1,6 @@
 import { Scheduler as CommentScheduler } from '../features/comment/scheduler.js';
 import { PHASE as COMMENT_MONITOR_PHASE, Scheduler as CommentMonitorScheduler } from '../features/comment-monitor/scheduler.js';
+import { Scheduler as ConceptMonitorScheduler } from '../features/concept-monitor/scheduler.js';
 import { Scheduler as PostScheduler } from '../features/post/scheduler.js';
 import { Scheduler as SemiPostScheduler } from '../features/semi-post/scheduler.js';
 import { Scheduler as IpScheduler } from '../features/ip/scheduler.js';
@@ -9,6 +10,7 @@ const commentScheduler = new CommentScheduler();
 const commentMonitorScheduler = new CommentMonitorScheduler({
   commentScheduler,
 });
+const conceptMonitorScheduler = new ConceptMonitorScheduler();
 const postScheduler = new PostScheduler();
 const semiPostScheduler = new SemiPostScheduler();
 const ipScheduler = new IpScheduler();
@@ -20,6 +22,7 @@ const monitorScheduler = new MonitorScheduler({
 const schedulers = {
   comment: commentScheduler,
   commentMonitor: commentMonitorScheduler,
+  conceptMonitor: conceptMonitorScheduler,
   post: postScheduler,
   semiPost: semiPostScheduler,
   ip: ipScheduler,
@@ -81,6 +84,7 @@ function ensureAllRunLoops() {
 async function resumeAllSchedulers() {
   await loadSchedulerStateIfIdle(schedulers.comment);
   await loadSchedulerStateIfIdle(schedulers.commentMonitor);
+  await loadSchedulerStateIfIdle(schedulers.conceptMonitor);
   await loadSchedulerStateIfIdle(schedulers.post);
   await loadSchedulerStateIfIdle(schedulers.semiPost);
   await loadSchedulerStateIfIdle(schedulers.ip);
@@ -118,6 +122,7 @@ async function resumeAllSchedulers() {
   }
 
   await resumeStandaloneScheduler(schedulers.commentMonitor, '🔁 저장된 댓글 감시 자동화 상태 복원');
+  await resumeStandaloneScheduler(schedulers.conceptMonitor, '🔁 저장된 개념글 방어 상태 복원');
   await resumeStandaloneScheduler(schedulers.monitor, '🔁 저장된 자동 감시 상태 복원');
 
   if (commentMonitorAttacking) {
@@ -139,6 +144,7 @@ function getAllStatuses() {
   return {
     comment: schedulers.comment.getStatus(),
     commentMonitor: schedulers.commentMonitor.getStatus(),
+    conceptMonitor: schedulers.conceptMonitor.getStatus(),
     post: schedulers.post.getStatus(),
     semiPost: schedulers.semiPost.getStatus(),
     ip: schedulers.ip.getStatus(),
@@ -296,6 +302,21 @@ function resetSchedulerStats(feature, scheduler) {
     return;
   }
 
+  if (feature === 'conceptMonitor') {
+    scheduler.currentPostNo = 0;
+    scheduler.lastPollAt = '';
+    scheduler.cycleCount = 0;
+    scheduler.lastScanCount = 0;
+    scheduler.lastCandidateCount = 0;
+    scheduler.totalDetectedCount = 0;
+    scheduler.totalReleasedCount = 0;
+    scheduler.totalFailedCount = 0;
+    scheduler.totalUnclearCount = 0;
+    scheduler.blockedUntilTs = 0;
+    scheduler.logs = [];
+    return;
+  }
+
   if (feature === 'post') {
     scheduler.totalClassified = 0;
     return;
@@ -337,6 +358,7 @@ function applySharedConfig(config) {
   const galleryChanged = Boolean(galleryId) && (
     schedulers.comment.config.galleryId !== galleryId
     || schedulers.commentMonitor.config.galleryId !== galleryId
+    || schedulers.conceptMonitor.config.galleryId !== galleryId
     || schedulers.post.config.galleryId !== galleryId
     || schedulers.semiPost.config.galleryId !== galleryId
     || schedulers.ip.config.galleryId !== galleryId
@@ -351,6 +373,7 @@ function applySharedConfig(config) {
   if (galleryId) {
     schedulers.comment.config.galleryId = galleryId;
     schedulers.commentMonitor.config.galleryId = galleryId;
+    schedulers.conceptMonitor.config.galleryId = galleryId;
     schedulers.post.config.galleryId = galleryId;
     schedulers.semiPost.config.galleryId = galleryId;
     schedulers.ip.config.galleryId = galleryId;
@@ -367,6 +390,7 @@ function applySharedConfig(config) {
   if (galleryChanged) {
     resetCommentSchedulerState(`ℹ️ 공통 설정 변경으로 댓글 방어 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetCommentMonitorSchedulerState(`ℹ️ 공통 설정 변경으로 댓글 감시 자동화 상태를 초기화했습니다. (갤러리: ${galleryId})`);
+    resetConceptMonitorSchedulerState(`ℹ️ 공통 설정 변경으로 개념글 방어 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetPostSchedulerState(`ℹ️ 공통 설정 변경으로 게시글 분류 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetSemiPostSchedulerState(`ℹ️ 공통 설정 변경으로 반고닉 분류 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetIpSchedulerState(`ℹ️ 공통 설정 변경으로 IP 차단 상태를 초기화했습니다. (갤러리: ${galleryId})`);
@@ -414,6 +438,10 @@ function getBusyFeatures() {
     busyFeatures.push('댓글 감시 자동화');
   }
 
+  if (isSchedulerBusy(schedulers.conceptMonitor)) {
+    busyFeatures.push('개념글 방어');
+  }
+
   if (isSchedulerBusy(schedulers.post)) {
     busyFeatures.push('게시글 분류');
   }
@@ -452,6 +480,12 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
     && config.monitorPages !== undefined
     && Number(config.monitorPages) !== Number(scheduler.config.monitorPages)) {
     return '댓글 감시 페이지 수는 댓글 감시 자동화를 정지한 뒤 변경하세요.';
+  }
+
+  if (feature === 'conceptMonitor'
+    && config.testMode !== undefined
+    && Boolean(config.testMode) !== Boolean(scheduler.config.testMode)) {
+    return '테스트 모드는 개념글 방어를 정지한 뒤 변경하세요.';
   }
 
   return '';
@@ -565,6 +599,22 @@ function resetCommentMonitorSchedulerState(message) {
   scheduler.totalAttackDetected = 0;
   scheduler.totalAttackReleased = 0;
   scheduler.reseedRemaining = 1;
+  scheduler.logs = [];
+  scheduler.log(message);
+}
+
+function resetConceptMonitorSchedulerState(message) {
+  const scheduler = schedulers.conceptMonitor;
+  scheduler.currentPostNo = 0;
+  scheduler.lastPollAt = '';
+  scheduler.cycleCount = 0;
+  scheduler.lastScanCount = 0;
+  scheduler.lastCandidateCount = 0;
+  scheduler.totalDetectedCount = 0;
+  scheduler.totalReleasedCount = 0;
+  scheduler.totalFailedCount = 0;
+  scheduler.totalUnclearCount = 0;
+  scheduler.blockedUntilTs = 0;
   scheduler.logs = [];
   scheduler.log(message);
 }

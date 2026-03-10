@@ -4,6 +4,7 @@ const sharedGalleryIdInput = document.getElementById('sharedGalleryId');
 const sharedHeadtextIdInput = document.getElementById('sharedHeadtextId');
 const sharedSaveConfigBtn = document.getElementById('sharedSaveConfigBtn');
 const DIRTY_FEATURES = {
+  conceptMonitor: false,
   commentMonitor: false,
   comment: false,
   post: false,
@@ -13,8 +14,29 @@ const DIRTY_FEATURES = {
 };
 let sharedConfigDirty = false;
 let latestMonitorStatus = null;
+let latestConceptMonitorStatus = null;
 
 const FEATURE_DOM = {
+  conceptMonitor: {
+    toggleBtn: document.getElementById('conceptMonitorToggleBtn'),
+    toggleLabel: document.getElementById('conceptMonitorToggleLabel'),
+    statusText: document.getElementById('conceptMonitorStatusText'),
+    modeText: document.getElementById('conceptMonitorModeText'),
+    lastPollAt: document.getElementById('conceptMonitorLastPollAt'),
+    currentPostNo: document.getElementById('conceptMonitorCurrentPostNo'),
+    lastScanCount: document.getElementById('conceptMonitorLastScanCount'),
+    lastCandidateCount: document.getElementById('conceptMonitorLastCandidateCount'),
+    totalDetectedCount: document.getElementById('conceptMonitorTotalDetectedCount'),
+    totalReleasedCount: document.getElementById('conceptMonitorTotalReleasedCount'),
+    totalFailedCount: document.getElementById('conceptMonitorTotalFailedCount'),
+    totalUnclearCount: document.getElementById('conceptMonitorTotalUnclearCount'),
+    logList: document.getElementById('conceptMonitorLogList'),
+    pollIntervalMsInput: document.getElementById('conceptMonitorPollIntervalMs'),
+    fluidRatioThresholdInput: document.getElementById('conceptMonitorFluidRatioThreshold'),
+    testModeInput: document.getElementById('conceptMonitorTestMode'),
+    saveConfigBtn: document.getElementById('conceptMonitorSaveConfigBtn'),
+    resetBtn: document.getElementById('conceptMonitorResetBtn'),
+  },
   commentMonitor: {
     toggleBtn: document.getElementById('commentMonitorToggleBtn'),
     toggleLabel: document.getElementById('commentMonitorToggleLabel'),
@@ -152,12 +174,14 @@ function bindTabEvents() {
 }
 
 function bindFeatureEvents() {
+  bindConfigDirtyTracking('conceptMonitor');
   bindConfigDirtyTracking('commentMonitor');
   bindConfigDirtyTracking('comment');
   bindConfigDirtyTracking('post');
   bindConfigDirtyTracking('semiPost');
   bindConfigDirtyTracking('ip');
   bindConfigDirtyTracking('monitor');
+  bindConceptMonitorEvents();
   bindCommentMonitorEvents();
   bindCommentEvents();
   bindPostEvents();
@@ -212,6 +236,106 @@ function bindSharedConfigEvents() {
     flashSaved(sharedSaveConfigBtn);
     if (response.statuses) {
       applyStatuses(response.statuses);
+    }
+  });
+}
+
+function bindConceptMonitorEvents() {
+  const dom = FEATURE_DOM.conceptMonitor;
+
+  dom.toggleBtn.addEventListener('change', async () => {
+    if (dom.toggleBtn.checked) {
+      if (!latestConceptMonitorStatus) {
+        await refreshAllStatuses();
+      }
+
+      if (!latestConceptMonitorStatus) {
+        alert('개념글 방어 상태를 아직 불러오지 못했습니다. 잠시 후 다시 시도하세요.');
+        updateToggle(dom, false);
+        return;
+      }
+
+      if (DIRTY_FEATURES.conceptMonitor) {
+        alert('개념글 방어 설정 변경사항을 먼저 저장하세요.');
+        updateToggle(dom, false);
+        return;
+      }
+
+      if (latestConceptMonitorStatus?.config?.testMode === false
+        && !confirm('실행 모드에서는 실제로 개념글 해제를 요청합니다. 계속하시겠습니까?')) {
+        updateToggle(dom, false);
+        return;
+      }
+    }
+
+    const action = dom.toggleBtn.checked ? 'start' : 'stop';
+    const response = await sendFeatureMessage('conceptMonitor', { action });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    DIRTY_FEATURES.conceptMonitor = false;
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.saveConfigBtn.addEventListener('click', async () => {
+    const nextTestMode = dom.testModeInput.checked;
+    if (latestConceptMonitorStatus?.config?.testMode !== false
+      && nextTestMode === false
+      && !confirm('테스트 모드를 끄면 실제 개념글 해제를 실행할 수 있습니다. 저장하시겠습니까?')) {
+      return;
+    }
+
+    const config = {
+      pollIntervalMs: Math.max(1000, parseOptionalInt(dom.pollIntervalMsInput.value, 120000)),
+      fluidRatioThresholdPercent: clampPercent(dom.fluidRatioThresholdInput.value, 90, 0),
+      testMode: nextTestMode,
+    };
+
+    const response = await sendFeatureMessage('conceptMonitor', { action: 'updateConfig', config });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    DIRTY_FEATURES.conceptMonitor = false;
+    flashSaved(dom.saveConfigBtn);
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.resetBtn.addEventListener('click', async () => {
+    if (!confirm('개념글 방어 통계와 로그를 초기화하시겠습니까?')) {
+      return;
+    }
+
+    const response = await sendFeatureMessage('conceptMonitor', { action: 'resetStats' });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
     }
   });
 }
@@ -603,6 +727,7 @@ async function refreshAllStatuses() {
 function applyStatuses(statuses) {
   latestMonitorStatus = statuses.monitor || latestMonitorStatus;
   syncSharedConfigInputs(statuses);
+  updateConceptMonitorUI(statuses.conceptMonitor);
   updateCommentMonitorUI(statuses.commentMonitor);
   updateMonitorUI(statuses.monitor);
   updateCommentUI(statuses.comment);
@@ -610,6 +735,35 @@ function applyStatuses(statuses) {
   updateSemiPostUI(statuses.semiPost);
   updateIpUI(statuses.ip);
   applyAutomationLocks(statuses.monitor, statuses.commentMonitor);
+}
+
+function updateConceptMonitorUI(status) {
+  if (!status) {
+    return;
+  }
+
+  latestConceptMonitorStatus = status;
+  const dom = FEATURE_DOM.conceptMonitor;
+  updateToggle(dom, status.isRunning);
+  updateStatusText(dom.statusText, getConceptMonitorStatusLabel(status), getConceptMonitorStatusClassName(status));
+  dom.modeText.textContent = status.config?.testMode === false ? '실행' : '테스트';
+  dom.lastPollAt.textContent = formatTimestamp(status.lastPollAt);
+  dom.currentPostNo.textContent = status.isRunning && status.currentPostNo > 0
+    ? `#${status.currentPostNo}`
+    : '-';
+  dom.lastScanCount.textContent = `${status.lastScanCount ?? 0}개`;
+  dom.lastCandidateCount.textContent = `${status.lastCandidateCount ?? 0}건`;
+  dom.totalDetectedCount.textContent = `${status.totalDetectedCount ?? 0}건`;
+  dom.totalReleasedCount.textContent = `${status.totalReleasedCount ?? 0}건`;
+  dom.totalFailedCount.textContent = `${status.totalFailedCount ?? 0}건`;
+  dom.totalUnclearCount.textContent = `${status.totalUnclearCount ?? 0}건`;
+
+  syncFeatureConfigInputs('conceptMonitor', [
+    [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 120000],
+    [dom.fluidRatioThresholdInput, status.config?.fluidRatioThresholdPercent ?? 90],
+    [dom.testModeInput, status.config?.testMode !== false],
+  ]);
+  updateLogList(dom.logList, status.logs);
 }
 
 function updateCommentMonitorUI(status) {
@@ -841,6 +995,7 @@ function syncSharedConfigInputs(statuses) {
   }
 
   const galleryId = statuses.comment?.config?.galleryId
+    || statuses.conceptMonitor?.config?.galleryId
     || statuses.commentMonitor?.config?.galleryId
     || statuses.post?.config?.galleryId
     || statuses.semiPost?.config?.galleryId
@@ -885,6 +1040,14 @@ function getFeatureConfigInputs(feature) {
       dom.requestDelayInput,
       dom.cycleDelayInput,
       dom.postConcurrencyInput,
+    ];
+  }
+
+  if (feature === 'conceptMonitor') {
+    return [
+      dom.pollIntervalMsInput,
+      dom.fluidRatioThresholdInput,
+      dom.testModeInput,
     ];
   }
 
@@ -986,6 +1149,14 @@ function flashSaved(button) {
 }
 
 function syncConfigInput(input, nextValue) {
+  if (input.type === 'checkbox') {
+    const nextChecked = Boolean(nextValue);
+    if (input.checked !== nextChecked) {
+      input.checked = nextChecked;
+    }
+    return;
+  }
+
   if (document.activeElement === input) {
     return;
   }
@@ -1048,6 +1219,22 @@ function getMonitorStatusClassName(status) {
   }
 
   return 'status-on';
+}
+
+function getConceptMonitorStatusLabel(status) {
+  if (!status?.isRunning) {
+    return '🔴 정지';
+  }
+
+  return status.config?.testMode === false ? '🟠 실행 중' : '🟡 테스트 중';
+}
+
+function getConceptMonitorStatusClassName(status) {
+  if (!status?.isRunning) {
+    return 'status-off';
+  }
+
+  return status.config?.testMode === false ? 'status-warn' : 'status-on';
 }
 
 function getCommentMonitorStatusLabel(status) {

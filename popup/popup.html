@@ -19,6 +19,7 @@
     <nav class="tabs" aria-label="기능 선택">
       <button class="tab-button tab-automation is-active" data-tab="monitor"><span class="tab-label">게시물<br>자동화</span></button>
       <button class="tab-button tab-automation" data-tab="commentMonitor"><span class="tab-label">댓글<br>자동화</span></button>
+      <button class="tab-button tab-automation" data-tab="conceptMonitor"><span class="tab-label">개념글<br>방어</span></button>
       <button class="tab-button" data-tab="comment">댓글 방어</button>
       <button class="tab-button" data-tab="post"><span class="tab-label">게시글<br>분류</span></button>
       <button class="tab-button" data-tab="semiPost"><span class="tab-label">반고닉<br>분류</span></button>
@@ -26,6 +27,93 @@
     </nav>
 
     <main class="panels">
+      <section class="panel" data-feature="conceptMonitor">
+        <div class="feature-header feature-concept-monitor">
+          <div>
+            <h2>개념글 방어</h2>
+            <p>기본은 테스트 모드이며, 개념글 목록 20개를 점검해 해제 후보만 식별합니다</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="conceptMonitorToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="conceptMonitorToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="conceptMonitorStatusText" class="status-value status-off">🔴 정지</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">모드</span>
+            <span id="conceptMonitorModeText" class="status-value">테스트</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 폴링</span>
+            <span id="conceptMonitorLastPollAt" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 검사 글</span>
+            <span id="conceptMonitorCurrentPostNo" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 snapshot</span>
+            <span id="conceptMonitorLastScanCount" class="status-value">0개</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 후보</span>
+            <span id="conceptMonitorLastCandidateCount" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 후보</span>
+            <span id="conceptMonitorTotalDetectedCount" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 해제</span>
+            <span id="conceptMonitorTotalReleasedCount" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 실패</span>
+            <span id="conceptMonitorTotalFailedCount" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 불명확</span>
+            <span id="conceptMonitorTotalUnclearCount" class="status-value">0건</span>
+          </div>
+        </div>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label for="conceptMonitorPollIntervalMs">검사 주기 (ms)</label>
+              <input type="number" id="conceptMonitorPollIntervalMs" min="1000" max="600000" step="1000" value="120000">
+            </div>
+            <div class="setting-item">
+              <label for="conceptMonitorFluidRatioThreshold">유동 추천 비율 기준 (%)</label>
+              <input type="number" id="conceptMonitorFluidRatioThreshold" min="0" max="100" value="90">
+            </div>
+            <div class="setting-item">
+              <label for="conceptMonitorTestMode">해제시 실제모드</label>
+              <input type="checkbox" id="conceptMonitorTestMode" checked>
+            </div>
+            <button id="conceptMonitorSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          </div>
+        </details>
+
+        <div class="action-row">
+          <button id="conceptMonitorResetBtn" class="btn btn-secondary">통계 초기화</button>
+        </div>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="conceptMonitorLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+      </section>
+
       <section class="panel" data-feature="commentMonitor">
         <div class="feature-header feature-comment-monitor">
           <div>
