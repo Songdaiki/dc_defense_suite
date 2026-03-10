@@ -204,7 +204,7 @@ function parseCommandComment(comment, commandPrefix) {
     targetUrl,
     targetPostNo: parsedTarget.targetPostNo,
     targetGalleryId: parsedTarget.targetGalleryId,
-    reasonText: reasonMatch[1].trim(),
+    reasonText: normalizeCommandReasonText(reasonMatch[1]),
     depth: Number(comment?.depth || 0),
     commentNo: String(comment?.no || ''),
     requestUserId: String(comment?.user_id || '').trim(),
@@ -252,6 +252,13 @@ function sanitizeExtractedUrl(value) {
     .trim()
     .replace(/^[\"'“”‘’「」『』＂]+/, '')
     .replace(/[\"'“”‘’「」『』＂),.;!?]+$/, '')
+    .trim();
+}
+
+function normalizeCommandReasonText(value) {
+  return String(value || '')
+    .replace(/\s*-\s*dc\s*app\s*$/i, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
