@@ -46,7 +46,7 @@ function normalizeReportTarget(reportTarget) {
 
   try {
     const url = new URL(rawValue);
-    const parsedTarget = extractPostTargetFromUrl(url);
+    const parsedTarget = extractPostTargetFromUrl(url, rawValue);
     const reportPostNo = parsedTarget.targetPostNo;
     const targetGalleryId = parsedTarget.targetGalleryId;
 
@@ -82,7 +82,7 @@ function parseTargetUrl(targetUrl) {
 
   try {
     const url = new URL(rawValue);
-    const { targetPostNo, targetGalleryId } = extractPostTargetFromUrl(url);
+    const { targetPostNo, targetGalleryId } = extractPostTargetFromUrl(url, rawValue);
 
     if (!/^\d+$/.test(targetPostNo)) {
       return {
@@ -97,6 +97,15 @@ function parseTargetUrl(targetUrl) {
       targetGalleryId,
     };
   } catch {
+    const fallbackTarget = extractPostTargetFromRawText(rawValue);
+    if (/^\d+$/.test(fallbackTarget.targetPostNo)) {
+      return {
+        success: true,
+        targetPostNo: fallbackTarget.targetPostNo,
+        targetGalleryId: fallbackTarget.targetGalleryId,
+      };
+    }
+
     return {
       success: false,
       message: '대상 링크 형식이 올바르지 않습니다.',
@@ -104,7 +113,7 @@ function parseTargetUrl(targetUrl) {
   }
 }
 
-function extractPostTargetFromUrl(url) {
+function extractPostTargetFromUrl(url, rawValue = '') {
   const targetPostNo = String(url.searchParams.get('no') || '').trim();
   const targetGalleryId = String(url.searchParams.get('id') || '').trim();
 
@@ -125,9 +134,31 @@ function extractPostTargetFromUrl(url) {
     };
   }
 
+  const fallbackTarget = extractPostTargetFromRawText(rawValue || String(url || ''));
   return {
-    targetGalleryId,
-    targetPostNo,
+    targetGalleryId: fallbackTarget.targetGalleryId || targetGalleryId,
+    targetPostNo: fallbackTarget.targetPostNo || targetPostNo,
+  };
+}
+
+function extractPostTargetFromRawText(rawText) {
+  const text = String(rawText || '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim();
+  const noMatch = text.match(/[?&]no=(\d+)/i);
+  const idMatch = text.match(/[?&]id=([^&#]+)/i);
+  const mobileBoardMatch = text.match(/\/board\/([^/?#]+)\/(\d+)/i);
+
+  if (mobileBoardMatch) {
+    return {
+      targetGalleryId: String(mobileBoardMatch[1] || '').trim(),
+      targetPostNo: String(mobileBoardMatch[2] || '').trim(),
+    };
+  }
+
+  return {
+    targetGalleryId: idMatch ? String(idMatch[1] || '').trim() : '',
+    targetPostNo: noMatch ? String(noMatch[1] || '').trim() : '',
   };
 }
 
@@ -195,9 +226,12 @@ function normalizeCommandMemo(memo) {
 }
 
 function extractCommandUrl(memo) {
-  const hrefMatch = memo.match(/href\s*=\s*["']([^"']+)["']/i);
-  if (hrefMatch && hrefMatch[1]) {
-    return sanitizeExtractedUrl(hrefMatch[1]);
+  const hrefMatches = memo.matchAll(/href\s*=\s*["']([^"']+)["']/ig);
+  for (const hrefMatch of hrefMatches) {
+    const candidate = sanitizeExtractedUrl(hrefMatch && hrefMatch[1]);
+    if (/^https?:\/\//i.test(candidate)) {
+      return candidate;
+    }
   }
 
   const quotedMatch = memo.match(/["'](https?:\/\/[^"']+)["']/i);
