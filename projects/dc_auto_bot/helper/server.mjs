@@ -1213,16 +1213,12 @@ function sanitizeRecordRequest(input) {
 
 async function preparePublicRecord(input, runtimeConfig) {
   const recordId = String(input.id || '').trim() || buildRecordId();
-  const normalizedStatus = String(input.status || 'completed').trim().toLowerCase();
-  const shouldCreateThumbnail = normalizedStatus !== 'pending';
-  const blurredThumbnailPath = shouldCreateThumbnail
-    ? await createBlurredThumbnail({
-      recordId,
-      targetUrl: input.targetUrl,
-      imageUrls: input.imageUrls,
-      runtimeConfig,
-    })
-    : '';
+  const blurredThumbnailPath = await createBlurredThumbnail({
+    recordId,
+    targetUrl: input.targetUrl,
+    imageUrls: input.imageUrls,
+    runtimeConfig,
+  });
 
   return {
     id: recordId,
