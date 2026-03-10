@@ -46,8 +46,9 @@ function normalizeReportTarget(reportTarget) {
 
   try {
     const url = new URL(rawValue);
-    const reportPostNo = String(url.searchParams.get('no') || '').trim();
-    const targetGalleryId = String(url.searchParams.get('id') || '').trim();
+    const parsedTarget = extractPostTargetFromUrl(url);
+    const reportPostNo = parsedTarget.targetPostNo;
+    const targetGalleryId = parsedTarget.targetGalleryId;
 
     if (!/^\d+$/.test(reportPostNo)) {
       return {
@@ -81,8 +82,7 @@ function parseTargetUrl(targetUrl) {
 
   try {
     const url = new URL(rawValue);
-    const targetPostNo = String(url.searchParams.get('no') || '').trim();
-    const targetGalleryId = String(url.searchParams.get('id') || '').trim();
+    const { targetPostNo, targetGalleryId } = extractPostTargetFromUrl(url);
 
     if (!/^\d+$/.test(targetPostNo)) {
       return {
@@ -102,6 +102,33 @@ function parseTargetUrl(targetUrl) {
       message: '대상 링크 형식이 올바르지 않습니다.',
     };
   }
+}
+
+function extractPostTargetFromUrl(url) {
+  const targetPostNo = String(url.searchParams.get('no') || '').trim();
+  const targetGalleryId = String(url.searchParams.get('id') || '').trim();
+
+  if (/^\d+$/.test(targetPostNo)) {
+    return {
+      targetPostNo,
+      targetGalleryId,
+    };
+  }
+
+  const pathname = String(url.pathname || '').replace(/\/+$/, '');
+  const mobileBoardMatch = pathname.match(/^\/board\/([^/]+)\/(\d+)$/i);
+
+  if (mobileBoardMatch) {
+    return {
+      targetGalleryId: String(mobileBoardMatch[1] || '').trim(),
+      targetPostNo: String(mobileBoardMatch[2] || '').trim(),
+    };
+  }
+
+  return {
+    targetGalleryId,
+    targetPostNo,
+  };
 }
 
 function parseCommandComment(comment, commandPrefix) {
