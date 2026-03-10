@@ -61,7 +61,6 @@ async function fetchConceptListHTML(config = {}) {
   const resolved = resolveConfig(config);
   const url = new URL('/mgallery/board/lists/', resolved.baseUrl);
   url.searchParams.set('id', resolved.galleryId);
-  url.searchParams.set('page', '1');
   url.searchParams.set('exception_mode', 'recommend');
 
   const response = await dcFetchWithRetry(url.toString());
