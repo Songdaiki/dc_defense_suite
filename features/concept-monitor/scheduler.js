@@ -11,11 +11,11 @@ import {
 } from './parser.js';
 
 const STORAGE_KEY = 'conceptMonitorSchedulerState';
-const SNAPSHOT_LIMIT = 20;
+const SNAPSHOT_LIMIT = 5;
 const BLOCK_COOLDOWN_MS = 30 * 60 * 1000;
-const CYCLE_BUFFER_MS = 5000;
 const TARGET_INSPECT_DELAY_MS = 5000;
 const INSPECT_DELAY_JITTER_MS = 500;
+const FALLBACK_RECHECK_DELAY_MS = 1000;
 
 class Scheduler {
   constructor() {
@@ -35,7 +35,7 @@ class Scheduler {
 
     this.config = {
       galleryId: DEFAULT_CONFIG.galleryId,
-      pollIntervalMs: 120000,
+      pollIntervalMs: 30000,
       fluidRatioThresholdPercent: 90,
       testMode: true,
     };
@@ -134,8 +134,6 @@ class Scheduler {
 
     this.log(`📄 개념글 snapshot ${snapshotPosts.length}개 확보 (${this.config.testMode ? '테스트' : '실행'} 모드)`);
 
-    const cycleTargetEndedAt = cycleStartedAt + Math.max(0, Number(this.config.pollIntervalMs) || 0) - CYCLE_BUFFER_MS;
-
     for (let index = 0; index < snapshotPosts.length; index += 1) {
       const post = snapshotPosts[index];
       if (!this.isRunning) {
@@ -149,7 +147,7 @@ class Scheduler {
         continue;
       }
 
-      const interPostDelayMs = computeInterPostDelay(index, snapshotPosts.length, cycleTargetEndedAt);
+      const interPostDelayMs = computeInterPostDelay(index, snapshotPosts.length);
       if (interPostDelayMs > 0) {
         await delayWhileRunning(this, interPostDelayMs);
       }
@@ -191,10 +189,12 @@ class Scheduler {
     }
 
     if (!metrics.isConcept) {
+      this.log(`ℹ️ ${progressLabel} #${postNo} 정상 통과 - 현재 개념글 아님`);
       return;
     }
 
     if (metrics.totalRecommendCount <= 0) {
+      this.log(`ℹ️ ${progressLabel} #${postNo} 정상 통과 - 총추천 0`);
       return;
     }
 
@@ -211,6 +211,9 @@ class Scheduler {
     const thresholdRatio = Math.max(0, Math.min(100, thresholdPercent)) / 100;
 
     if (fluidRatio < thresholdRatio) {
+      this.log(
+        `ℹ️ ${progressLabel} #${postNo} 정상 통과 - 총추천 ${metrics.totalRecommendCount}, 고정닉 ${metrics.fixedNickRecommendCount}, 유동비율 ${fluidRatio.toFixed(2)}`,
+      );
       return;
     }
 
@@ -235,12 +238,18 @@ class Scheduler {
     try {
       releaseResult = await releaseConceptPost(this.config, postNo);
     } catch (error) {
+      if (await this.skipIfAlreadyReleasedBySomeoneElse(postNo, `해제 요청 실패 (${error.message})`)) {
+        return;
+      }
       this.totalFailedCount += 1;
       this.log(`❌ 개념글 해제 실패 #${postNo} - ${error.message}`);
       return;
     }
 
     if (releaseResult.status !== 200) {
+      if (await this.skipIfAlreadyReleasedBySomeoneElse(postNo, `해제 응답 HTTP ${releaseResult.status}`)) {
+        return;
+      }
       this.totalFailedCount += 1;
       this.log(`❌ 개념글 해제 실패 #${postNo} - HTTP ${releaseResult.status} / raw: ${releaseResult.rawSummary}`);
       return;
@@ -250,6 +259,9 @@ class Scheduler {
     try {
       recheckHtml = await fetchConceptPostViewHTML(this.config, postNo);
     } catch (error) {
+      if (await this.skipIfAlreadyReleasedBySomeoneElse(postNo, `재확인 조회 실패 (${error.message})`)) {
+        return;
+      }
       this.totalUnclearCount += 1;
       this.log(`⚠️ 개념글 해제 결과 불명확 #${postNo} - 재확인 실패 (${error.message}) / raw: ${releaseResult.rawSummary}`);
       return;
@@ -272,6 +284,28 @@ class Scheduler {
 
     this.totalFailedCount += 1;
     this.log(`❌ 개념글 해제 실패 #${postNo} - HTTP 200 / raw: ${releaseResult.rawSummary}`);
+  }
+
+  async skipIfAlreadyReleasedBySomeoneElse(postNo, contextMessage = '') {
+    try {
+      await delayWhileRunning(this, FALLBACK_RECHECK_DELAY_MS);
+      const latestHtml = await fetchConceptPostViewHTML(this.config, postNo);
+      const latestMetrics = extractConceptPostMetrics(latestHtml, {
+        postNoHint: postNo,
+      });
+
+      if (latestMetrics.success && !latestMetrics.isConcept) {
+        const suffix = contextMessage ? ` (${contextMessage})` : '';
+        this.log(`ℹ️ #${postNo} 이미 개념글 아님 - 수동 해제로 보고 다음 글로 진행${suffix}`);
+        return true;
+      }
+    } catch (error) {
+      if (isBlockSignalMessage(error.message)) {
+        throw error;
+      }
+    }
+
+    return false;
   }
 
   log(message) {
@@ -380,20 +414,13 @@ class Scheduler {
   }
 }
 
-function computeInterPostDelay(index, totalPosts, cycleTargetEndedAt) {
+function computeInterPostDelay(index, totalPosts) {
   const remainingPosts = Math.max(0, totalPosts - index - 1);
   if (remainingPosts <= 0) {
     return 0;
   }
 
-  const remainingTimeMs = cycleTargetEndedAt - Date.now();
-  if (remainingTimeMs <= 0) {
-    return 0;
-  }
-
-  const desiredDelayMs = applyJitter(TARGET_INSPECT_DELAY_MS);
-  const budgetedDelayMs = Math.floor(remainingTimeMs / remainingPosts);
-  return Math.max(0, Math.min(desiredDelayMs, budgetedDelayMs));
+  return Math.max(0, applyJitter(TARGET_INSPECT_DELAY_MS));
 }
 
 function applyJitter(baseDelayMs) {

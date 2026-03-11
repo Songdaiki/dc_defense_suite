@@ -295,7 +295,7 @@ function bindConceptMonitorEvents() {
     }
 
     const config = {
-      pollIntervalMs: Math.max(1000, parseOptionalInt(dom.pollIntervalMsInput.value, 120000)),
+      pollIntervalMs: Math.max(1000, parseOptionalInt(dom.pollIntervalMsInput.value, 30000)),
       fluidRatioThresholdPercent: clampPercent(dom.fluidRatioThresholdInput.value, 90, 0),
       testMode: nextTestMode,
     };
@@ -759,7 +759,7 @@ function updateConceptMonitorUI(status) {
   dom.totalUnclearCount.textContent = `${status.totalUnclearCount ?? 0}건`;
 
   syncFeatureConfigInputs('conceptMonitor', [
-    [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 120000],
+    [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 30000],
     [dom.fluidRatioThresholdInput, status.config?.fluidRatioThresholdPercent ?? 90],
     [dom.testModeInput, status.config?.testMode !== false],
   ]);

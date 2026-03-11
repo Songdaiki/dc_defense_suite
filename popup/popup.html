@@ -31,7 +31,7 @@
         <div class="feature-header feature-concept-monitor">
           <div>
             <h2>개념글 방어</h2>
-            <p>기본은 테스트 모드이며, 개념글 목록 20개를 점검해 해제 후보만 식별합니다</p>
+            <p>기본은 테스트 모드이며, 개념글 목록 최신 5개를 점검해 해제 후보만 식별합니다</p>
           </div>
           <div class="toggle-section">
             <label class="toggle-switch">
@@ -90,7 +90,7 @@
           <div class="settings-grid">
             <div class="setting-item">
               <label for="conceptMonitorPollIntervalMs">검사 주기 (ms)</label>
-              <input type="number" id="conceptMonitorPollIntervalMs" min="1000" max="600000" step="1000" value="120000">
+              <input type="number" id="conceptMonitorPollIntervalMs" min="1000" max="600000" step="1000" value="30000">
             </div>
             <div class="setting-item">
               <label for="conceptMonitorFluidRatioThreshold">유동 추천 비율 기준 (%)</label>
