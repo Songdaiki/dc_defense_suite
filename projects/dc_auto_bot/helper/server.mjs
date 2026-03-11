@@ -132,6 +132,9 @@ function buildGeminiCliPrompt(input) {
     '- P11은 원문에 적힌 허용 예시와 금지 예시를 구분해라.',
     '- P14는 원문에 적힌 금지 떡밥 예시를 기준으로 판정해라.',
     '- 제목과 본문에 충분한 문맥이 있으면 텍스트 맥락을 우선하고, 이미지는 보조 근거로만 사용해라.',
+    '- 제목과 본문을 읽을 때 단순 비교/후기인지, 비꼼·조롱·도발·갈라치기 의도가 담긴 말투인지 함께 판단해라.',
+    '- 짧은 제목이나 한두 문장 본문이라도 문맥상 특정 모델·집단·이용자를 깎아내리거나 싸움을 유도하는 뉘앙스가 있으면 그 의도를 reason에 분명히 적어라.',
+    '- 반대로 제목이 자극적이어도 본문이 실제 경험 공유·성능 비교·개인 의견 수준이면 말투만으로 과잉 판정하지 마라.',
     '- 본문이 비어 있거나 매우 짧고 이미지가 실제 핵심 내용을 담고 있을 때만 이미지 비중을 높여라.',
     '- 제목/본문이 정상적인 사용 후기, 정보 공유, 링크 소개라면 이미지가 다소 자극적이거나 썸네일 성격이어도 낚시글로 과잉 판정하지 마라.',
     '- 존재 여부가 불명확한 모델명, 버전명, 과장된 제목, 드립성 표현만으로 허위사실이나 낚시글로 단정하지 마라. 본문과 이미지 맥락까지 함께 확인해라.',
@@ -1190,14 +1193,14 @@ function sanitizeRecordRequest(input) {
 
   return {
     success: true,
-      recordInput: {
-        id: String(input.id || '').trim(),
-        source,
-        decisionSource,
-        status: 'completed',
-        targetUrl,
-        targetPostNo,
-        title: String(input.title || '').trim(),
+    recordInput: {
+      id: String(input.id || '').trim(),
+      source,
+      decisionSource,
+      status: 'completed',
+      targetUrl,
+      targetPostNo,
+      title: String(input.title || '').trim(),
       bodyText: String(input.bodyText || '').trim(),
       reportReason: String(input.reportReason || '').trim(),
       imageUrls: Array.isArray(input.imageUrls)
