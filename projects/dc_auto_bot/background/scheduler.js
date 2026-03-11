@@ -941,7 +941,10 @@ function getHelperTimeoutFallback(helperResult, content) {
     };
   }
 
-  if (message === 'CLI helper 응답 대기 시간이 초과되었습니다.') {
+  if (
+    message === 'CLI helper 응답 대기 시간이 초과되었습니다.'
+    || message.startsWith('Gemini CLI 응답 대기 시간이 초과되었습니다.')
+  ) {
     return {
       decisionSource: 'helper_timeout_fallback',
       reason: 'Gemini 응답 시간 초과로 인한 삭제',
