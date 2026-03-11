@@ -92,7 +92,17 @@ class ModerationRecordStore {
 
     let records = this.records;
     if (decision) {
-      records = records.filter((record) => record.decision === decision);
+      records = records.filter((record) => {
+        if (record.decision === decision) {
+          return true;
+        }
+
+        if (decision === 'review' && record.status === 'pending') {
+          return true;
+        }
+
+        return false;
+      });
     }
     if (policyId) {
       records = records.filter((record) => Array.isArray(record.policyIds) && record.policyIds.includes(policyId));

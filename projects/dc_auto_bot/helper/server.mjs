@@ -1216,12 +1216,15 @@ function sanitizeRecordRequest(input) {
 
 async function preparePublicRecord(input, runtimeConfig) {
   const recordId = String(input.id || '').trim() || buildRecordId();
-  const blurredThumbnailPath = await createBlurredThumbnail({
-    recordId,
-    targetUrl: input.targetUrl,
-    imageUrls: input.imageUrls,
-    runtimeConfig,
-  });
+  const normalizedStatus = String(input.status || 'completed').trim().toLowerCase();
+  const blurredThumbnailPath = normalizedStatus === 'pending'
+    ? ''
+    : await createBlurredThumbnail({
+      recordId,
+      targetUrl: input.targetUrl,
+      imageUrls: input.imageUrls,
+      runtimeConfig,
+    });
 
   return {
     id: recordId,
@@ -1229,7 +1232,7 @@ async function preparePublicRecord(input, runtimeConfig) {
     updatedAt: new Date().toISOString(),
     source: input.source,
     decisionSource: input.decisionSource,
-    status: String(input.status || 'completed'),
+    status: normalizedStatus || 'completed',
     targetUrl: input.targetUrl,
     targetPostNo: input.targetPostNo,
     publicTitle: String(input.title || '').trim(),
