@@ -321,7 +321,7 @@ class Scheduler {
     }
 
     if (this.isDailyLimitExceeded(trustedUser.userId)) {
-      this.addLog(`⛔ [${trustedUser.label}] 일일 2회 제한 초과`);
+      this.addLog(`⛔ [${trustedUser.label}] 일일 ${getDailyLimitLabel(this.config.dailyLimitPerUser)}회 제한 초과`);
       return;
     }
 
@@ -1020,6 +1020,10 @@ function pruneDailyUsage(dailyUsage) {
       }
     }
   }
+}
+
+function getDailyLimitLabel(limitValue) {
+  return Math.max(1, Number(limitValue) || 2);
 }
 
 async function delayWhileRunning(scheduler, ms) {
