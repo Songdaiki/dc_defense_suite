@@ -73,7 +73,8 @@ function renderTransparencyListPage({ records, nextCursor, total, healthStatus, 
   );
 }
 
-function renderTransparencyDetailPage(record, healthStatus) {
+function renderTransparencyDetailPage(record, healthStatus, options = {}) {
+  const showDebugReason = Boolean(options?.showDebugReason);
   const decision = getDecisionLabel(record.decision, record.status);
   const autoRefreshScript = record.status === 'pending'
     ? `
@@ -93,6 +94,8 @@ function renderTransparencyDetailPage(record, healthStatus) {
         </div>
       `
     : '';
+  const formattedReason = formatReason(record);
+  const debugReasonSection = buildDebugReasonSection(record, formattedReason, showDebugReason);
 
   return renderPageLayout(
     `${record.publicTitle || record.targetPostNo || '운영 내역'}`,
@@ -144,7 +147,8 @@ function renderTransparencyDetailPage(record, healthStatus) {
 
           <div class="reason-box">
             <h3><img class="gemini-icon" src="/gemini-icon.webp" alt="Gemini" width="14" height="14"> Gemini 판단 이유</h3>
-            <p class="reason-text">${escapeHtml(formatReason(record))}</p>
+            <p class="reason-text">${escapeHtml(formattedReason)}</p>
+            ${debugReasonSection}
           </div>
 
           <div class="detail-footer">
@@ -488,10 +492,111 @@ function formatPolicyIds(values, status = 'completed') {
 }
 
 function formatReason(record) {
-  if (String(record?.status || '').toLowerCase() === 'pending') {
+  const status = String(record?.status || '').toLowerCase();
+  if (status === 'pending') {
     return '검토중';
   }
-  return String(record?.reason || '-');
+
+  const rawReason = String(record?.reason || '').trim();
+  if (status !== 'failed') {
+    return rawReason || '-';
+  }
+
+  return mapFailedReasonToPublicMessage(rawReason);
+}
+
+function mapFailedReasonToPublicMessage(reason) {
+  const rawReason = String(reason || '').trim();
+  if (!rawReason) {
+    return '자동 처리 중 내부 오류가 발생했습니다.';
+  }
+
+  if (rawReason.startsWith('작성자 판정 실패:')) {
+    if (rawReason.includes('활동 통계 조회 실패:')) {
+      return '작성자 활동 정보를 불러오지 못해 자동 처리를 중단했습니다.';
+    }
+    return '작성자 정보를 확인하지 못해 자동 처리를 중단했습니다.';
+  }
+
+  if (rawReason.startsWith('v2 core 작성자 필터 미통과:')) {
+    return '일반 활동 계정으로 분류되어 자동 처리하지 않았습니다.';
+  }
+
+  if (rawReason.startsWith('개념글 판정 실패:')) {
+    return '게시물 상태를 확인하지 못해 자동 처리를 중단했습니다.';
+  }
+
+  if (rawReason === '개념글은 자동 삭제/차단하지 않습니다.') {
+    return '개념글은 자동 처리 대상이 아니어서 검토만 기록했습니다.';
+  }
+
+  if (rawReason.startsWith('최근 100개 판정 실패:')) {
+    return '최근 게시물 범위를 확인하지 못해 자동 처리를 중단했습니다.';
+  }
+
+  if (rawReason === '최근 100개 regular row 밖 게시물입니다.') {
+    return '최근 게시물 범위를 벗어나 자동 처리 대상에서 제외되었습니다.';
+  }
+
+  if (
+    rawReason === 'CLI helper endpoint 형식이 올바르지 않습니다.'
+    || rawReason === 'CLI helper endpoint는 http://localhost 또는 http://127.0.0.1 주소만 허용됩니다.'
+    || rawReason === 'CLI helper endpoint는 localhost 계열 주소만 허용됩니다.'
+    || rawReason.startsWith('CLI helper 연결 실패:')
+  ) {
+    return 'AI 판정 서버에 연결하지 못해 자동 처리를 중단했습니다.';
+  }
+
+  if (rawReason === 'CLI helper 응답 대기 시간이 초과되었습니다.') {
+    return 'AI 판정 응답 시간이 초과되어 자동 처리를 중단했습니다.';
+  }
+
+  if (rawReason === 'CLI helper 응답 JSON 파싱 실패') {
+    return 'AI 판정 결과를 해석하지 못해 자동 처리를 중단했습니다.';
+  }
+
+  if (
+    rawReason === 'decision 값이 올바르지 않습니다.'
+    || rawReason === 'confidence 값이 올바르지 않습니다.'
+    || rawReason === 'policy_ids가 비어 있습니다.'
+    || rawReason === 'policy_ids에 허용되지 않은 값이 포함되어 있습니다.'
+    || rawReason === 'reason 값이 비어 있습니다.'
+    || rawReason === 'policy_ids에 NONE과 다른 정책이 동시에 포함될 수 없습니다.'
+    || rawReason === 'policy_ids가 ["NONE"]이면 decision은 deny여야 합니다.'
+    || rawReason === 'P15 단독 allow는 자동 삭제/차단 대상으로 처리할 수 없습니다.'
+    || rawReason === 'allow 결정에는 최소 1개 이상의 정책 ID가 필요합니다.'
+  ) {
+    return 'AI 판정 결과가 올바르지 않아 자동 처리를 중단했습니다.';
+  }
+
+  if (rawReason === 'CLI helper 판정 실패') {
+    return 'AI 판정 결과를 해석하지 못해 자동 처리를 중단했습니다.';
+  }
+
+  return '자동 처리 중 내부 오류가 발생했습니다.';
+}
+
+function buildDebugReasonSection(record, formattedReason, showDebugReason) {
+  if (!showDebugReason) {
+    return '';
+  }
+
+  const rawReason = String(record?.reason || '').trim();
+  if (!rawReason) {
+    return '';
+  }
+
+  const normalizedFormattedReason = String(formattedReason || '').trim();
+  if (rawReason === normalizedFormattedReason) {
+    return '';
+  }
+
+  return `
+    <details class="debug-reason-box">
+      <summary>원문 사유 보기</summary>
+      <pre class="debug-reason-text">${escapeHtml(rawReason)}</pre>
+    </details>
+  `;
 }
 
 function truncateText(value, maxLength) {

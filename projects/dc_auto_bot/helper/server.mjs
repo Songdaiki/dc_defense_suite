@@ -665,7 +665,15 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
           return;
         }
 
-        writeText(response, 200, renderTransparencyDetailPage(record, pageHealthStatus), 'text/html; charset=utf-8', request);
+        writeText(
+          response,
+          200,
+          renderTransparencyDetailPage(record, pageHealthStatus, {
+            showDebugReason: isTruthyDebugQuery(requestUrl.searchParams.get('debug')),
+          }),
+          'text/html; charset=utf-8',
+          request,
+        );
         return;
       }
 
@@ -1007,6 +1015,11 @@ function safeParseJson(value) {
   } catch {
     return null;
   }
+}
+
+function isTruthyDebugQuery(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
 }
 
 async function buildTransparencyHealthStatus(runtimeConfig) {
