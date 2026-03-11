@@ -483,7 +483,8 @@ class Scheduler {
     );
 
     if (!helperResult.success) {
-      if (shouldUseImageAnalysisTimeoutFallback(helperResult, content)) {
+      const helperTimeoutFallback = getHelperTimeoutFallback(helperResult, content);
+      if (helperTimeoutFallback) {
         const loginSessionResult = await this.ensureLoginSessionForAction();
         if (!loginSessionResult.success) {
           this.totalFailedCommands += 1;
@@ -491,7 +492,6 @@ class Scheduler {
           return;
         }
 
-        const fallbackReason = 'Gemini 이미지 분석 시간 초과로 인한 삭제';
         const actionResult = await executeDeleteAndBan(
           this.config,
           parsedCommand.targetPostNo,
@@ -502,12 +502,12 @@ class Scheduler {
 
         if (actionResult.success) {
           this.totalSucceededCommands += 1;
-          this.addLog(`✅ [${trustedUser.label}] 이미지 분석 timeout fallback 처리 #${parsedCommand.targetPostNo}`);
+          this.addLog(`✅ [${trustedUser.label}] ${helperTimeoutFallback.logLabel} 처리 #${parsedCommand.targetPostNo}`);
           await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
             id: recordId,
             source: 'auto_report',
             status: 'completed',
-            decisionSource: 'image_analysis_timeout_fallback',
+            decisionSource: helperTimeoutFallback.decisionSource,
             targetUrl: parsedCommand.targetUrl,
             targetPostNo: parsedCommand.targetPostNo,
             reportReason: parsedCommand.reasonText,
@@ -517,13 +517,13 @@ class Scheduler {
             decision: 'allow',
             confidence: null,
             policyIds: [],
-            reason: fallbackReason,
+            reason: helperTimeoutFallback.reason,
           }), signal);
           return;
         }
 
         this.totalFailedCommands += 1;
-        this.addLog(`❌ [${trustedUser.label}] 이미지 분석 timeout fallback 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`);
+        this.addLog(`❌ [${trustedUser.label}] ${helperTimeoutFallback.logLabel} 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`);
         await this.notifyLoginAccessFailure(actionResult.message || '');
         return;
       }
@@ -918,17 +918,38 @@ function migrateLegacyHelperTimeout(value) {
   return numericValue;
 }
 
-function shouldUseImageAnalysisTimeoutFallback(helperResult, content) {
+function getHelperTimeoutFallback(helperResult, content) {
   if (!helperResult || helperResult.success !== false) {
-    return false;
+    return null;
   }
 
-  if (!Array.isArray(content?.imageUrls) || content.imageUrls.length === 0) {
-    return false;
+  const failureType = String(helperResult.failureType || '').trim();
+  const message = String(helperResult.message || '').trim();
+  const hasImages = Array.isArray(content?.imageUrls) && content.imageUrls.length > 0;
+
+  if (
+    hasImages
+    && (
+      failureType === 'image_analysis_timeout'
+      || message.includes('이미지 분석 시간 초과')
+    )
+  ) {
+    return {
+      decisionSource: 'image_analysis_timeout_fallback',
+      reason: 'Gemini 이미지 분석 시간 초과로 인한 삭제',
+      logLabel: '이미지 분석 timeout fallback',
+    };
   }
 
-  return String(helperResult.failureType || '') === 'image_analysis_timeout'
-    || String(helperResult.message || '').includes('이미지 분석 시간 초과');
+  if (message === 'CLI helper 응답 대기 시간이 초과되었습니다.') {
+    return {
+      decisionSource: 'helper_timeout_fallback',
+      reason: 'Gemini 응답 시간 초과로 인한 삭제',
+      logLabel: 'LLM helper timeout fallback',
+    };
+  }
+
+  return null;
 }
 
 function normalizeDailyUsage(dailyUsage) {
