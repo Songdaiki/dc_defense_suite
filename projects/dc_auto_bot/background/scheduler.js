@@ -328,7 +328,7 @@ class Scheduler {
     const isForeignGallery = parsedCommand.targetGalleryId
       && parsedCommand.targetGalleryId !== this.config.galleryId;
 
-    this.markCommandAttempted(commandKey, parsedCommand.targetPostNo, trustedUser.userId);
+    this.markCommandSeen(commandKey, parsedCommand.targetPostNo);
     this.totalProcessedCommands += 1;
     this.totalAttemptedCommands += 1;
 
@@ -501,6 +501,7 @@ class Scheduler {
         );
 
         if (actionResult.success) {
+          this.incrementDailyUsage(trustedUser.userId);
           this.totalSucceededCommands += 1;
           this.addLog(`✅ [${trustedUser.label}] ${helperTimeoutFallback.logLabel} 처리 #${parsedCommand.targetPostNo}`);
           await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
@@ -562,6 +563,7 @@ class Scheduler {
     }), signal);
 
     if (helperResult.decision !== 'allow') {
+      this.incrementDailyUsage(trustedUser.userId);
       this.totalFailedCommands += 1;
       this.addLog(`⏭️ [${trustedUser.label}] LLM 보류 #${parsedCommand.targetPostNo} - ${formatLlmDecisionSummary(helperResult)}`);
       return;
@@ -569,6 +571,7 @@ class Scheduler {
 
     const confidenceThreshold = clampConfidenceThreshold(this.config.llmConfidenceThreshold);
     if (helperResult.confidence < confidenceThreshold) {
+      this.incrementDailyUsage(trustedUser.userId);
       this.totalFailedCommands += 1;
       this.addLog(`⏭️ [${trustedUser.label}] LLM 신뢰도 부족 #${parsedCommand.targetPostNo} - ${formatLlmDecisionSummary(helperResult)} / threshold=${confidenceThreshold.toFixed(2)}`);
       return;
@@ -590,6 +593,7 @@ class Scheduler {
     );
 
     if (actionResult.success) {
+      this.incrementDailyUsage(trustedUser.userId);
       this.totalSucceededCommands += 1;
       this.addLog(`✅ [${trustedUser.label}] 처리 완료 #${parsedCommand.targetPostNo} (${authorCheck.message} / ${formatLlmDecisionSummary(helperResult)} / ${actionResult.reasonText})`);
       return;
@@ -691,7 +695,7 @@ class Scheduler {
     return this.processedCommandKeys.includes(String(commandKey));
   }
 
-  markCommandAttempted(commandKey, targetPostNo, userId) {
+  markCommandSeen(commandKey, targetPostNo) {
     if (!this.hasProcessedCommandKey(commandKey)) {
       this.processedCommandKeys.push(String(commandKey));
       this.processedCommandKeys = trimRecentArray(this.processedCommandKeys, 5000);
@@ -701,8 +705,6 @@ class Scheduler {
       this.processedTargetPostNos.push(String(targetPostNo));
       this.processedTargetPostNos = trimRecentArray(this.processedTargetPostNos, 5000);
     }
-
-    this.incrementDailyUsage(userId);
   }
 
   isDailyLimitExceeded(userId) {
