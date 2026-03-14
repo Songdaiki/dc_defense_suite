@@ -415,9 +415,9 @@ a:hover {
 }
 
 .badge-done {
-  background: #e3f2fd;
-  color: #1565c0;
-  border: 1px solid #90caf9;
+  background: #e0f2f1;
+  color: #00695c;
+  border: 1px solid #80cbc4;
 }
 
 /* ============ Pager ============ */
