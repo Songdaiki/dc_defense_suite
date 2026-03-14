@@ -2,11 +2,12 @@ import http from 'node:http';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { readFileSync, constants as fsConstants } from 'node:fs';
-import { basename, relative, resolve } from 'node:path';
+import { basename, dirname, relative, resolve } from 'node:path';
 import sharp from 'sharp';
 import { createModerationRecordStore } from './db.mjs';
+import { createGeminiWorkerManager } from './gemini_worker_manager.mjs';
 import { renderTransparencyDetailPage, renderTransparencyListPage } from './transparency.mjs';
 
 const DEFAULT_HOST = process.env.HOST || '127.0.0.1';
@@ -15,6 +16,9 @@ const DEFAULT_TIMEOUT_MS = normalizePositiveInt(process.env.GEMINI_TIMEOUT_MS, 2
 const DEFAULT_PROMPT_MODE = normalizePromptMode(process.env.GEMINI_PROMPT_MODE || getDefaultPromptMode());
 const DEFAULT_PROMPT_FLAG = String(process.env.GEMINI_PROMPT_FLAG || '-p').trim() || '-p';
 const DEFAULT_GEMINI_COMMAND = String(process.env.GEMINI_COMMAND || getDefaultGeminiCommand()).trim() || getDefaultGeminiCommand();
+const DEFAULT_GEMINI_WORKER_IDLE_MS = normalizeNonNegativeInt(process.env.GEMINI_WORKER_IDLE_MS, 0);
+const DEFAULT_GEMINI_WORKER_MAX_JOBS = normalizeNonNegativeInt(process.env.GEMINI_WORKER_MAX_JOBS, 0);
+const DEFAULT_GEMINI_WORKER_COMPRESS_AFTER_JOBS = normalizeNonNegativeInt(process.env.GEMINI_WORKER_COMPRESS_AFTER_JOBS, 10);
 const MAX_REQUEST_BYTES = 512 * 1024;
 const MAX_IMAGE_DOWNLOAD_BYTES = 8 * 1024 * 1024;
 const IMAGE_DOWNLOAD_TIMEOUT_MS = 10000;
@@ -87,6 +91,8 @@ const commandAvailabilityCache = {
   checkedAtMs: 0,
   result: null,
 };
+
+let geminiWorkerManager = null;
 
 function buildGeminiCliPrompt(input) {
   const title = truncateText(input.title, MAX_TITLE_LENGTH);
@@ -255,7 +261,7 @@ function sanitizeSelfTestImageRequest(input) {
   };
 }
 
-async function runGeminiCli(prompt, runtimeConfig = buildRuntimeConfig()) {
+async function runGeminiCli(prompt, runtimeConfig = buildRuntimeConfig(), executionContext = null) {
   const availability = await checkGeminiCommandAvailability(runtimeConfig);
   if (!availability.available) {
     return {
@@ -266,9 +272,66 @@ async function runGeminiCli(prompt, runtimeConfig = buildRuntimeConfig()) {
   }
 
   const commandToRun = availability.commandPath || runtimeConfig.command;
-  const primaryResult = await runGeminiCliOnce(prompt, runtimeConfig, commandToRun);
+  const packageRoot = await resolveGeminiCliPackageRoot(commandToRun);
+  if (!packageRoot || runtimeConfig.disablePersistentWorker === true) {
+    return runGeminiCliViaSpawn(prompt, runtimeConfig, commandToRun);
+  }
+
+  const workerRuntimeFingerprint = createGeminiWorkerRuntimeFingerprint(packageRoot, runtimeConfig);
+  const executeWithWorker = async (executor) => executor.runPrompt({
+    prompt,
+    runtimeConfig: {
+      args: runtimeConfig.args,
+      timeoutMs: runtimeConfig.timeoutMs,
+      compressAfterJobs: runtimeConfig.workerCompressAfterJobs,
+      countTowardCompression: runtimeConfig.countTowardCompression !== false,
+    },
+    runtimeFingerprint: workerRuntimeFingerprint,
+    packageRoot,
+    cwd: runtimeConfig.helperRootDir,
+  });
+
+  let workerResult = null;
+  try {
+    workerResult = executionContext?.runPrompt
+      ? await executeWithWorker(executionContext)
+      : await getGeminiWorkerManager().runExclusive(executeWithWorker);
+  } catch {
+    return runGeminiCliViaSpawn(prompt, runtimeConfig, commandToRun);
+  }
+
+  if (
+    workerResult.failureType === 'runtime_error'
+    || workerResult.failureType === 'worker_exit'
+    || workerResult.failureType === 'worker_error'
+  ) {
+    const fallbackResult = normalizeGeminiCliResult(
+      workerResult,
+      runtimeConfig.timeoutMs,
+      'Gemini CLI 실행 실패',
+    );
+    if (fallbackResult.success || shouldRetryGeminiCliWithStdin(runtimeConfig, fallbackResult)) {
+      return shouldRetryGeminiCliWithStdin(runtimeConfig, fallbackResult)
+        ? runGeminiCliViaSpawn(
+          prompt,
+          {
+            ...runtimeConfig,
+            promptMode: 'stdin',
+          },
+          commandToRun,
+        )
+        : fallbackResult;
+    }
+    return fallbackResult;
+  }
+
+  return normalizeGeminiCliResult(workerResult, runtimeConfig.timeoutMs);
+}
+
+async function runGeminiCliViaSpawn(prompt, runtimeConfig, commandToRun) {
+  const primaryResult = await runGeminiCliViaSpawnOnce(prompt, runtimeConfig, commandToRun);
   if (shouldRetryGeminiCliWithStdin(runtimeConfig, primaryResult)) {
-    return runGeminiCliOnce(
+    return runGeminiCliViaSpawnOnce(
       prompt,
       {
         ...runtimeConfig,
@@ -281,7 +344,7 @@ async function runGeminiCli(prompt, runtimeConfig = buildRuntimeConfig()) {
   return primaryResult;
 }
 
-async function runGeminiCliOnce(prompt, runtimeConfig, commandToRun) {
+async function runGeminiCliViaSpawnOnce(prompt, runtimeConfig, commandToRun) {
   const childArgs = [
     ...runtimeConfig.args,
     ...buildPromptInvocationArgs(runtimeConfig, prompt),
@@ -365,6 +428,131 @@ async function runGeminiCliOnce(prompt, runtimeConfig, commandToRun) {
   }
 }
 
+function normalizeGeminiCliResult(result, timeoutMs, fallbackMessage = 'Gemini CLI 실행 실패') {
+  const rawText = String(result?.rawText || '').trim();
+  const hasUsableDecisionOutput = hasUsableGeminiDecisionOutput(rawText);
+  if (result?.success === true || hasUsableDecisionOutput) {
+    return {
+      success: true,
+      rawText,
+    };
+  }
+
+  const failureType = String(result?.failureType || '').trim();
+  if (failureType === 'timeout') {
+    return {
+      success: false,
+      message: `Gemini CLI 응답 대기 시간이 초과되었습니다. (${timeoutMs}ms)`,
+      rawText,
+    };
+  }
+
+  return {
+    success: false,
+    message: String(result?.message || fallbackMessage),
+    rawText,
+  };
+}
+
+function isGeminiTimeoutMessage(message) {
+  const normalized = String(message || '').trim();
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    normalized.includes('시간 초과')
+    || normalized.includes('시간이 초과')
+    || normalized.startsWith('Gemini CLI 응답 대기 시간이 초과되었습니다.')
+  );
+}
+
+function getGeminiWorkerManager() {
+  if (!geminiWorkerManager) {
+    geminiWorkerManager = createGeminiWorkerManager({
+      workerScriptUrl: new URL('./gemini_worker.mjs', import.meta.url),
+      idleMs: DEFAULT_GEMINI_WORKER_IDLE_MS,
+      maxJobsPerWorker: DEFAULT_GEMINI_WORKER_MAX_JOBS,
+    });
+  }
+
+  return geminiWorkerManager;
+}
+
+function createGeminiWorkerRuntimeFingerprint(packageRoot, runtimeConfig) {
+  return JSON.stringify({
+    packageRoot: String(packageRoot || '').trim(),
+    cwd: String(runtimeConfig.helperRootDir || '').trim(),
+    args: Array.isArray(runtimeConfig.args) ? runtimeConfig.args.map((entry) => String(entry || '')) : [],
+    sessionScope: String(runtimeConfig.workerSessionScope || 'moderation-main'),
+  });
+}
+
+async function resolveGeminiCliPackageRoot(commandToRun) {
+  const resolvedCommandPath = await resolveCommandRealPath(commandToRun);
+  const candidateDirectories = buildGeminiPackageRootCandidates(resolvedCommandPath, commandToRun);
+
+  for (const candidateDirectory of candidateDirectories) {
+    if (await isGeminiCliPackageRoot(candidateDirectory)) {
+      return candidateDirectory;
+    }
+  }
+
+  return '';
+}
+
+async function resolveCommandRealPath(commandToRun) {
+  try {
+    return await realpath(commandToRun);
+  } catch {
+    return String(commandToRun || '');
+  }
+}
+
+function buildGeminiPackageRootCandidates(resolvedCommandPath, originalCommandPath) {
+  const commandDirectories = [resolvedCommandPath, originalCommandPath]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .map((value) => dirname(value));
+  const candidates = new Set();
+
+  for (const directory of commandDirectories) {
+    let currentDirectory = directory;
+    let previousDirectory = '';
+    while (currentDirectory && currentDirectory !== previousDirectory) {
+      candidates.add(currentDirectory);
+      candidates.add(resolve(currentDirectory, 'node_modules/@google/gemini-cli'));
+      candidates.add(resolve(currentDirectory, '../node_modules/@google/gemini-cli'));
+      candidates.add(resolve(currentDirectory, '../lib/node_modules/@google/gemini-cli'));
+      previousDirectory = currentDirectory;
+      currentDirectory = dirname(currentDirectory);
+    }
+  }
+
+  return [...candidates];
+}
+
+async function isGeminiCliPackageRoot(candidateDirectory) {
+  const packageJsonPath = resolve(candidateDirectory, 'package.json');
+  const requiredModulePaths = [
+    resolve(candidateDirectory, 'dist/src/config/config.js'),
+    resolve(candidateDirectory, 'dist/src/config/settings.js'),
+    resolve(candidateDirectory, 'dist/src/nonInteractiveCli.js'),
+  ];
+  try {
+    const packageJsonText = await readFile(packageJsonPath, 'utf8');
+    const parsed = safeParseJson(packageJsonText);
+    if (parsed?.name !== '@google/gemini-cli') {
+      return false;
+    }
+
+    await Promise.all(requiredModulePaths.map((modulePath) => access(modulePath, fsConstants.F_OK)));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function hasUsableGeminiDecisionOutput(rawText) {
   return parseGeminiCliJson(rawText).success === true;
 }
@@ -427,6 +615,33 @@ function parseGeminiCliJson(rawText) {
     success: false,
     message: 'Gemini CLI 출력에서 JSON object를 추출하지 못했습니다.',
   };
+}
+
+function parseLooseJsonObject(rawText) {
+  const normalizedText = String(rawText || '').trim();
+  if (!normalizedText) {
+    return null;
+  }
+
+  const candidates = [normalizedText];
+  const fencedBlocks = normalizedText.match(/```(?:json)?\s*([\s\S]*?)```/gi) || [];
+  for (const block of fencedBlocks) {
+    candidates.push(stripJsonFences(block));
+  }
+
+  const extractedObjects = extractJsonObjects(normalizedText);
+  for (const extracted of extractedObjects) {
+    candidates.push(extracted);
+  }
+
+  for (const candidate of candidates) {
+    const parsed = safeParseJson(candidate);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
 
 function validateJudgeDecision(data, rawText) {
@@ -780,27 +995,48 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
       const judgeStartedAtMs = Date.now();
       const preparedInputs = await prepareJudgeImageInputs(sanitized.payload, runtimeConfig);
       let cliResult = null;
-      let imageAnalysisText = '';
       try {
-        const imageAnalysisResult = await runImageAnalysis(preparedInputs.imageFileRefs, runtimeConfig, judgeStartedAtMs);
-        if (imageAnalysisResult.timedOut) {
+        const executionResult = await getGeminiWorkerManager().runExclusive(async (executionContext) => {
+          const imageAnalysisResult = await runImageAnalysis(
+            preparedInputs.imageFileRefs,
+            runtimeConfig,
+            judgeStartedAtMs,
+            executionContext,
+          );
+          if (imageAnalysisResult.timedOut) {
+            return {
+              imageAnalysisResult,
+              cliResult: null,
+            };
+          }
+
+          const nextCliResult = await runGeminiCli(
+            buildGeminiCliPrompt({
+              ...sanitized.payload,
+              imageFileRefs: preparedInputs.imageFileRefs,
+              imageAnalysis: imageAnalysisResult.text,
+            }),
+            withRemainingJudgeBudget(runtimeConfig, judgeStartedAtMs),
+            executionContext,
+          );
+
+          return {
+            imageAnalysisResult,
+            cliResult: nextCliResult,
+          };
+        });
+
+        if (executionResult.imageAnalysisResult?.timedOut) {
           writeJson(response, 200, {
             success: false,
             failure_type: IMAGE_ANALYSIS_TIMEOUT_FAILURE_TYPE,
             message: 'Gemini 이미지 분석 시간 초과',
-            rawText: imageAnalysisResult.rawText || '',
+            rawText: executionResult.imageAnalysisResult.rawText || '',
           }, request);
           return;
         }
-        imageAnalysisText = imageAnalysisResult.text;
-        cliResult = await runGeminiCli(
-          buildGeminiCliPrompt({
-            ...sanitized.payload,
-            imageFileRefs: preparedInputs.imageFileRefs,
-            imageAnalysis: imageAnalysisText,
-          }),
-          withRemainingJudgeBudget(runtimeConfig, judgeStartedAtMs),
-        );
+
+        cliResult = executionResult.cliResult;
       } finally {
         await cleanupPreparedJudgeImageInputs(preparedInputs);
       }
@@ -858,6 +1094,8 @@ function buildRuntimeConfig() {
     // 실제 파일은 cleanupPreparedJudgeImageInputs()가 요청 후 삭제한다.
     judgeInputDir: process.env.TRANSPARENCY_JUDGE_INPUT_DIR || fileURLToPath(new URL('./gemini-inputs', import.meta.url)),
     helperRootDir: fileURLToPath(new URL('./', import.meta.url)),
+    workerCompressAfterJobs: DEFAULT_GEMINI_WORKER_COMPRESS_AFTER_JOBS,
+    workerSessionScope: 'moderation-main',
     thumbnailWidth: DEFAULT_THUMBNAIL_WIDTH,
     thumbnailBlurSigma: DEFAULT_THUMBNAIL_BLUR_SIGMA,
     thumbnailWebpQuality: DEFAULT_THUMBNAIL_QUALITY,
@@ -1066,6 +1304,15 @@ function normalizePort(value, fallback) {
 function normalizePositiveInt(value, fallback) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return fallback;
+  }
+
+  return Math.floor(numericValue);
+}
+
+function normalizeNonNegativeInt(value, fallback) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue < 0) {
     return fallback;
   }
 
@@ -1430,7 +1677,7 @@ async function cleanupPreparedJudgeImageInputs(preparedInputs) {
   }
 }
 
-async function runImageAnalysis(imageFileRefs, runtimeConfig, judgeStartedAtMs = Date.now()) {
+async function runImageAnalysis(imageFileRefs, runtimeConfig, judgeStartedAtMs = Date.now(), executionContext = null) {
   if (!Array.isArray(imageFileRefs) || imageFileRefs.length === 0) {
     return {
       text: '',
@@ -1441,18 +1688,22 @@ async function runImageAnalysis(imageFileRefs, runtimeConfig, judgeStartedAtMs =
 
   const analysisResult = await runGeminiCli(
     buildImageAnalysisPrompt(imageFileRefs),
-    withRemainingJudgeBudget(runtimeConfig, judgeStartedAtMs),
+    {
+      ...withRemainingJudgeBudget(runtimeConfig, judgeStartedAtMs),
+      countTowardCompression: false,
+    },
+    executionContext,
   );
 
   if (!analysisResult.success) {
     return {
       text: '',
-      timedOut: String(analysisResult.message || '').includes('시간 초과'),
+      timedOut: isGeminiTimeoutMessage(analysisResult.message),
       rawText: String(analysisResult.rawText || ''),
     };
   }
 
-  const parsed = safeParseJson(String(analysisResult.rawText || '').trim());
+  const parsed = parseLooseJsonObject(String(analysisResult.rawText || '').trim());
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return {
       text: '',
@@ -1500,6 +1751,8 @@ async function runImageRecognitionSelfTest(input, runtimeConfig) {
       runtimeConfig: {
         ...runtimeConfig,
         timeoutMs: Math.min(runtimeConfig.timeoutMs, 30000),
+        disablePersistentWorker: true,
+        countTowardCompression: false,
       },
     },
     {
@@ -1511,6 +1764,8 @@ async function runImageRecognitionSelfTest(input, runtimeConfig) {
       runtimeConfig: {
         ...runtimeConfig,
         timeoutMs: Math.min(runtimeConfig.timeoutMs, 30000),
+        disablePersistentWorker: true,
+        countTowardCompression: false,
       },
     },
     {
@@ -1523,6 +1778,8 @@ async function runImageRecognitionSelfTest(input, runtimeConfig) {
         ...runtimeConfig,
         timeoutMs: Math.min(runtimeConfig.timeoutMs, 30000),
         args: [...runtimeConfig.args, '--approval-mode', 'yolo'],
+        disablePersistentWorker: true,
+        countTowardCompression: false,
       },
     },
   ];
@@ -1537,6 +1794,13 @@ async function runImageRecognitionSelfTest(input, runtimeConfig) {
         rawText: String(result?.rawText || ''),
       });
     }
+  } catch (error) {
+    reports.push({
+      name: 'self_test_failure',
+      success: false,
+      message: error instanceof Error ? error.message : String(error),
+      rawText: '',
+    });
   } finally {
     await cleanupPreparedJudgeImageInputs(preparedInputs);
   }
