@@ -53,6 +53,7 @@ const loginAutomationState = {
 };
 
 scheduler.ensureLoginSession = ensureLoginSessionBeforeAction;
+scheduler.recoverLoginSession = recoverLoginSessionAfterAccessFailure;
 scheduler.handleLoginAccessFailure = handleLoginAccessFailure;
 
 void initialize();
@@ -1122,7 +1123,9 @@ async function inspectSessionPage(tabId, galleryId) {
     success: false,
     state: 'wrong_account_or_no_manager',
     message: '관리자 권한 버튼을 찾지 못했습니다.',
-    detail: '로그인 상태이지만 특갤 관리 권한이 없거나 다른 계정일 수 있습니다.',
+    detail: result.hasForeignManagerButton
+      ? '현재 갤러리용 관리자 버튼이 아니라 다른 관리자 버튼만 확인되었습니다.'
+      : '로그인 상태이지만 특갤 관리 권한이 없거나 다른 계정일 수 있습니다.',
     loginUrl: '',
   };
 }
@@ -1418,21 +1421,69 @@ async function ensureLoginSessionBeforeAction() {
   };
 }
 
-async function handleLoginAccessFailure(message) {
+async function handleLoginAccessFailure(payload) {
+  return recoverLoginSessionAfterAccessFailure(payload);
+}
+
+async function recoverLoginSessionAfterAccessFailure(payload) {
   if (!scheduler.config.loginAutomationEnabled) {
-    return;
+    return {
+      attempted: false,
+      success: false,
+      status: 'disabled',
+      message: '로그인 세션 자동화가 비활성화되어 있습니다.',
+      detail: '',
+    };
   }
 
-  const normalizedMessage = normalizeLoginAccessFailureMessage(message);
-  if (!LOGIN_ACCESS_FAILURE_MESSAGES.some((keyword) => normalizedMessage.includes(keyword))) {
-    return;
+  const normalizedFailure = normalizeLoginAccessFailurePayload(payload);
+  if (!shouldRecoverLoginFromFailure(normalizedFailure)) {
+    return {
+      attempted: false,
+      success: false,
+      status: 'ignored',
+      message: '세션 재검증 대상 실패가 아닙니다.',
+      detail: '',
+    };
   }
 
-  await refreshLoginHealth(true, {
+  invalidateLoginHealth();
+  const snapshot = await refreshLoginHealth(true, {
     allowAutoLogin: true,
     passive: false,
     reason: 'access_failure',
   });
+
+  return {
+    attempted: true,
+    success: snapshot.status === 'healthy',
+    status: snapshot.status,
+    message: snapshot.message || 'login 연결실패',
+    detail: snapshot.detail || '',
+  };
+}
+
+function shouldRecoverLoginFromFailure({ normalizedMessage = '', failureType = '' } = {}) {
+  const normalizedFailureType = String(failureType || '').trim();
+  if (['manager_permission_denied', 'session_access_denied', 'ci_token_missing'].includes(normalizedFailureType)) {
+    return true;
+  }
+
+  return LOGIN_ACCESS_FAILURE_MESSAGES.some((keyword) => normalizedMessage.includes(keyword));
+}
+
+function normalizeLoginAccessFailurePayload(payload) {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    return {
+      normalizedMessage: normalizeLoginAccessFailureMessage(payload.message),
+      failureType: String(payload.failureType || '').trim(),
+    };
+  }
+
+  return {
+    normalizedMessage: normalizeLoginAccessFailureMessage(payload),
+    failureType: '',
+  };
 }
 
 function normalizeLoginAccessFailureMessage(message) {
@@ -1464,8 +1515,10 @@ function isSessionCheckTab(tab, targetUrl) {
 
 function inspectSessionPageDom(galleryId, loginPromptText) {
   const normalizedGalleryId = String(galleryId || '').trim();
-  const adminButton = document.querySelector(`button.btn_useradmin_go[onclick*="id=${normalizedGalleryId}"]`)
-    || document.querySelector('button.btn_useradmin_go');
+  const expectedAdminButtonSelector = `button.btn_useradmin_go[onclick*="/mgallery/management?id=${normalizedGalleryId}"]`;
+  const adminButton = document.querySelector(expectedAdminButtonSelector)
+    || document.querySelector(`button.btn_useradmin_go[onclick*="id=${normalizedGalleryId}"]`);
+  const anyAdminButton = document.querySelector('button.btn_useradmin_go');
   const loginPrompt = [...document.querySelectorAll('strong[onclick]')].find((element) => {
     const text = String(element.textContent || '').trim();
     const onclick = String(element.getAttribute('onclick') || '');
@@ -1484,6 +1537,7 @@ function inspectSessionPageDom(galleryId, loginPromptText) {
   return {
     currentUrl: location.href,
     hasManagerButton: Boolean(adminButton),
+    hasForeignManagerButton: Boolean(anyAdminButton) && !adminButton,
     hasLoginPrompt: Boolean(loginPrompt),
     loginUrl,
   };

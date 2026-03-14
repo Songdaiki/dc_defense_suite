@@ -61,6 +61,7 @@ class Scheduler {
       posts: [],
     };
     this.ensureLoginSession = null;
+    this.recoverLoginSession = null;
     this.handleLoginAccessFailure = null;
   }
 
@@ -504,7 +505,7 @@ class Scheduler {
           return;
         }
 
-        const actionResult = await executeDeleteAndBan(
+        const actionResult = await this.executeDeleteAndBanWithRecovery(
           this.config,
           parsedCommand.targetPostNo,
           trustedUser.label,
@@ -515,7 +516,10 @@ class Scheduler {
         if (actionResult.success) {
           this.incrementDailyUsage(trustedUser.userId);
           this.totalSucceededCommands += 1;
-          this.addLog(`✅ [${trustedUser.label}] ${helperTimeoutFallback.logLabel} 처리 #${parsedCommand.targetPostNo}`);
+          this.addLog(
+            `✅ [${trustedUser.label}] ${helperTimeoutFallback.logLabel} 처리 #${parsedCommand.targetPostNo}`
+            + (actionResult.recoveredByLoginRetry ? ' (세션 재검증 후 복구)' : ''),
+          );
           await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
             id: recordId,
             source: 'auto_report',
@@ -549,7 +553,6 @@ class Scheduler {
           imageUrls: content.imageUrls,
           reason: buildTimeoutFallbackFailureReason(helperTimeoutFallback, actionResult.message || '응답 확인 실패'),
         }), signal);
-        await this.notifyLoginAccessFailure(actionResult.message || '');
         return;
       }
 
@@ -605,10 +608,25 @@ class Scheduler {
     if (!loginSessionResult.success) {
       this.totalFailedCommands += 1;
       this.addLog(`❌ [${trustedUser.label}] 로그인 세션 실패 #${parsedCommand.targetPostNo} - ${loginSessionResult.message}`);
+      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+        id: recordId,
+        source: 'auto_report',
+        status: 'failed',
+        targetUrl: parsedCommand.targetUrl,
+        targetPostNo: parsedCommand.targetPostNo,
+        reportReason: parsedCommand.reasonText,
+        title: content.title,
+        bodyText: content.bodyText,
+        imageUrls: content.imageUrls,
+        decision: helperResult.decision,
+        confidence: helperResult.confidence,
+        policyIds: helperResult.policy_ids || [],
+        reason: `로그인 세션 실패: ${loginSessionResult.message || 'login 연결실패'}`,
+      }), signal);
       return;
     }
 
-    const actionResult = await executeDeleteAndBan(
+    const actionResult = await this.executeDeleteAndBanWithRecovery(
       this.config,
       parsedCommand.targetPostNo,
       trustedUser.label,
@@ -619,13 +637,31 @@ class Scheduler {
     if (actionResult.success) {
       this.incrementDailyUsage(trustedUser.userId);
       this.totalSucceededCommands += 1;
-      this.addLog(`✅ [${trustedUser.label}] 처리 완료 #${parsedCommand.targetPostNo} (${authorCheck.message} / ${formatLlmDecisionSummary(helperResult)} / ${actionResult.reasonText})`);
+      this.addLog(
+        `✅ [${trustedUser.label}] 처리 완료 #${parsedCommand.targetPostNo} `
+        + `(${authorCheck.message} / ${formatLlmDecisionSummary(helperResult)} / ${actionResult.reasonText})`
+        + (actionResult.recoveredByLoginRetry ? ' [세션 재검증 후 복구]' : ''),
+      );
       return;
     }
 
     this.totalFailedCommands += 1;
     this.addLog(`❌ [${trustedUser.label}] 처리 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`);
-    await this.notifyLoginAccessFailure(actionResult.message || '');
+    await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+      id: recordId,
+      source: 'auto_report',
+      status: 'failed',
+      targetUrl: parsedCommand.targetUrl,
+      targetPostNo: parsedCommand.targetPostNo,
+      reportReason: parsedCommand.reasonText,
+      title: content.title,
+      bodyText: content.bodyText,
+      imageUrls: content.imageUrls,
+      decision: helperResult.decision,
+      confidence: helperResult.confidence,
+      policyIds: helperResult.policy_ids || [],
+      reason: buildDeleteActionFailureReason(actionResult),
+    }), signal);
   }
 
   async ensureLoginSessionForAction() {
@@ -634,6 +670,86 @@ class Scheduler {
     }
 
     return this.ensureLoginSession();
+  }
+
+  async executeDeleteAndBanWithRecovery(config, targetPostNo, label, rawReasonText, signal) {
+    const initialResult = await executeDeleteAndBan(config, targetPostNo, label, rawReasonText, signal);
+    if (initialResult.success) {
+      return initialResult;
+    }
+
+    if (initialResult.authFailureDetected) {
+      this.addLog(`⚠️ 권한/세션 실패 감지 #${targetPostNo} - 세션 강제 재검증 시작`);
+    }
+
+    const recoveryResult = await this.tryRecoverLoginAccessFailure(initialResult);
+    if (!recoveryResult.attempted) {
+      return initialResult;
+    }
+
+    this.addLog(
+      `🔁 세션 체크 탭 재검증 결과: ${recoveryResult.message || recoveryResult.status || '확인 불가'}`
+      + '. 삭제/차단 1회 재시도',
+    );
+
+    const retriedResult = await executeDeleteAndBan(config, targetPostNo, label, rawReasonText, signal);
+    if (retriedResult.success) {
+      return {
+        ...retriedResult,
+        recoveryAttempted: true,
+        recoveredByLoginRetry: true,
+      };
+    }
+
+    return {
+      ...retriedResult,
+      recoveryAttempted: true,
+      recoveredByLoginRetry: false,
+      confirmedFailureType: String(retriedResult.failureType || initialResult.failureType || 'unknown'),
+      message: buildConfirmedDeleteFailureMessage(retriedResult, recoveryResult),
+    };
+  }
+
+  async tryRecoverLoginAccessFailure(actionResult) {
+    if (!actionResult?.authFailureDetected) {
+      return {
+        attempted: false,
+        success: false,
+        status: 'ignored',
+        message: '',
+        detail: '',
+      };
+    }
+
+    if (typeof this.recoverLoginSession !== 'function') {
+      return {
+        attempted: false,
+        success: false,
+        status: 'unavailable',
+        message: '',
+        detail: '',
+      };
+    }
+
+    const failureMessage = [actionResult.message, actionResult.rawText]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    try {
+      return await this.recoverLoginSession({
+        message: failureMessage,
+        failureType: actionResult.failureType,
+      });
+    } catch (error) {
+      return {
+        attempted: true,
+        success: false,
+        status: 'error',
+        message: `세션 재검증 실패: ${error.message}`,
+        detail: '',
+      };
+    }
   }
 
   async notifyLoginAccessFailure(message) {
@@ -985,6 +1101,48 @@ function buildTimeoutFallbackFailureReason(helperTimeoutFallback, failureMessage
   const fallbackReason = String(helperTimeoutFallback?.reason || '').trim() || 'LLM helper timeout fallback';
   const detail = String(failureMessage || '').trim() || '응답 확인 실패';
   return `${fallbackReason} 후 처리 실패: ${detail}`;
+}
+
+function buildConfirmedDeleteFailureMessage(actionResult, recoveryResult) {
+  const detail = String(actionResult?.message || '').trim() || '응답 확인 실패';
+  const recoveryDetail = String(recoveryResult?.message || '').trim();
+  const failureType = String(actionResult?.failureType || '').trim();
+
+  if (failureType === 'manager_permission_denied') {
+    return recoveryDetail
+      ? `세션 재검증 후에도 관리 권한이 없습니다. 진짜 권한 실패로 판단합니다. (${detail} / 재검증: ${recoveryDetail})`
+      : `세션 재검증 후에도 관리 권한이 없습니다. 진짜 권한 실패로 판단합니다. (${detail})`;
+  }
+
+  if (failureType === 'session_access_denied' || failureType === 'ci_token_missing') {
+    return recoveryDetail
+      ? `세션 재검증 후에도 인증/세션 문제가 지속됩니다. (${detail} / 재검증: ${recoveryDetail})`
+      : `세션 재검증 후에도 인증/세션 문제가 지속됩니다. (${detail})`;
+  }
+
+  if (recoveryDetail) {
+    return `세션 재검증 후에도 삭제/차단 실패: ${detail} (재검증: ${recoveryDetail})`;
+  }
+
+  return `세션 재검증 후에도 삭제/차단 실패: ${detail}`;
+}
+
+function buildDeleteActionFailureReason(actionResult) {
+  const detail = String(actionResult?.message || '').trim() || '응답 확인 실패';
+  const confirmedFailureType = String(actionResult?.confirmedFailureType || '').trim();
+  if (confirmedFailureType === 'manager_permission_denied') {
+    return `진짜 권한 실패로 확정: ${detail}`;
+  }
+
+  if (confirmedFailureType === 'session_access_denied' || confirmedFailureType === 'ci_token_missing') {
+    return `세션/인증 실패로 확정: ${detail}`;
+  }
+
+  if (actionResult?.recoveryAttempted) {
+    return `세션 재검증 후 삭제/차단 실패: ${detail}`;
+  }
+
+  return `삭제/차단 실패: ${detail}`;
 }
 
 function normalizeDailyUsage(dailyUsage) {

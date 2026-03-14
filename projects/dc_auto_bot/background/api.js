@@ -124,11 +124,19 @@ async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
       const response = await dcFetch(url, options);
 
       if (response.status === 429) {
+        const responseText = await response.text();
+        if (attempt === retries - 1) {
+          throw createHttpResponseError(response.status, responseText);
+        }
         await delayWithSignal((attempt + 1) * 2000, signal);
         continue;
       }
 
       if (response.status === 403) {
+        const responseText = await response.text();
+        if (attempt === retries - 1) {
+          throw createHttpResponseError(response.status, responseText);
+        }
         await delayWithSignal(5000, signal);
         continue;
       }
@@ -148,6 +156,13 @@ async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
   }
 
   throw new Error('최대 재시도 횟수 초과');
+}
+
+function createHttpResponseError(status, responseText = '') {
+  const error = new Error(`HTTP ${status}`);
+  error.status = Number(status || 0);
+  error.responseText = String(responseText || '');
+  return error;
 }
 
 async function fetchPostPage(config = {}, postNo, signal) {
@@ -435,6 +450,10 @@ async function executeDeleteAndBan(config = {}, targetPostNo, label, rawReasonTe
       success: false,
       message: 'ci_t 토큰(ci_c 쿠키)을 찾지 못했습니다.',
       reasonText: '',
+      rawText: '',
+      status: 0,
+      failureType: 'ci_token_missing',
+      authFailureDetected: true,
     };
   }
 
@@ -451,29 +470,56 @@ async function executeDeleteAndBan(config = {}, targetPostNo, label, rawReasonTe
   body.set('avoid_type_chk', resolved.avoidTypeChk ? '1' : '0');
   body.append('nos[]', String(targetPostNo));
 
-  const response = await dcFetchWithRetry(
-    `${resolved.baseUrl}/ajax/minor_manager_board_ajax/update_avoid_list`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Referer': `${resolved.baseUrl}/mgallery/board/lists/?id=${resolved.galleryId}`,
-        'Origin': resolved.baseUrl,
+  try {
+    const response = await dcFetchWithRetry(
+      `${resolved.baseUrl}/ajax/minor_manager_board_ajax/update_avoid_list`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Referer': `${resolved.baseUrl}/mgallery/board/lists/?id=${resolved.galleryId}`,
+          'Origin': resolved.baseUrl,
+        },
+        body: body.toString(),
+        signal,
       },
-      body: body.toString(),
-      signal,
-    },
-  );
+    );
 
-  const responseText = await response.text();
-  const parsed = safeParseJson(responseText);
+    const responseText = await response.text();
+    const parsed = safeParseJson(responseText);
+    const message = summarizeResponse(parsed, responseText);
+    const failureType = inferDeleteAndBanFailureType(response.status, message, responseText);
 
-  return {
-    success: isAvoidResponseSuccessful(response, parsed, responseText),
-    message: summarizeResponse(parsed, responseText),
-    reasonText,
-  };
+    return {
+      success: isAvoidResponseSuccessful(response, parsed, responseText),
+      message,
+      reasonText,
+      rawText: responseText,
+      status: response.status,
+      failureType,
+      authFailureDetected: isDeleteAndBanAuthFailure(failureType),
+    };
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw error;
+    }
+
+    const responseText = String(error?.responseText || '');
+    const message = String(error?.message || '삭제/차단 요청 실패');
+    const status = Number(error?.status || 0);
+    const failureType = inferDeleteAndBanFailureType(status, message, responseText);
+
+    return {
+      success: false,
+      message,
+      reasonText,
+      rawText: responseText,
+      status,
+      failureType,
+      authFailureDetected: isDeleteAndBanAuthFailure(failureType),
+    };
+  }
 }
 
 async function callCliHelperJudge(config = {}, input, signal) {
@@ -800,6 +846,57 @@ function summarizeResponse(data, responseText) {
   }
 
   return String(responseText || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+}
+
+function inferDeleteAndBanFailureType(status, message, responseText) {
+  const normalized = normalizeFailureText([
+    String(message || ''),
+    String(responseText || ''),
+  ].join(' '));
+
+  if (!normalized) {
+    return status > 0 ? `http_${status}` : 'unknown';
+  }
+
+  if (normalized.includes('관리권한이없습니다')) {
+    return 'manager_permission_denied';
+  }
+
+  if (normalized.includes('정상적인접근이아닙니다')) {
+    return 'session_access_denied';
+  }
+
+  if (normalized.includes('ci_t토큰(ci_c쿠키)을찾지못했습니다')) {
+    return 'ci_token_missing';
+  }
+
+  if (status === 403) {
+    return 'session_access_denied';
+  }
+
+  if (status === 429) {
+    return 'rate_limited';
+  }
+
+  if (status > 0 && status >= 400) {
+    return `http_${status}`;
+  }
+
+  return 'application_error';
+}
+
+function isDeleteAndBanAuthFailure(failureType) {
+  return [
+    'manager_permission_denied',
+    'session_access_denied',
+    'ci_token_missing',
+  ].includes(String(failureType || ''));
+}
+
+function normalizeFailureText(value) {
+  return String(value || '')
+    .replace(/\s+/g, '')
+    .trim();
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
