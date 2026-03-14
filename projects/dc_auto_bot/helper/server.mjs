@@ -1529,7 +1529,11 @@ function sanitizeRecordRequest(input) {
   }
 
   const decisionSource = String(input.decisionSource || 'gemini').trim();
-  if (decisionSource === 'image_analysis_timeout_fallback' || decisionSource === 'helper_timeout_fallback') {
+  if (
+    decisionSource === 'image_analysis_timeout_fallback'
+    || decisionSource === 'helper_timeout_fallback'
+    || decisionSource === 'helper_internal_error_fallback'
+  ) {
     const targetUrl = String(input.targetUrl || '').trim();
     const targetPostNo = String(input.targetPostNo || '').trim();
     const reason = String(input.reason || '').trim();

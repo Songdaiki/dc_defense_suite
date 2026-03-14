@@ -595,6 +595,7 @@ async function callCliHelperJudge(config = {}, input, signal) {
       return {
         success: false,
         message: parsed.message,
+        failureType: parsed.failureType || '',
         rawText: parsed.rawText || responseText,
       };
     }

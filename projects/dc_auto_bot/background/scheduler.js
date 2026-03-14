@@ -486,8 +486,8 @@ class Scheduler {
     );
 
     if (!helperResult.success) {
-      const helperTimeoutFallback = getHelperTimeoutFallback(helperResult, content);
-      if (helperTimeoutFallback) {
+      const helperForceAllowFallback = getHelperForceAllowFallback(helperResult, content);
+      if (helperForceAllowFallback) {
         const loginSessionResult = await this.ensureLoginSessionForAction();
         if (!loginSessionResult.success) {
           this.totalFailedCommands += 1;
@@ -502,7 +502,7 @@ class Scheduler {
             title: content.title,
             bodyText: content.bodyText,
             imageUrls: content.imageUrls,
-            reason: buildTimeoutFallbackFailureReason(helperTimeoutFallback, `로그인 세션 실패: ${loginSessionResult.message}`),
+            reason: buildHelperForceAllowFallbackFailureReason(helperForceAllowFallback, `로그인 세션 실패: ${loginSessionResult.message}`),
           }), signal);
           return;
         }
@@ -519,14 +519,14 @@ class Scheduler {
           this.incrementDailyUsage(trustedUser.userId);
           this.totalSucceededCommands += 1;
           this.addLog(
-            `✅ [${trustedUser.label}] ${helperTimeoutFallback.logLabel} 처리 #${parsedCommand.targetPostNo}`
+            `✅ [${trustedUser.label}] ${helperForceAllowFallback.logLabel} 처리 #${parsedCommand.targetPostNo}`
             + (actionResult.recoveredByLoginRetry ? ' (세션 재검증 후 복구)' : ''),
           );
           await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
             id: recordId,
             source: 'auto_report',
             status: 'completed',
-            decisionSource: helperTimeoutFallback.decisionSource,
+            decisionSource: helperForceAllowFallback.decisionSource,
             targetUrl: parsedCommand.targetUrl,
             targetPostNo: parsedCommand.targetPostNo,
             reportReason: parsedCommand.reasonText,
@@ -536,13 +536,13 @@ class Scheduler {
             decision: 'allow',
             confidence: null,
             policyIds: [],
-            reason: helperTimeoutFallback.reason,
+            reason: helperForceAllowFallback.reason,
           }), signal);
           return;
         }
 
         this.totalFailedCommands += 1;
-        this.addLog(`❌ [${trustedUser.label}] ${helperTimeoutFallback.logLabel} 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`);
+        this.addLog(`❌ [${trustedUser.label}] ${helperForceAllowFallback.logLabel} 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`);
         await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
           id: recordId,
           source: 'auto_report',
@@ -553,7 +553,7 @@ class Scheduler {
           title: content.title,
           bodyText: content.bodyText,
           imageUrls: content.imageUrls,
-          reason: buildTimeoutFallbackFailureReason(helperTimeoutFallback, actionResult.message || '응답 확인 실패'),
+          reason: buildHelperForceAllowFallbackFailureReason(helperForceAllowFallback, actionResult.message || '응답 확인 실패'),
         }), signal);
         return;
       }
@@ -1086,7 +1086,7 @@ function migrateLegacyHelperTimeout(value) {
   return numericValue;
 }
 
-function getHelperTimeoutFallback(helperResult, content) {
+function getHelperForceAllowFallback(helperResult, content) {
   if (!helperResult || helperResult.success !== false) {
     return null;
   }
@@ -1120,11 +1120,48 @@ function getHelperTimeoutFallback(helperResult, content) {
     };
   }
 
-  return null;
+  if (isKnownNonForceAllowHelperFailure(message)) {
+    return null;
+  }
+
+  return {
+    decisionSource: 'helper_internal_error_fallback',
+    reason: 'LLM helper 내부 오류로 인한 삭제',
+    logLabel: 'LLM helper internal-error fallback',
+  };
 }
 
-function buildTimeoutFallbackFailureReason(helperTimeoutFallback, failureMessage) {
-  const fallbackReason = String(helperTimeoutFallback?.reason || '').trim() || 'LLM helper timeout fallback';
+function isKnownNonForceAllowHelperFailure(message) {
+  const normalized = String(message || '').trim();
+  if (!normalized) {
+    return false;
+  }
+
+  if (
+    normalized === 'CLI helper endpoint 형식이 올바르지 않습니다.'
+    || normalized === 'CLI helper endpoint는 http://localhost 또는 http://127.0.0.1 주소만 허용됩니다.'
+    || normalized === 'CLI helper endpoint는 localhost 계열 주소만 허용됩니다.'
+    || normalized.startsWith('CLI helper 연결 실패:')
+    || normalized === 'CLI helper 응답 JSON 파싱 실패'
+    || normalized === 'CLI helper 판정 실패'
+    || normalized === 'decision 값이 올바르지 않습니다.'
+    || normalized === 'confidence 값이 올바르지 않습니다.'
+    || normalized === 'policy_ids가 비어 있습니다.'
+    || normalized === 'policy_ids에 허용되지 않은 값이 포함되어 있습니다.'
+    || normalized === 'reason 값이 비어 있습니다.'
+    || normalized === 'policy_ids에 NONE과 다른 정책이 동시에 포함될 수 없습니다.'
+    || normalized === 'policy_ids가 ["NONE"]이면 decision은 deny여야 합니다.'
+    || normalized === 'P15 단독 allow는 자동 삭제/차단 대상으로 처리할 수 없습니다.'
+    || normalized === 'allow 결정에는 최소 1개 이상의 정책 ID가 필요합니다.'
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function buildHelperForceAllowFallbackFailureReason(helperForceAllowFallback, failureMessage) {
+  const fallbackReason = String(helperForceAllowFallback?.reason || '').trim() || 'LLM helper force-allow fallback';
   const detail = String(failureMessage || '').trim() || '응답 확인 실패';
   return `${fallbackReason} 후 처리 실패: ${detail}`;
 }
