@@ -161,14 +161,15 @@ const schedulers = {
 {
   galleryId: 'thesingularity',
   monitorPages: 2,
-  pollIntervalMs: 30000,
+  pollIntervalMs: 20000,
 
-  attackNewCommentThreshold: 250,
+  attackNewCommentThreshold: 30,
+  attackChangedPostThreshold: 20,
   attackConsecutiveCount: 2,
 
-  releaseNewCommentThreshold: 50,
-  releaseVerifiedDeleteThreshold: 50,
-  releaseConsecutiveCount: 2,
+  releaseNewCommentThreshold: 30,
+  releaseVerifiedDeleteThreshold: 10,
+  releaseConsecutiveCount: 3,
   reseedPollCountAfterRelease: 1,
 }
 ```
@@ -183,6 +184,8 @@ const schedulers = {
   - 감시 주기
 - `attackNewCommentThreshold`
   - 1 poll 구간 동안 감지된 `reply_num 순증가 합계`
+- `attackChangedPostThreshold`
+  - 1 poll 구간 동안 댓글 수가 증가한 게시물 수
 - `attackConsecutiveCount`
   - 공격 감지 연속 횟수
 - `releaseNewCommentThreshold`
@@ -357,7 +360,7 @@ changedPostCount = 3
 
 1. `currentSnapshot` 수집
 2. `newCommentCount` 계산
-3. `newCommentCount >= attackNewCommentThreshold`면 `attackHitCount += 1`
+3. `newCommentCount >= attackNewCommentThreshold` 이고 `changedPostCount >= attackChangedPostThreshold`면 `attackHitCount += 1`
 4. 아니면 `attackHitCount = 0`
 5. `attackHitCount >= attackConsecutiveCount`면 `ATTACKING` 진입
 
@@ -429,7 +432,9 @@ changedPostCount = 3
 공격 진입은 `>=`를 사용한다.
 
 ```js
-attackCondition = newCommentCount >= attackNewCommentThreshold
+attackCondition =
+  newCommentCount >= attackNewCommentThreshold
+  && changedPostCount >= attackChangedPostThreshold
 ```
 
 예:
@@ -468,14 +473,15 @@ v1에서 댓글 쪽은 각 임계치에 대해 `<=`를 명시적으로 사용한
 
 ```js
 monitorPages: 2
-pollIntervalMs: 30000
+pollIntervalMs: 20000
 
-attackNewCommentThreshold: 250
+attackNewCommentThreshold: 30
+attackChangedPostThreshold: 20
 attackConsecutiveCount: 2
 
-releaseNewCommentThreshold: 50
-releaseVerifiedDeleteThreshold: 50
-releaseConsecutiveCount: 2
+releaseNewCommentThreshold: 30
+releaseVerifiedDeleteThreshold: 10
+releaseConsecutiveCount: 3
 reseedPollCountAfterRelease: 1
 ```
 
@@ -551,6 +557,7 @@ reseedPollCountAfterRelease: 1
 - 감시 페이지 수
 - 감시 폴링 시간(ms)
 - 공격 감지 새 댓글 수
+- 공격 감지 변화 글 수
 - 공격 감지 연속 횟수
 - 공격 종료 새 댓글 수
 - 공격 종료 실제 삭제 수

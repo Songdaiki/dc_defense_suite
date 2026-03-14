@@ -39,13 +39,13 @@ class Scheduler {
 
     this.config = {
       galleryId: 'thesingularity',
-      monitorPages: 1,
-      pollIntervalMs: 30000,
-      attackNewPostThreshold: 50,
-      attackFluidRatioThreshold: 85,
+      monitorPages: 2,
+      pollIntervalMs: 20000,
+      attackNewPostThreshold: 15,
+      attackFluidRatioThreshold: 88,
       attackConsecutiveCount: 2,
       releaseNewPostThreshold: 10,
-      releaseFluidRatioThreshold: 40,
+      releaseFluidRatioThreshold: 30,
       releaseConsecutiveCount: 3,
     };
   }

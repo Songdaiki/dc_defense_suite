@@ -177,7 +177,7 @@
           <div class="settings-grid">
             <div class="setting-item">
               <label for="commentMonitorPollIntervalMs">감시 폴링 시간 (ms)</label>
-              <input type="number" id="commentMonitorPollIntervalMs" min="1000" max="60000" step="1000" value="30000">
+              <input type="number" id="commentMonitorPollIntervalMs" min="1000" max="60000" step="1000" value="20000">
             </div>
             <div class="setting-item">
               <label for="commentMonitorPages">감시 페이지 수</label>
@@ -185,7 +185,11 @@
             </div>
             <div class="setting-item">
               <label for="commentMonitorAttackNewCommentThreshold">공격 감지 새 댓글 수</label>
-              <input type="number" id="commentMonitorAttackNewCommentThreshold" min="1" max="5000" value="250">
+              <input type="number" id="commentMonitorAttackNewCommentThreshold" min="1" max="5000" value="30">
+            </div>
+            <div class="setting-item">
+              <label for="commentMonitorAttackChangedPostThreshold">공격 감지 변화 글 수</label>
+              <input type="number" id="commentMonitorAttackChangedPostThreshold" min="1" max="500" value="20">
             </div>
             <div class="setting-item">
               <label for="commentMonitorAttackConsecutiveCount">공격 감지 연속 횟수</label>
@@ -193,15 +197,15 @@
             </div>
             <div class="setting-item">
               <label for="commentMonitorReleaseNewCommentThreshold">공격 종료 새 댓글 수</label>
-              <input type="number" id="commentMonitorReleaseNewCommentThreshold" min="0" max="5000" value="50">
+              <input type="number" id="commentMonitorReleaseNewCommentThreshold" min="0" max="5000" value="30">
             </div>
             <div class="setting-item">
               <label for="commentMonitorReleaseVerifiedDeleteThreshold">공격 종료 실제 삭제 수</label>
-              <input type="number" id="commentMonitorReleaseVerifiedDeleteThreshold" min="0" max="5000" value="50">
+              <input type="number" id="commentMonitorReleaseVerifiedDeleteThreshold" min="0" max="5000" value="10">
             </div>
             <div class="setting-item">
               <label for="commentMonitorReleaseConsecutiveCount">공격 종료 연속 횟수</label>
-              <input type="number" id="commentMonitorReleaseConsecutiveCount" min="1" max="10" value="2">
+              <input type="number" id="commentMonitorReleaseConsecutiveCount" min="1" max="10" value="3">
             </div>
             <button id="commentMonitorSaveConfigBtn" class="btn btn-primary">설정 저장</button>
           </div>
@@ -571,19 +575,19 @@
           <div class="settings-grid">
             <div class="setting-item">
               <label for="monitorPollIntervalMs">감시 폴링 시간 (ms)</label>
-              <input type="number" id="monitorPollIntervalMs" min="1000" max="60000" step="1000" value="30000">
+              <input type="number" id="monitorPollIntervalMs" min="1000" max="60000" step="1000" value="20000">
             </div>
             <div class="setting-item">
               <label for="monitorPages">감시 페이지 수</label>
-              <input type="number" id="monitorPages" min="1" max="10" value="1">
+              <input type="number" id="monitorPages" min="1" max="10" value="2">
             </div>
             <div class="setting-item">
               <label for="monitorAttackNewPostThreshold">공격 감지 새 게시물 수</label>
-              <input type="number" id="monitorAttackNewPostThreshold" min="1" max="500" value="50">
+              <input type="number" id="monitorAttackNewPostThreshold" min="1" max="500" value="15">
             </div>
             <div class="setting-item">
               <label for="monitorAttackFluidRatioThreshold">공격 감지 유동 비율 (%)</label>
-              <input type="number" id="monitorAttackFluidRatioThreshold" min="1" max="100" value="85">
+              <input type="number" id="monitorAttackFluidRatioThreshold" min="1" max="100" value="88">
             </div>
             <div class="setting-item">
               <label for="monitorAttackConsecutiveCount">공격 감지 연속 횟수</label>
@@ -595,7 +599,7 @@
             </div>
             <div class="setting-item">
               <label for="monitorReleaseFluidRatioThreshold">공격 종료 유동 비율 (%)</label>
-              <input type="number" id="monitorReleaseFluidRatioThreshold" min="0" max="100" value="40">
+              <input type="number" id="monitorReleaseFluidRatioThreshold" min="0" max="100" value="30">
             </div>
             <div class="setting-item">
               <label for="monitorReleaseConsecutiveCount">공격 종료 연속 횟수</label>

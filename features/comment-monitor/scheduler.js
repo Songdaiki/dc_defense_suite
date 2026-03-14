@@ -37,12 +37,13 @@ class Scheduler {
     this.config = {
       galleryId: 'thesingularity',
       monitorPages: 2,
-      pollIntervalMs: 30000,
-      attackNewCommentThreshold: 250,
+      pollIntervalMs: 20000,
+      attackNewCommentThreshold: 30,
+      attackChangedPostThreshold: 20,
       attackConsecutiveCount: 2,
-      releaseNewCommentThreshold: 50,
-      releaseVerifiedDeleteThreshold: 50,
-      releaseConsecutiveCount: 2,
+      releaseNewCommentThreshold: 30,
+      releaseVerifiedDeleteThreshold: 10,
+      releaseConsecutiveCount: 3,
       reseedPollCountAfterRelease: 1,
     };
   }
@@ -271,11 +272,15 @@ class Scheduler {
       return;
     }
 
-    const attackCondition = metrics.newCommentCount >= this.config.attackNewCommentThreshold;
+    const attackCondition = metrics.newCommentCount >= this.config.attackNewCommentThreshold
+      && metrics.changedPostCount >= this.config.attackChangedPostThreshold;
 
     if (attackCondition) {
       this.attackHitCount += 1;
-      this.log(`🚨 댓글 공격 감지 streak ${this.attackHitCount}/${this.config.attackConsecutiveCount}`);
+      this.log(
+        `🚨 댓글 공격 감지 streak ${this.attackHitCount}/${this.config.attackConsecutiveCount} `
+        + `(새 댓글 ${metrics.newCommentCount} / 변화 글 ${metrics.changedPostCount})`,
+      );
       if (this.attackHitCount >= this.config.attackConsecutiveCount) {
         await this.enterAttackMode();
       }

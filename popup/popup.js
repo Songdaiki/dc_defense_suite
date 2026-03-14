@@ -54,6 +54,7 @@ const FEATURE_DOM = {
     pollIntervalMsInput: document.getElementById('commentMonitorPollIntervalMs'),
     pagesInput: document.getElementById('commentMonitorPages'),
     attackNewCommentThresholdInput: document.getElementById('commentMonitorAttackNewCommentThreshold'),
+    attackChangedPostThresholdInput: document.getElementById('commentMonitorAttackChangedPostThreshold'),
     attackConsecutiveCountInput: document.getElementById('commentMonitorAttackConsecutiveCount'),
     releaseNewCommentThresholdInput: document.getElementById('commentMonitorReleaseNewCommentThreshold'),
     releaseVerifiedDeleteThresholdInput: document.getElementById('commentMonitorReleaseVerifiedDeleteThreshold'),
@@ -364,13 +365,14 @@ function bindCommentMonitorEvents() {
 
   dom.saveConfigBtn.addEventListener('click', async () => {
     const config = {
-      pollIntervalMs: Math.max(1000, parseOptionalInt(dom.pollIntervalMsInput.value, 30000)),
+      pollIntervalMs: Math.max(1000, parseOptionalInt(dom.pollIntervalMsInput.value, 20000)),
       monitorPages: Math.max(1, parseOptionalInt(dom.pagesInput.value, 2)),
-      attackNewCommentThreshold: Math.max(1, parseOptionalInt(dom.attackNewCommentThresholdInput.value, 250)),
+      attackNewCommentThreshold: Math.max(1, parseOptionalInt(dom.attackNewCommentThresholdInput.value, 30)),
+      attackChangedPostThreshold: Math.max(1, parseOptionalInt(dom.attackChangedPostThresholdInput.value, 20)),
       attackConsecutiveCount: Math.max(1, parseOptionalInt(dom.attackConsecutiveCountInput.value, 2)),
-      releaseNewCommentThreshold: Math.max(0, parseOptionalInt(dom.releaseNewCommentThresholdInput.value, 50)),
-      releaseVerifiedDeleteThreshold: Math.max(0, parseOptionalInt(dom.releaseVerifiedDeleteThresholdInput.value, 50)),
-      releaseConsecutiveCount: Math.max(1, parseOptionalInt(dom.releaseConsecutiveCountInput.value, 2)),
+      releaseNewCommentThreshold: Math.max(0, parseOptionalInt(dom.releaseNewCommentThresholdInput.value, 30)),
+      releaseVerifiedDeleteThreshold: Math.max(0, parseOptionalInt(dom.releaseVerifiedDeleteThresholdInput.value, 10)),
+      releaseConsecutiveCount: Math.max(1, parseOptionalInt(dom.releaseConsecutiveCountInput.value, 3)),
     };
 
     const response = await sendFeatureMessage('commentMonitor', { action: 'updateConfig', config });
@@ -785,13 +787,14 @@ function updateCommentMonitorUI(status) {
   dom.totalAttackReleased.textContent = `${status.totalAttackReleased ?? 0}회`;
 
   syncFeatureConfigInputs('commentMonitor', [
-    [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 30000],
+    [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 20000],
     [dom.pagesInput, status.config?.monitorPages ?? 2],
-    [dom.attackNewCommentThresholdInput, status.config?.attackNewCommentThreshold ?? 250],
+    [dom.attackNewCommentThresholdInput, status.config?.attackNewCommentThreshold ?? 30],
+    [dom.attackChangedPostThresholdInput, status.config?.attackChangedPostThreshold ?? 20],
     [dom.attackConsecutiveCountInput, status.config?.attackConsecutiveCount ?? 2],
-    [dom.releaseNewCommentThresholdInput, status.config?.releaseNewCommentThreshold ?? 50],
-    [dom.releaseVerifiedDeleteThresholdInput, status.config?.releaseVerifiedDeleteThreshold ?? 50],
-    [dom.releaseConsecutiveCountInput, status.config?.releaseConsecutiveCount ?? 2],
+    [dom.releaseNewCommentThresholdInput, status.config?.releaseNewCommentThreshold ?? 30],
+    [dom.releaseVerifiedDeleteThresholdInput, status.config?.releaseVerifiedDeleteThreshold ?? 10],
+    [dom.releaseConsecutiveCountInput, status.config?.releaseConsecutiveCount ?? 3],
   ]);
   updateLogList(dom.logList, status.logs);
 }
@@ -1056,6 +1059,7 @@ function getFeatureConfigInputs(feature) {
       dom.pollIntervalMsInput,
       dom.pagesInput,
       dom.attackNewCommentThresholdInput,
+      dom.attackChangedPostThresholdInput,
       dom.attackConsecutiveCountInput,
       dom.releaseNewCommentThresholdInput,
       dom.releaseVerifiedDeleteThresholdInput,
