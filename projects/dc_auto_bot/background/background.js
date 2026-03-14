@@ -672,11 +672,10 @@ async function ensureGeminiAuthBeforeJudge() {
     };
   }
 
-  const geminiAuthHealth = getGeminiAuthHealthSnapshot();
+  const geminiAuthHealth = await refreshGeminiAuthHealth(
+    getGeminiAuthHealthSnapshot().isHealthy !== true,
+  );
   if (!shouldBlockOnGeminiAuthHealth(geminiAuthHealth)) {
-    if (geminiAuthHealth.status === 'unknown') {
-      void refreshGeminiAuthHealth();
-    }
     return { success: true };
   }
 
