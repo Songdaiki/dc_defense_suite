@@ -49,6 +49,8 @@ function renderTransparencyListPage({ records, nextCursor, total, healthStatus, 
             <span class="stat-item"><span class="stat-dot stat-dot-allow"></span> 삭제 승인 ${stats.allow}</span>
             <span class="stat-item"><span class="stat-dot stat-dot-deny"></span> 삭제 반려 ${stats.deny}</span>
             <span class="stat-item"><span class="stat-dot stat-dot-review"></span> 검토 필요 ${stats.review}</span>
+            <span class="stat-item"><span class="stat-dot stat-dot-filtered"></span> 처리 불가 ${stats.filtered}</span>
+            <span class="stat-item"><span class="stat-dot stat-dot-forced"></span> 강제 승인 ${stats.forced}</span>
           </div>
         </div>
 
@@ -236,6 +238,14 @@ function renderSidebar(total, stats) {
             <span class="sidebar-info-label">검토 필요</span>
             <span class="sidebar-info-value">${stats.review}건</span>
           </div>
+          <div class="sidebar-info-row">
+            <span class="sidebar-info-label">처리 불가</span>
+            <span class="sidebar-info-value">${stats.filtered}건</span>
+          </div>
+          <div class="sidebar-info-row">
+            <span class="sidebar-info-label">강제 승인</span>
+            <span class="sidebar-info-value">${stats.forced}건</span>
+          </div>
         </div>
       </div>
 
@@ -382,6 +392,8 @@ function countDecisions(records) {
   let allow = 0;
   let deny = 0;
   let review = 0;
+  let filtered = 0;
+  let forced = 0;
 
   for (const record of records) {
     const status = String(record.status || '').toLowerCase();
@@ -390,6 +402,17 @@ function countDecisions(records) {
       continue;
     }
     if (status === 'failed') {
+      if (isLikelyAlreadyProcessedPost(record)) {
+        continue;
+      }
+      if (isProcessingExcluded(record)) {
+        filtered += 1;
+        continue;
+      }
+      if (isInternalErrorFailed(record)) {
+        forced += 1;
+        continue;
+      }
       continue;
     }
     const d = String(record.decision || '').toLowerCase();
@@ -398,7 +421,7 @@ function countDecisions(records) {
     else if (d === 'review') review += 1;
   }
 
-  return { allow, deny, review };
+  return { allow, deny, review, filtered, forced };
 }
 
 function getDecisionLabel(decision, status = 'completed', record = null) {
@@ -410,7 +433,7 @@ function getDecisionLabel(decision, status = 'completed', record = null) {
     if (record && isLikelyAlreadyProcessedPost(record)) {
       return { label: '처리 완료', className: 'done' };
     }
-    if (record && isAuthorFilterFailed(record)) {
+    if (record && isProcessingExcluded(record)) {
       return { label: '처리 불가', className: 'filtered' };
     }
     if (record && isInternalErrorFailed(record)) {
@@ -540,6 +563,15 @@ function isLikelyAlreadyProcessedPost(record) {
 function isAuthorFilterFailed(record) {
   const rawReason = String(record?.reason || '').trim();
   return rawReason.startsWith('v2 core 작성자 필터 미통과:');
+}
+
+function isRecentWindowExcluded(record) {
+  const rawReason = String(record?.reason || '').trim();
+  return rawReason === '최근 100개 regular row 밖 게시물입니다.';
+}
+
+function isProcessingExcluded(record) {
+  return isAuthorFilterFailed(record) || isRecentWindowExcluded(record);
 }
 
 /**

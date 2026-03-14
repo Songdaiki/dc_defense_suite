@@ -219,6 +219,14 @@ a:hover {
   background: #e65100;
 }
 
+.stat-dot-filtered {
+  background: #c62828;
+}
+
+.stat-dot-forced {
+  background: #212121;
+}
+
 /* ============ Filter Tabs ============ */
 .filter-tabs {
   background: #fff;
