@@ -703,13 +703,60 @@ function parseCliHelperJudgeResponse(data, responseText) {
   if (success !== true) {
     return {
       success: false,
-      message: String(data.message || 'CLI helper 판정 실패'),
+      message: formatCliHelperMessage(data.message, 'CLI helper 판정 실패'),
       failureType: String(data.failure_type || data.failureType || ''),
       rawText,
     };
   }
 
   return parseModerationDecisionPayload(data, rawText);
+}
+
+function formatCliHelperMessage(value, fallback = '') {
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    return normalized || String(fallback || '');
+  }
+
+  if (value == null) {
+    return String(fallback || '');
+  }
+
+  if (value instanceof Error) {
+    const name = String(value.name || 'Error').trim();
+    const message = String(value.message || '').trim();
+    return message ? `${name}: ${message}` : (name || String(fallback || ''));
+  }
+
+  if (typeof value === 'object') {
+    const preferredKeys = ['name', 'message', 'code', 'status', 'statusCode', 'failureType', 'details', 'cause'];
+    const summaryParts = [];
+    for (const key of preferredKeys) {
+      if (!(key in value)) {
+        continue;
+      }
+      const normalizedPart = formatCliHelperMessage(value[key], '').trim();
+      if (!normalizedPart) {
+        continue;
+      }
+      summaryParts.push(`${key}=${normalizedPart}`);
+    }
+    if (summaryParts.length > 0) {
+      return summaryParts.join(' | ');
+    }
+
+    try {
+      const serialized = JSON.stringify(value);
+      if (serialized && serialized !== '{}') {
+        return serialized;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const normalized = String(value || '').trim();
+  return normalized || String(fallback || '');
 }
 
 function parseModerationDecisionPayload(data, rawText = '') {

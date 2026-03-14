@@ -101,6 +101,85 @@ function normalizeChunk(chunk, encoding) {
   return String(chunk || '');
 }
 
+function formatThrownValue(value) {
+  if (value instanceof Error) {
+    const name = String(value.name || 'Error').trim();
+    const message = String(value.message || '').trim();
+    return message ? `${name}: ${message}` : name;
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (!value || typeof value !== 'object') {
+    return String(value || '');
+  }
+
+  const preferredKeys = ['name', 'message', 'code', 'status', 'statusCode', 'failureType', 'details', 'cause'];
+  const summaryParts = [];
+  for (const key of preferredKeys) {
+    if (!(key in value)) {
+      continue;
+    }
+    const normalizedValue = normalizeThrownFieldValue(value[key]);
+    if (!normalizedValue) {
+      continue;
+    }
+    summaryParts.push(`${key}=${normalizedValue}`);
+  }
+
+  if (summaryParts.length > 0) {
+    return summaryParts.join(' | ');
+  }
+
+  try {
+    const serialized = JSON.stringify(value);
+    if (serialized && serialized !== '{}') {
+      return serialized;
+    }
+  } catch {
+    // ignore
+  }
+
+  const entries = Object.entries(value)
+    .slice(0, 10)
+    .map(([key, entryValue]) => {
+      const normalizedValue = normalizeThrownFieldValue(entryValue);
+      return normalizedValue ? `${key}=${normalizedValue}` : '';
+    })
+    .filter(Boolean);
+  if (entries.length > 0) {
+    return entries.join(', ');
+  }
+
+  return String(value);
+}
+
+function normalizeThrownFieldValue(value) {
+  if (value instanceof Error) {
+    return formatThrownValue(value);
+  }
+
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (value == null) {
+    return '';
+  }
+
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+
+  return String(value).trim();
+}
+
 function getCombinedCaptureText(capture = activeCapture) {
   if (!capture) {
     return '';
@@ -353,7 +432,7 @@ async function warmRuntime(job) {
     return {
       success: false,
       rawText: '',
-      message: error instanceof Error ? error.message : String(error),
+      message: formatThrownValue(error),
       failureType: 'runtime_error',
     };
   }
@@ -434,7 +513,7 @@ async function executeJob(job) {
     return {
       success: false,
       rawText: getCombinedCaptureText(capture),
-      message: error instanceof Error ? error.message : String(error),
+      message: formatThrownValue(error),
       failureType: 'runtime_error',
     };
   } finally {
