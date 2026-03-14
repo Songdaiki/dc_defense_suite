@@ -1,7 +1,7 @@
 # 댓글 IP 차단 기능 스펙
 
 > 작성일: 2026-03-14
-> 상태: 스펙 확정 (구현 전)
+> 상태: 구현 완료
 
 ## 1. 목적
 
@@ -153,12 +153,12 @@ processPost() 내부:
 - 기존 `delete_comment`도 배치였으므로 API 호출 수는 동일
 - **레이트 리밋 위험:** 차단 API가 삭제보다 레이트 리밋이 엄격할 수 있음 → 필요 시 `requestDelay` 조정
 
-## 6. TODO (구현 순서)
+## 6. 구현 상태
 
-- [ ] `features/comment/api.js` — `deleteAndBanComments()` 추가
-- [ ] `features/comment/scheduler.js` — config 추가 + 분기 처리
-- [ ] `popup/popup.html` — IP 차단 설정 UI
-- [ ] `popup/popup.js` — 설정 저장/로드
-- [ ] `background/background.js` — 메시지 핸들러에 새 config 반영
+- [x] `features/comment/api.js` — `deleteAndBanComments()` 추가
+- [x] `features/comment/scheduler.js` — config 추가 + 분기 처리
+- [x] `popup/popup.html` — IP 차단 설정 UI
+- [x] `popup/popup.js` — 설정 저장/로드
+- [x] `background/background.js` — 별도 수정 없이 기존 `updateConfig` generic merge 경로로 반영
 - [ ] 테스트: 수동 모드에서 삭제+차단 동작 확인
 - [ ] 테스트: 자동화 모드에서 자동 시작 시 삭제+차단 동작 확인
