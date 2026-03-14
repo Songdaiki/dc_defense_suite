@@ -31,6 +31,41 @@ function parseConceptListPosts(html, limit = 20) {
   return results;
 }
 
+function parseBoardRecommendSnapshot(html) {
+  const results = [];
+  const seen = new Set();
+  const rowPattern = /<tr[^>]*class="[^"]*ub-content[^"]*"[^>]*>([\s\S]*?)<\/tr>/ig;
+  let match = null;
+
+  while ((match = rowPattern.exec(String(html || ''))) !== null) {
+    const rowHtml = String(match[1] || '');
+    const postNo = extractPostNo(rowHtml);
+    if (!postNo || seen.has(postNo)) {
+      continue;
+    }
+
+    const currentHead = extractCurrentHead(rowHtml);
+    if (isExcludedBoardHead(currentHead)) {
+      continue;
+    }
+
+    const recommendCount = extractRecommendCount(rowHtml);
+    if (!Number.isInteger(recommendCount) || recommendCount < 0) {
+      continue;
+    }
+
+    seen.add(postNo);
+    results.push({
+      no: postNo,
+      currentHead,
+      subject: extractSubject(rowHtml),
+      recommendCount,
+    });
+  }
+
+  return results;
+}
+
 function extractConceptPostMetrics(html, options = {}) {
   const htmlText = String(html || '');
   const postNoHint = String(options.postNoHint || '').trim();
@@ -184,6 +219,15 @@ function extractCurrentHead(rowHtml) {
     .replace(/,+$/g, '');
 }
 
+function extractRecommendCount(rowHtml) {
+  const match = String(rowHtml || '').match(/<td[^>]*class="gall_recommend[^"]*"[^>]*>([\s\S]*?)<\/td>/i);
+  if (!match) {
+    return NaN;
+  }
+
+  return parseCountText(match[1]);
+}
+
 function isExcludedBoardHead(currentHead) {
   const normalized = String(currentHead || '').replace(/\s+/g, ' ').trim();
   return normalized === '공지' || normalized === '설문';
@@ -243,5 +287,6 @@ function hasText(text, pattern) {
 
 export {
   extractConceptPostMetrics,
+  parseBoardRecommendSnapshot,
   parseConceptListPosts,
 };

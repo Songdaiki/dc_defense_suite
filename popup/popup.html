@@ -44,12 +44,16 @@
 
         <div class="status-grid">
           <div class="status-item">
-            <span class="status-label">상태</span>
+            <span class="status-label">실행</span>
             <span id="conceptMonitorStatusText" class="status-value status-off">🔴 정지</span>
           </div>
           <div class="status-item">
             <span class="status-label">모드</span>
             <span id="conceptMonitorModeText" class="status-value">테스트</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="conceptMonitorAutoCutStateText" class="status-value">NORMAL</span>
           </div>
           <div class="status-item">
             <span class="status-label">최근 폴링</span>
@@ -83,6 +87,18 @@
             <span class="status-label">누적 불명확</span>
             <span id="conceptMonitorTotalUnclearCount" class="status-value">0건</span>
           </div>
+          <div class="status-item">
+            <span class="status-label">최근 30초 추천 증가량</span>
+            <span id="conceptMonitorLastRecommendDelta" class="status-value">0개</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 비교 글 수</span>
+            <span id="conceptMonitorLastComparedPostCount" class="status-value">0개</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">마지막 컷 변경</span>
+            <span id="conceptMonitorLastCutChangedAt" class="status-value">-</span>
+          </div>
         </div>
 
         <details class="settings-section">
@@ -103,6 +119,42 @@
             <div class="setting-item">
               <label for="conceptMonitorTestMode">해제시 실제모드</label>
               <input type="checkbox" id="conceptMonitorTestMode" checked>
+            </div>
+            <div class="subfeature-divider">
+              <span>개념컷 자동조절</span>
+            </div>
+            <div class="subfeature-toggle-row">
+              <div class="subfeature-copy">
+                <strong>개념컷 자동조절</strong>
+                <p>전체글 1페이지 추천 증가량으로 14/100 컷을 자동 전환합니다</p>
+              </div>
+              <div class="toggle-section">
+                <label class="toggle-switch">
+                  <input type="checkbox" id="conceptMonitorAutoCutEnabled">
+                  <span class="slider"></span>
+                </label>
+                <span id="conceptMonitorAutoCutEnabledLabel" class="toggle-label">OFF</span>
+              </div>
+            </div>
+            <div class="setting-item">
+              <label for="conceptMonitorAutoCutPollIntervalMs">개념컷 검사 주기 (ms)</label>
+              <input type="number" id="conceptMonitorAutoCutPollIntervalMs" min="1000" max="600000" step="1000" value="30000">
+            </div>
+            <div class="setting-item">
+              <label for="conceptMonitorAutoCutAttackThreshold">공격 추천 증가량 threshold</label>
+              <input type="number" id="conceptMonitorAutoCutAttackThreshold" min="0" max="100000" value="200">
+            </div>
+            <div class="setting-item">
+              <label for="conceptMonitorAutoCutAttackConsecutiveCount">공격 연속 횟수</label>
+              <input type="number" id="conceptMonitorAutoCutAttackConsecutiveCount" min="1" max="10" value="1">
+            </div>
+            <div class="setting-item">
+              <label for="conceptMonitorAutoCutReleaseThreshold">복귀 추천 증가량 threshold</label>
+              <input type="number" id="conceptMonitorAutoCutReleaseThreshold" min="0" max="100000" value="40">
+            </div>
+            <div class="setting-item">
+              <label for="conceptMonitorAutoCutReleaseConsecutiveCount">복귀 연속 횟수</label>
+              <input type="number" id="conceptMonitorAutoCutReleaseConsecutiveCount" min="1" max="10" value="2">
             </div>
             <button id="conceptMonitorSaveConfigBtn" class="btn btn-primary">설정 저장</button>
           </div>

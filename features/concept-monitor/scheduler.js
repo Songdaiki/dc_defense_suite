@@ -1,21 +1,35 @@
 import {
   DEFAULT_CONFIG,
   delay,
+  fetchBoardListHTML,
   fetchConceptListHTML,
   fetchConceptPostViewHTML,
   releaseConceptPost,
+  updateRecommendCut,
 } from './api.js';
 import {
   extractConceptPostMetrics,
+  parseBoardRecommendSnapshot,
   parseConceptListPosts,
 } from './parser.js';
 
 const STORAGE_KEY = 'conceptMonitorSchedulerState';
 const DEFAULT_SNAPSHOT_POST_LIMIT = 5;
+const DEFAULT_AUTO_CUT_POLL_INTERVAL_MS = 30000;
+const DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD = 200;
+const DEFAULT_AUTO_CUT_ATTACK_CONSECUTIVE_COUNT = 1;
+const DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD = 40;
+const DEFAULT_AUTO_CUT_RELEASE_CONSECUTIVE_COUNT = 2;
+const NORMAL_RECOMMEND_CUT = 14;
+const DEFENDING_RECOMMEND_CUT = 100;
 const BLOCK_COOLDOWN_MS = 30 * 60 * 1000;
 const TARGET_INSPECT_DELAY_MS = 5000;
 const INSPECT_DELAY_JITTER_MS = 500;
 const FALLBACK_RECHECK_DELAY_MS = 1000;
+const AUTO_CUT_STATE = {
+  NORMAL: 'NORMAL',
+  DEFENDING: 'DEFENDING',
+};
 
 class Scheduler {
   constructor() {
@@ -23,6 +37,7 @@ class Scheduler {
     this.runPromise = null;
     this.currentPostNo = 0;
     this.lastPollAt = '';
+    this.lastConceptPollAt = '';
     this.cycleCount = 0;
     this.lastScanCount = 0;
     this.lastCandidateCount = 0;
@@ -30,6 +45,16 @@ class Scheduler {
     this.totalReleasedCount = 0;
     this.totalFailedCount = 0;
     this.totalUnclearCount = 0;
+    this.autoCutState = AUTO_CUT_STATE.NORMAL;
+    this.autoCutAttackHitCount = 0;
+    this.autoCutReleaseHitCount = 0;
+    this.lastRecommendDelta = 0;
+    this.lastComparedPostCount = 0;
+    this.lastCutChangedAt = '';
+    this.lastAutoCutPollAt = '';
+    this.lastRecommendSnapshot = [];
+    this.lastAppliedRecommendCut = NORMAL_RECOMMEND_CUT;
+    this.lastRecommendCutApplySucceeded = true;
     this.blockedUntilTs = 0;
     this.logs = [];
 
@@ -39,6 +64,12 @@ class Scheduler {
       snapshotPostLimit: DEFAULT_SNAPSHOT_POST_LIMIT,
       fluidRatioThresholdPercent: 90,
       testMode: true,
+      autoCutEnabled: false,
+      autoCutPollIntervalMs: DEFAULT_AUTO_CUT_POLL_INTERVAL_MS,
+      autoCutAttackRecommendThreshold: DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD,
+      autoCutAttackConsecutiveCount: DEFAULT_AUTO_CUT_ATTACK_CONSECUTIVE_COUNT,
+      autoCutReleaseRecommendThreshold: DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD,
+      autoCutReleaseConsecutiveCount: DEFAULT_AUTO_CUT_RELEASE_CONSECUTIVE_COUNT,
     };
   }
 
@@ -46,6 +77,10 @@ class Scheduler {
     if (this.isRunning) {
       this.log('⚠️ 이미 개념글 방어가 실행 중입니다.');
       return;
+    }
+
+    if (this.config.autoCutEnabled) {
+      this.resetAutoCutState('ℹ️ 개념컷 자동조절 활성화 - NORMAL 기준으로 감시를 시작합니다.');
     }
 
     this.isRunning = true;
@@ -86,7 +121,7 @@ class Scheduler {
         await this.pollOnce(cycleStartedAt);
         if (this.isRunning) {
           const elapsedMs = Date.now() - cycleStartedAt;
-          const waitMs = Math.max(0, Number(this.config.pollIntervalMs) - elapsedMs);
+          const waitMs = Math.max(0, this.getLoopIntervalMs() - elapsedMs);
           await delayWhileRunning(this, waitMs);
         }
       } catch (error) {
@@ -118,9 +153,24 @@ class Scheduler {
 
   async pollOnce(cycleStartedAt = Date.now()) {
     this.lastPollAt = new Date(cycleStartedAt).toISOString();
+    this.currentPostNo = 0;
+    await this.runAutoCutCycleIfDue(cycleStartedAt);
+    await this.runConceptReleaseCycleIfDue(cycleStartedAt);
+
+    this.currentPostNo = 0;
+    this.cycleCount += 1;
+    await this.saveState();
+  }
+
+  async runConceptReleaseCycleIfDue(cycleStartedAt) {
+    const lastConceptPollAtTs = parseTimestamp(this.lastConceptPollAt);
+    if (lastConceptPollAtTs > 0 && cycleStartedAt - lastConceptPollAtTs < this.getConceptReleasePollIntervalMs()) {
+      return;
+    }
+
+    this.lastConceptPollAt = new Date(cycleStartedAt).toISOString();
     this.lastScanCount = 0;
     this.lastCandidateCount = 0;
-    this.currentPostNo = 0;
 
     const listHtml = await fetchConceptListHTML(this.config);
     const snapshotLimit = Math.max(1, Number(this.config.snapshotPostLimit) || DEFAULT_SNAPSHOT_POST_LIMIT);
@@ -129,8 +179,6 @@ class Scheduler {
 
     if (snapshotPosts.length === 0) {
       this.log('⚠️ 개념글 목록에서 실제 게시물 row를 찾지 못했습니다.');
-      this.cycleCount += 1;
-      await this.saveState();
       return;
     }
 
@@ -154,10 +202,41 @@ class Scheduler {
         await delayWhileRunning(this, interPostDelayMs);
       }
     }
+  }
 
-    this.currentPostNo = 0;
-    this.cycleCount += 1;
-    await this.saveState();
+  async runAutoCutCycleIfDue(cycleStartedAt) {
+    if (!this.config.autoCutEnabled) {
+      return;
+    }
+
+    const lastAutoCutPollAtTs = parseTimestamp(this.lastAutoCutPollAt);
+    if (lastAutoCutPollAtTs > 0 && cycleStartedAt - lastAutoCutPollAtTs < this.getAutoCutPollIntervalMs()) {
+      return;
+    }
+
+    this.lastAutoCutPollAt = new Date(cycleStartedAt).toISOString();
+
+    const listHtml = await fetchBoardListHTML(this.config);
+    const snapshotPosts = parseBoardRecommendSnapshot(listHtml);
+    const metrics = computeRecommendDeltaMetrics(this.lastRecommendSnapshot, snapshotPosts);
+    this.lastRecommendDelta = metrics.totalIncrease;
+    this.lastComparedPostCount = metrics.comparedPostCount;
+
+    if (metrics.comparedPostCount <= 0) {
+      this.lastRecommendSnapshot = snapshotPosts;
+      this.autoCutAttackHitCount = 0;
+      this.autoCutReleaseHitCount = 0;
+      this.log(`ℹ️ 개념컷 자동조절 비교 가능한 게시물 없음 - snapshot ${snapshotPosts.length}개 갱신`);
+      await this.ensureRecommendCutApplied(this.autoCutState);
+      return;
+    }
+
+    const previousState = this.autoCutState;
+    const nextState = this.evaluateAutoCutState(metrics.totalIncrease);
+    this.autoCutState = nextState;
+    this.lastRecommendSnapshot = snapshotPosts;
+    this.logAutoCutStateChange(metrics, previousState, nextState);
+    await this.ensureRecommendCutApplied(nextState);
   }
 
   async inspectPost(post, position = 0, totalPosts = 0) {
@@ -294,6 +373,112 @@ class Scheduler {
     this.log(`❌ 개념글 해제 실패 #${postNo} - HTTP 200 / raw: ${releaseResult.rawSummary}`);
   }
 
+  evaluateAutoCutState(totalIncrease) {
+    const attackThreshold = Math.max(0, Number(this.config.autoCutAttackRecommendThreshold) || DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD);
+    const releaseThreshold = Math.max(0, Number(this.config.autoCutReleaseRecommendThreshold) || DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD);
+    const attackConsecutiveCount = Math.max(1, Number(this.config.autoCutAttackConsecutiveCount) || DEFAULT_AUTO_CUT_ATTACK_CONSECUTIVE_COUNT);
+    const releaseConsecutiveCount = Math.max(1, Number(this.config.autoCutReleaseConsecutiveCount) || DEFAULT_AUTO_CUT_RELEASE_CONSECUTIVE_COUNT);
+
+    if (totalIncrease >= attackThreshold) {
+      this.autoCutAttackHitCount = Math.min(attackConsecutiveCount, this.autoCutAttackHitCount + 1);
+      this.autoCutReleaseHitCount = 0;
+      if (this.autoCutAttackHitCount >= attackConsecutiveCount) {
+        return AUTO_CUT_STATE.DEFENDING;
+      }
+      return this.autoCutState;
+    }
+
+    if (totalIncrease <= releaseThreshold) {
+      this.autoCutReleaseHitCount = Math.min(releaseConsecutiveCount, this.autoCutReleaseHitCount + 1);
+      this.autoCutAttackHitCount = 0;
+      if (this.autoCutReleaseHitCount >= releaseConsecutiveCount) {
+        return AUTO_CUT_STATE.NORMAL;
+      }
+      return this.autoCutState;
+    }
+
+    this.autoCutAttackHitCount = 0;
+    this.autoCutReleaseHitCount = 0;
+    return this.autoCutState;
+  }
+
+  logAutoCutStateChange(metrics, previousState, nextState) {
+    if (nextState === AUTO_CUT_STATE.DEFENDING && previousState !== AUTO_CUT_STATE.DEFENDING) {
+      this.log(`📈 전체글 1페이지 추천 증가량 ${metrics.totalIncrease} -> 방어 진입 후보 (비교 ${metrics.comparedPostCount}개)`);
+      return;
+    }
+
+    if (nextState === AUTO_CUT_STATE.NORMAL && previousState !== AUTO_CUT_STATE.NORMAL) {
+      this.log(`📉 전체글 1페이지 추천 증가량 ${metrics.totalIncrease} -> 복귀 후보 (비교 ${metrics.comparedPostCount}개)`);
+    }
+  }
+
+  async ensureRecommendCutApplied(state) {
+    const targetRecommendCut = state === AUTO_CUT_STATE.DEFENDING
+      ? DEFENDING_RECOMMEND_CUT
+      : NORMAL_RECOMMEND_CUT;
+
+    if (this.lastAppliedRecommendCut === targetRecommendCut && this.lastRecommendCutApplySucceeded) {
+      return;
+    }
+
+    let updateResult;
+    try {
+      updateResult = await updateRecommendCut(this.config, targetRecommendCut);
+    } catch (error) {
+      this.lastRecommendCutApplySucceeded = false;
+      this.log(`❌ 개념컷 ${targetRecommendCut} ${state === AUTO_CUT_STATE.DEFENDING ? '적용' : '복귀'} 실패 - ${error.message}`);
+      return;
+    }
+
+    if (updateResult.success) {
+      this.lastAppliedRecommendCut = targetRecommendCut;
+      this.lastRecommendCutApplySucceeded = true;
+      this.lastCutChangedAt = new Date().toISOString();
+      this.log(state === AUTO_CUT_STATE.DEFENDING
+        ? `🛡️ 개념컷 ${targetRecommendCut} 적용 완료`
+        : `✅ 개념컷 ${targetRecommendCut} 복귀 완료`);
+      return;
+    }
+
+    this.lastRecommendCutApplySucceeded = false;
+    this.log(`❌ 개념컷 ${targetRecommendCut} ${state === AUTO_CUT_STATE.DEFENDING ? '적용' : '복귀'} 실패 - HTTP ${updateResult.status} / raw: ${updateResult.rawSummary}`);
+  }
+
+  getLoopIntervalMs() {
+    const intervals = [this.getConceptReleasePollIntervalMs()];
+    if (this.config.autoCutEnabled) {
+      intervals.push(this.getAutoCutPollIntervalMs());
+    }
+
+    return Math.max(1000, Math.min(...intervals));
+  }
+
+  getConceptReleasePollIntervalMs() {
+    return Math.max(1000, Number(this.config.pollIntervalMs) || 30000);
+  }
+
+  getAutoCutPollIntervalMs() {
+    return Math.max(1000, Number(this.config.autoCutPollIntervalMs) || DEFAULT_AUTO_CUT_POLL_INTERVAL_MS);
+  }
+
+  resetAutoCutState(message = '') {
+    this.autoCutState = AUTO_CUT_STATE.NORMAL;
+    this.autoCutAttackHitCount = 0;
+    this.autoCutReleaseHitCount = 0;
+    this.lastRecommendDelta = 0;
+    this.lastComparedPostCount = 0;
+    this.lastCutChangedAt = '';
+    this.lastAutoCutPollAt = '';
+    this.lastRecommendSnapshot = [];
+    this.lastAppliedRecommendCut = NORMAL_RECOMMEND_CUT;
+    this.lastRecommendCutApplySucceeded = true;
+
+    if (message) {
+      this.log(message);
+    }
+  }
+
   async skipIfAlreadyReleasedBySomeoneElse(postNo, contextMessage = '') {
     try {
       await delayWhileRunning(this, FALLBACK_RECHECK_DELAY_MS);
@@ -334,6 +519,8 @@ class Scheduler {
           isRunning: this.isRunning,
           currentPostNo: this.currentPostNo,
           lastPollAt: this.lastPollAt,
+          lastConceptPollAt: this.lastConceptPollAt,
+          lastAutoCutPollAt: this.lastAutoCutPollAt,
           cycleCount: this.cycleCount,
           lastScanCount: this.lastScanCount,
           lastCandidateCount: this.lastCandidateCount,
@@ -341,6 +528,15 @@ class Scheduler {
           totalReleasedCount: this.totalReleasedCount,
           totalFailedCount: this.totalFailedCount,
           totalUnclearCount: this.totalUnclearCount,
+          autoCutState: this.autoCutState,
+          autoCutAttackHitCount: this.autoCutAttackHitCount,
+          autoCutReleaseHitCount: this.autoCutReleaseHitCount,
+          lastRecommendDelta: this.lastRecommendDelta,
+          lastComparedPostCount: this.lastComparedPostCount,
+          lastCutChangedAt: this.lastCutChangedAt,
+          lastRecommendSnapshot: this.lastRecommendSnapshot,
+          lastAppliedRecommendCut: this.lastAppliedRecommendCut,
+          lastRecommendCutApplySucceeded: this.lastRecommendCutApplySucceeded,
           blockedUntilTs: this.blockedUntilTs,
           logs: this.logs.slice(0, 50),
           config: this.config,
@@ -361,6 +557,8 @@ class Scheduler {
       this.isRunning = Boolean(schedulerState.isRunning);
       this.currentPostNo = schedulerState.currentPostNo || 0;
       this.lastPollAt = schedulerState.lastPollAt || '';
+      this.lastConceptPollAt = schedulerState.lastConceptPollAt || '';
+      this.lastAutoCutPollAt = schedulerState.lastAutoCutPollAt || '';
       this.cycleCount = schedulerState.cycleCount || 0;
       this.lastScanCount = schedulerState.lastScanCount || 0;
       this.lastCandidateCount = schedulerState.lastCandidateCount || 0;
@@ -368,6 +566,15 @@ class Scheduler {
       this.totalReleasedCount = schedulerState.totalReleasedCount || 0;
       this.totalFailedCount = schedulerState.totalFailedCount || 0;
       this.totalUnclearCount = schedulerState.totalUnclearCount || 0;
+      this.autoCutState = normalizeAutoCutState(schedulerState.autoCutState);
+      this.autoCutAttackHitCount = Math.max(0, Number(schedulerState.autoCutAttackHitCount) || 0);
+      this.autoCutReleaseHitCount = Math.max(0, Number(schedulerState.autoCutReleaseHitCount) || 0);
+      this.lastRecommendDelta = Math.max(0, Number(schedulerState.lastRecommendDelta) || 0);
+      this.lastComparedPostCount = Math.max(0, Number(schedulerState.lastComparedPostCount) || 0);
+      this.lastCutChangedAt = schedulerState.lastCutChangedAt || '';
+      this.lastRecommendSnapshot = normalizeRecommendSnapshot(schedulerState.lastRecommendSnapshot);
+      this.lastAppliedRecommendCut = normalizeRecommendCut(schedulerState.lastAppliedRecommendCut);
+      this.lastRecommendCutApplySucceeded = schedulerState.lastRecommendCutApplySucceeded !== false;
       this.blockedUntilTs = Math.max(0, Number(schedulerState.blockedUntilTs) || 0);
       this.logs = Array.isArray(schedulerState.logs) ? schedulerState.logs : [];
       this.config = {
@@ -376,6 +583,12 @@ class Scheduler {
         galleryId: String(schedulerState.config?.galleryId || this.config.galleryId).trim() || DEFAULT_CONFIG.galleryId,
         snapshotPostLimit: Math.max(1, Number(schedulerState.config?.snapshotPostLimit) || this.config.snapshotPostLimit),
         testMode: schedulerState.config?.testMode !== false,
+        autoCutEnabled: Boolean(schedulerState.config?.autoCutEnabled),
+        autoCutPollIntervalMs: Math.max(1000, Number(schedulerState.config?.autoCutPollIntervalMs) || DEFAULT_AUTO_CUT_POLL_INTERVAL_MS),
+        autoCutAttackRecommendThreshold: Math.max(0, Number(schedulerState.config?.autoCutAttackRecommendThreshold) || DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD),
+        autoCutAttackConsecutiveCount: Math.max(1, Number(schedulerState.config?.autoCutAttackConsecutiveCount) || DEFAULT_AUTO_CUT_ATTACK_CONSECUTIVE_COUNT),
+        autoCutReleaseRecommendThreshold: Math.max(0, Number(schedulerState.config?.autoCutReleaseRecommendThreshold) || DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD),
+        autoCutReleaseConsecutiveCount: Math.max(1, Number(schedulerState.config?.autoCutReleaseConsecutiveCount) || DEFAULT_AUTO_CUT_RELEASE_CONSECUTIVE_COUNT),
       };
     } catch (error) {
       console.error('[ConceptMonitorScheduler] 상태 복원 실패:', error.message);
@@ -409,6 +622,8 @@ class Scheduler {
       isRunning: this.isRunning,
       currentPostNo: this.currentPostNo,
       lastPollAt: this.lastPollAt,
+      lastConceptPollAt: this.lastConceptPollAt,
+      lastAutoCutPollAt: this.lastAutoCutPollAt,
       cycleCount: this.cycleCount,
       lastScanCount: this.lastScanCount,
       lastCandidateCount: this.lastCandidateCount,
@@ -416,6 +631,14 @@ class Scheduler {
       totalReleasedCount: this.totalReleasedCount,
       totalFailedCount: this.totalFailedCount,
       totalUnclearCount: this.totalUnclearCount,
+      autoCutState: this.autoCutState,
+      autoCutAttackHitCount: this.autoCutAttackHitCount,
+      autoCutReleaseHitCount: this.autoCutReleaseHitCount,
+      lastRecommendDelta: this.lastRecommendDelta,
+      lastComparedPostCount: this.lastComparedPostCount,
+      lastCutChangedAt: this.lastCutChangedAt,
+      lastAppliedRecommendCut: this.lastAppliedRecommendCut,
+      lastRecommendCutApplySucceeded: this.lastRecommendCutApplySucceeded,
       blockedUntilTs: this.blockedUntilTs,
       logs: this.logs.slice(0, 20),
       config: this.config,
@@ -486,6 +709,71 @@ function isGeneralBoardHead(currentHead) {
 function formatBoardHeadLabel(currentHead) {
   const normalized = normalizeBoardHead(currentHead);
   return normalized || '(없음)';
+}
+
+function computeRecommendDeltaMetrics(previousSnapshot, currentSnapshot) {
+  const previousMap = new Map(
+    Array.isArray(previousSnapshot)
+      ? previousSnapshot.map((post) => [String(post.no || ''), Math.max(0, Number(post.recommendCount) || 0)])
+      : [],
+  );
+
+  let totalIncrease = 0;
+  let comparedPostCount = 0;
+
+  for (const post of Array.isArray(currentSnapshot) ? currentSnapshot : []) {
+    const postNo = String(post?.no || '').trim();
+    if (!postNo || !previousMap.has(postNo)) {
+      continue;
+    }
+
+    comparedPostCount += 1;
+    const previousRecommendCount = previousMap.get(postNo);
+    const currentRecommendCount = Math.max(0, Number(post?.recommendCount) || 0);
+    totalIncrease += Math.max(0, currentRecommendCount - previousRecommendCount);
+  }
+
+  return {
+    totalIncrease,
+    comparedPostCount,
+  };
+}
+
+function normalizeAutoCutState(value) {
+  return value === AUTO_CUT_STATE.DEFENDING ? AUTO_CUT_STATE.DEFENDING : AUTO_CUT_STATE.NORMAL;
+}
+
+function normalizeRecommendSnapshot(snapshot) {
+  if (!Array.isArray(snapshot)) {
+    return [];
+  }
+
+  return snapshot
+    .map((post) => {
+      const postNo = String(post?.no || '').trim();
+      const recommendCount = Math.max(0, Number(post?.recommendCount) || 0);
+      if (!postNo) {
+        return null;
+      }
+      return {
+        no: postNo,
+        recommendCount,
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeRecommendCut(value) {
+  return Number(value) === DEFENDING_RECOMMEND_CUT ? DEFENDING_RECOMMEND_CUT : NORMAL_RECOMMEND_CUT;
+}
+
+function parseTimestamp(value) {
+  if (!value) {
+    return 0;
+  }
+
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 async function delayWhileRunning(scheduler, waitMs) {

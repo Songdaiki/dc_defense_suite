@@ -243,6 +243,9 @@ async function handleMessage(message) {
           };
         }
 
+        if (message.feature === 'conceptMonitor') {
+          applyConceptMonitorConfigUpdate(scheduler, message.config);
+        }
         scheduler.config = { ...scheduler.config, ...message.config };
         await scheduler.saveState();
       }
@@ -305,6 +308,8 @@ function resetSchedulerStats(feature, scheduler) {
   if (feature === 'conceptMonitor') {
     scheduler.currentPostNo = 0;
     scheduler.lastPollAt = '';
+    scheduler.lastConceptPollAt = '';
+    scheduler.lastAutoCutPollAt = '';
     scheduler.cycleCount = 0;
     scheduler.lastScanCount = 0;
     scheduler.lastCandidateCount = 0;
@@ -312,6 +317,15 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.totalReleasedCount = 0;
     scheduler.totalFailedCount = 0;
     scheduler.totalUnclearCount = 0;
+    scheduler.autoCutState = 'NORMAL';
+    scheduler.autoCutAttackHitCount = 0;
+    scheduler.autoCutReleaseHitCount = 0;
+    scheduler.lastRecommendDelta = 0;
+    scheduler.lastComparedPostCount = 0;
+    scheduler.lastCutChangedAt = '';
+    scheduler.lastRecommendSnapshot = [];
+    scheduler.lastAppliedRecommendCut = 14;
+    scheduler.lastRecommendCutApplySucceeded = true;
     scheduler.blockedUntilTs = 0;
     scheduler.logs = [];
     return;
@@ -607,6 +621,8 @@ function resetConceptMonitorSchedulerState(message) {
   const scheduler = schedulers.conceptMonitor;
   scheduler.currentPostNo = 0;
   scheduler.lastPollAt = '';
+  scheduler.lastConceptPollAt = '';
+  scheduler.lastAutoCutPollAt = '';
   scheduler.cycleCount = 0;
   scheduler.lastScanCount = 0;
   scheduler.lastCandidateCount = 0;
@@ -614,9 +630,38 @@ function resetConceptMonitorSchedulerState(message) {
   scheduler.totalReleasedCount = 0;
   scheduler.totalFailedCount = 0;
   scheduler.totalUnclearCount = 0;
+  scheduler.autoCutState = 'NORMAL';
+  scheduler.autoCutAttackHitCount = 0;
+  scheduler.autoCutReleaseHitCount = 0;
+  scheduler.lastRecommendDelta = 0;
+  scheduler.lastComparedPostCount = 0;
+  scheduler.lastCutChangedAt = '';
+  scheduler.lastRecommendSnapshot = [];
+  scheduler.lastAppliedRecommendCut = 14;
+  scheduler.lastRecommendCutApplySucceeded = true;
   scheduler.blockedUntilTs = 0;
   scheduler.logs = [];
   scheduler.log(message);
+}
+
+function applyConceptMonitorConfigUpdate(scheduler, config) {
+  if (!scheduler || !config) {
+    return;
+  }
+
+  const currentEnabled = Boolean(scheduler.config?.autoCutEnabled);
+  const nextEnabled = config.autoCutEnabled === undefined
+    ? currentEnabled
+    : Boolean(config.autoCutEnabled);
+
+  if (!currentEnabled && nextEnabled) {
+    scheduler.resetAutoCutState('ℹ️ 개념컷 자동조절 활성화 - NORMAL 기준으로 감시를 시작합니다.');
+    return;
+  }
+
+  if (currentEnabled && !nextEnabled) {
+    scheduler.resetAutoCutState('ℹ️ 개념컷 자동조절 비활성화 - 상태를 초기화했습니다.');
+  }
 }
 
 function resetPostSchedulerState(message) {

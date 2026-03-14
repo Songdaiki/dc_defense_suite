@@ -73,6 +73,21 @@ async function fetchConceptListHTML(config = {}) {
   return html;
 }
 
+async function fetchBoardListHTML(config = {}) {
+  const resolved = resolveConfig(config);
+  const url = new URL('/mgallery/board/lists/', resolved.baseUrl);
+  url.searchParams.set('id', resolved.galleryId);
+
+  const response = await dcFetchWithRetry(url.toString());
+  const html = await response.text();
+  assertValidHtmlResponse(response, html, {
+    label: '전체글 목록 페이지',
+    shapeCheck: looksLikeBoardListHtml,
+  });
+
+  return html;
+}
+
 async function fetchConceptPostViewHTML(config = {}, postNo) {
   const resolved = resolveConfig(config);
   const url = buildPostViewUrl(resolved, postNo);
@@ -126,6 +141,57 @@ async function releaseConceptPost(config = {}, postNo) {
   return {
     success: response.status === 200,
     status: response.status,
+    rawText,
+    rawSummary: summarizeResponseText(rawText),
+  };
+}
+
+async function updateRecommendCut(config = {}, recommendCount) {
+  const resolved = resolveConfig(config);
+  const ciToken = await getCiToken(resolved.baseUrl);
+
+  if (!ciToken) {
+    return {
+      success: false,
+      status: 0,
+      result: '',
+      rawText: '',
+      rawSummary: 'ci_t 토큰(ci_c 쿠키)을 찾지 못했습니다.',
+    };
+  }
+
+  const body = new URLSearchParams();
+  body.set('ci_t', ciToken);
+  body.set('gallery_id', resolved.galleryId);
+  body.set('_GALLTYPE_', resolved.galleryType);
+  body.set('decom_use', '0');
+  body.set('recom_down_use', '0');
+  body.set('recom_count', String(recommendCount));
+  body.set('decom_count', '0');
+
+  const response = await dcFetchWithRetry(
+    `${resolved.baseUrl}/ajax/managements_ajax/update_recom_decom`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Origin': resolved.baseUrl,
+        'Referer': `${resolved.baseUrl}/mgallery/management/gallery?id=${encodeURIComponent(resolved.galleryId)}`,
+      },
+      body: body.toString(),
+    },
+    1,
+  );
+
+  const rawText = await response.text();
+  const parsed = parseJsonResponse(rawText);
+  const result = String(parsed?.result || '').trim();
+
+  return {
+    success: response.status === 200 && result === 'success',
+    status: response.status,
+    result,
     rawText,
     rawSummary: summarizeResponseText(rawText),
   };
@@ -189,6 +255,16 @@ function looksLikeConceptListHtml(htmlText) {
   ]);
 }
 
+function looksLikeBoardListHtml(htmlText) {
+  const normalized = String(htmlText || '');
+  return hasAnyMarker(normalized, [
+    '/mgallery/board/lists/?id=',
+    'class="gall_recommend"',
+    'class="ub-content',
+    'class="gall_listwrap',
+  ]);
+}
+
 function looksLikeBoardViewHtml(htmlText) {
   const normalized = String(htmlText || '');
   return hasAnyMarker(normalized, [
@@ -220,6 +296,14 @@ function summarizeResponseText(responseText) {
   }
 }
 
+function parseJsonResponse(responseText) {
+  try {
+    return JSON.parse(String(responseText || '').trim());
+  } catch {
+    return null;
+  }
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -227,8 +311,10 @@ function delay(ms) {
 export {
   DEFAULT_CONFIG,
   delay,
+  fetchBoardListHTML,
   fetchConceptListHTML,
   fetchConceptPostViewHTML,
   releaseConceptPost,
   resolveConfig,
+  updateRecommendCut,
 };

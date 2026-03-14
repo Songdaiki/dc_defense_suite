@@ -22,6 +22,7 @@ const FEATURE_DOM = {
     toggleLabel: document.getElementById('conceptMonitorToggleLabel'),
     statusText: document.getElementById('conceptMonitorStatusText'),
     modeText: document.getElementById('conceptMonitorModeText'),
+    autoCutStateText: document.getElementById('conceptMonitorAutoCutStateText'),
     lastPollAt: document.getElementById('conceptMonitorLastPollAt'),
     currentPostNo: document.getElementById('conceptMonitorCurrentPostNo'),
     lastScanCount: document.getElementById('conceptMonitorLastScanCount'),
@@ -30,11 +31,21 @@ const FEATURE_DOM = {
     totalReleasedCount: document.getElementById('conceptMonitorTotalReleasedCount'),
     totalFailedCount: document.getElementById('conceptMonitorTotalFailedCount'),
     totalUnclearCount: document.getElementById('conceptMonitorTotalUnclearCount'),
+    lastRecommendDelta: document.getElementById('conceptMonitorLastRecommendDelta'),
+    lastComparedPostCount: document.getElementById('conceptMonitorLastComparedPostCount'),
+    lastCutChangedAt: document.getElementById('conceptMonitorLastCutChangedAt'),
     logList: document.getElementById('conceptMonitorLogList'),
     pollIntervalMsInput: document.getElementById('conceptMonitorPollIntervalMs'),
     snapshotPostLimitInput: document.getElementById('conceptMonitorSnapshotPostLimit'),
     fluidRatioThresholdInput: document.getElementById('conceptMonitorFluidRatioThreshold'),
     testModeInput: document.getElementById('conceptMonitorTestMode'),
+    autoCutEnabledInput: document.getElementById('conceptMonitorAutoCutEnabled'),
+    autoCutEnabledLabel: document.getElementById('conceptMonitorAutoCutEnabledLabel'),
+    autoCutPollIntervalMsInput: document.getElementById('conceptMonitorAutoCutPollIntervalMs'),
+    autoCutAttackThresholdInput: document.getElementById('conceptMonitorAutoCutAttackThreshold'),
+    autoCutAttackConsecutiveCountInput: document.getElementById('conceptMonitorAutoCutAttackConsecutiveCount'),
+    autoCutReleaseThresholdInput: document.getElementById('conceptMonitorAutoCutReleaseThreshold'),
+    autoCutReleaseConsecutiveCountInput: document.getElementById('conceptMonitorAutoCutReleaseConsecutiveCount'),
     saveConfigBtn: document.getElementById('conceptMonitorSaveConfigBtn'),
     resetBtn: document.getElementById('conceptMonitorResetBtn'),
   },
@@ -245,6 +256,10 @@ function bindSharedConfigEvents() {
 function bindConceptMonitorEvents() {
   const dom = FEATURE_DOM.conceptMonitor;
 
+  dom.autoCutEnabledInput.addEventListener('change', () => {
+    updateToggle({ toggleBtn: dom.autoCutEnabledInput, toggleLabel: dom.autoCutEnabledLabel }, dom.autoCutEnabledInput.checked);
+  });
+
   dom.toggleBtn.addEventListener('change', async () => {
     if (dom.toggleBtn.checked) {
       if (!latestConceptMonitorStatus) {
@@ -301,6 +316,12 @@ function bindConceptMonitorEvents() {
       snapshotPostLimit: Math.max(1, parseOptionalInt(dom.snapshotPostLimitInput.value, 5)),
       fluidRatioThresholdPercent: clampPercent(dom.fluidRatioThresholdInput.value, 90, 0),
       testMode: nextTestMode,
+      autoCutEnabled: dom.autoCutEnabledInput.checked,
+      autoCutPollIntervalMs: Math.max(1000, parseOptionalInt(dom.autoCutPollIntervalMsInput.value, 30000)),
+      autoCutAttackRecommendThreshold: Math.max(0, parseOptionalInt(dom.autoCutAttackThresholdInput.value, 200)),
+      autoCutAttackConsecutiveCount: Math.max(1, parseOptionalInt(dom.autoCutAttackConsecutiveCountInput.value, 1)),
+      autoCutReleaseRecommendThreshold: Math.max(0, parseOptionalInt(dom.autoCutReleaseThresholdInput.value, 40)),
+      autoCutReleaseConsecutiveCount: Math.max(1, parseOptionalInt(dom.autoCutReleaseConsecutiveCountInput.value, 2)),
     };
 
     const response = await sendFeatureMessage('conceptMonitor', { action: 'updateConfig', config });
@@ -751,6 +772,7 @@ function updateConceptMonitorUI(status) {
   updateToggle(dom, status.isRunning);
   updateStatusText(dom.statusText, getConceptMonitorStatusLabel(status), getConceptMonitorStatusClassName(status));
   dom.modeText.textContent = status.config?.testMode === false ? '실행' : '테스트';
+  updateConceptAutoCutStateText(dom.autoCutStateText, status.autoCutState || 'NORMAL');
   dom.lastPollAt.textContent = formatTimestamp(status.lastPollAt);
   dom.currentPostNo.textContent = status.isRunning && status.currentPostNo > 0
     ? `#${status.currentPostNo}`
@@ -761,13 +783,23 @@ function updateConceptMonitorUI(status) {
   dom.totalReleasedCount.textContent = `${status.totalReleasedCount ?? 0}건`;
   dom.totalFailedCount.textContent = `${status.totalFailedCount ?? 0}건`;
   dom.totalUnclearCount.textContent = `${status.totalUnclearCount ?? 0}건`;
+  dom.lastRecommendDelta.textContent = `${status.lastRecommendDelta ?? 0}개`;
+  dom.lastComparedPostCount.textContent = `${status.lastComparedPostCount ?? 0}개`;
+  dom.lastCutChangedAt.textContent = formatTimestamp(status.lastCutChangedAt);
 
   syncFeatureConfigInputs('conceptMonitor', [
     [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 30000],
     [dom.snapshotPostLimitInput, status.config?.snapshotPostLimit ?? 5],
     [dom.fluidRatioThresholdInput, status.config?.fluidRatioThresholdPercent ?? 90],
     [dom.testModeInput, status.config?.testMode !== false],
+    [dom.autoCutEnabledInput, status.config?.autoCutEnabled === true],
+    [dom.autoCutPollIntervalMsInput, status.config?.autoCutPollIntervalMs ?? 30000],
+    [dom.autoCutAttackThresholdInput, status.config?.autoCutAttackRecommendThreshold ?? 200],
+    [dom.autoCutAttackConsecutiveCountInput, status.config?.autoCutAttackConsecutiveCount ?? 1],
+    [dom.autoCutReleaseThresholdInput, status.config?.autoCutReleaseRecommendThreshold ?? 40],
+    [dom.autoCutReleaseConsecutiveCountInput, status.config?.autoCutReleaseConsecutiveCount ?? 2],
   ]);
+  updateToggle({ toggleBtn: dom.autoCutEnabledInput, toggleLabel: dom.autoCutEnabledLabel }, dom.autoCutEnabledInput.checked);
   updateLogList(dom.logList, status.logs);
 }
 
@@ -1055,6 +1087,12 @@ function getFeatureConfigInputs(feature) {
       dom.snapshotPostLimitInput,
       dom.fluidRatioThresholdInput,
       dom.testModeInput,
+      dom.autoCutEnabledInput,
+      dom.autoCutPollIntervalMsInput,
+      dom.autoCutAttackThresholdInput,
+      dom.autoCutAttackConsecutiveCountInput,
+      dom.autoCutReleaseThresholdInput,
+      dom.autoCutReleaseConsecutiveCountInput,
     ];
   }
 
@@ -1243,6 +1281,12 @@ function getConceptMonitorStatusClassName(status) {
   }
 
   return status.config?.testMode === false ? 'status-warn' : 'status-on';
+}
+
+function updateConceptAutoCutStateText(node, state) {
+  const normalizedState = state === 'DEFENDING' ? 'DEFENDING' : 'NORMAL';
+  node.textContent = normalizedState;
+  node.className = `status-value ${normalizedState === 'DEFENDING' ? 'status-warn' : 'status-on'}`;
 }
 
 function getCommentMonitorStatusLabel(status) {
