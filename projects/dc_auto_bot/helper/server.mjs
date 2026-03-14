@@ -357,7 +357,15 @@ async function runGeminiCli(prompt, runtimeConfig = buildRuntimeConfig(), execut
     return fallbackResult;
   }
 
-  return normalizeGeminiCliResult(workerResult, runtimeConfig.timeoutMs);
+  const normalizedWorkerResult = normalizeGeminiCliResult(workerResult, runtimeConfig.timeoutMs);
+  if (isFailedCompressionResult(normalizedWorkerResult.compression)) {
+    console.warn(
+      '[CLI Helper] persistent session compression failed:',
+      normalizedWorkerResult.compression.compressionStatus,
+      normalizedWorkerResult.compression.message || '',
+    );
+  }
+  return normalizedWorkerResult;
 }
 
 async function runGeminiCliViaSpawn(prompt, runtimeConfig, commandToRun) {
@@ -463,10 +471,12 @@ async function runGeminiCliViaSpawnOnce(prompt, runtimeConfig, commandToRun) {
 function normalizeGeminiCliResult(result, timeoutMs, fallbackMessage = 'Gemini CLI 실행 실패') {
   const rawText = String(result?.rawText || '').trim();
   const hasUsableDecisionOutput = hasUsableGeminiDecisionOutput(rawText);
+  const compression = normalizeCompressionResult(result?.compression);
   if (result?.success === true || hasUsableDecisionOutput) {
     return {
       success: true,
       rawText,
+      compression,
     };
   }
 
@@ -484,6 +494,30 @@ function normalizeGeminiCliResult(result, timeoutMs, fallbackMessage = 'Gemini C
     message: String(result?.message || fallbackMessage),
     rawText,
   };
+}
+
+function normalizeCompressionResult(compression) {
+  if (!compression || typeof compression !== 'object') {
+    return null;
+  }
+
+  return {
+    attempted: compression.attempted === true,
+    compressionStatus: String(compression.compressionStatus || ''),
+    originalTokenCount: Number(compression.originalTokenCount || 0),
+    newTokenCount: Number(compression.newTokenCount || 0),
+    successful: compression.successful === true,
+    shouldRecycleRuntime: compression.shouldRecycleRuntime === true,
+    message: String(compression.message || ''),
+  };
+}
+
+function isFailedCompressionResult(compression) {
+  return Boolean(
+    compression
+    && compression.attempted === true
+    && compression.successful !== true,
+  );
 }
 
 function isGeminiTimeoutMessage(message) {

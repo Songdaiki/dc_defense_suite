@@ -19,6 +19,15 @@ const cliModuleCache = {
 
 let activeCapture = null;
 let workerRuntime = null;
+const COMPRESSION_STATUS_NAME_BY_CODE = {
+  1: 'COMPRESSED',
+  2: 'COMPRESSION_FAILED_INFLATED_TOKEN_COUNT',
+  3: 'COMPRESSION_FAILED_TOKEN_COUNT_ERROR',
+  4: 'COMPRESSION_FAILED_EMPTY_SUMMARY',
+  5: 'NOOP',
+  6: 'CONTENT_TRUNCATED',
+};
+const SUCCESSFUL_COMPRESSION_STATUSES = new Set(['COMPRESSED', 'CONTENT_TRUNCATED']);
 
 process.stdout.write = function patchedWorkerStdoutWrite(chunk, encodingOrCallback, callback) {
   return captureWorkerOutput('stdout', chunk, encodingOrCallback, callback);
@@ -109,6 +118,45 @@ function normalizeNonNegativeInt(value, fallback) {
   }
 
   return Math.floor(numericValue);
+}
+
+function normalizeCompressionStatus(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return COMPRESSION_STATUS_NAME_BY_CODE[value] || String(value);
+  }
+
+  const normalized = String(value || '').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  if (/^\d+$/.test(normalized)) {
+    const mapped = COMPRESSION_STATUS_NAME_BY_CODE[Number(normalized)];
+    return mapped || normalized;
+  }
+
+  return normalized.toUpperCase();
+}
+
+function buildCompressionResult(compressionInfo = {}, errorMessage = '') {
+  const compressionStatus = normalizeCompressionStatus(compressionInfo?.compressionStatus) || 'UNKNOWN';
+  const successful = SUCCESSFUL_COMPRESSION_STATUSES.has(compressionStatus);
+  const message = String(
+    errorMessage
+    || compressionInfo?.message
+    || (successful ? '' : `Gemini 대화 압축이 실패했습니다. (${compressionStatus})`)
+    || '',
+  ).trim();
+
+  return {
+    attempted: true,
+    compressionStatus,
+    originalTokenCount: Number(compressionInfo?.originalTokenCount || 0),
+    newTokenCount: Number(compressionInfo?.newTokenCount || 0),
+    successful,
+    shouldRecycleRuntime: !successful,
+    message,
+  };
 }
 
 async function ensureCliModules(packageRoot) {
@@ -334,18 +382,12 @@ async function maybeCompressContext(runtime, job, promptId) {
       `${promptId}-compress-${runtime.promptCount}`,
       true,
     );
-    return {
-      attempted: true,
-      compressionStatus: String(compressionInfo?.compressionStatus || ''),
-      originalTokenCount: Number(compressionInfo?.originalTokenCount || 0),
-      newTokenCount: Number(compressionInfo?.newTokenCount || 0),
-    };
+    return buildCompressionResult(compressionInfo);
   } catch (error) {
-    return {
-      attempted: true,
-      compressionStatus: 'failed',
-      message: error instanceof Error ? error.message : String(error),
-    };
+    return buildCompressionResult(
+      { compressionStatus: 'FAILED' },
+      error instanceof Error ? error.message : String(error),
+    );
   }
 }
 
@@ -376,6 +418,9 @@ async function executeJob(job) {
     });
 
     const compression = await maybeCompressContext(runtime, job, promptId);
+    if (compression?.shouldRecycleRuntime) {
+      await disposeWorkerRuntime();
+    }
 
     return {
       success: true,

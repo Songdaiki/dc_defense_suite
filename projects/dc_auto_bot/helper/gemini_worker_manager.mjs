@@ -227,6 +227,7 @@ export function createGeminiWorkerManager(options = {}) {
         message: String(message.message || ''),
         failureType: String(message.failureType || ''),
         rawText: String(message.rawText || buildRawTextFromPromptEntry(activePromptEntry)),
+        compression: normalizeCompressionResult(message.compression),
       });
     }
   }
@@ -415,4 +416,20 @@ function buildRawTextFromPromptEntry(promptEntry) {
   const stdout = promptEntry.stdout.join('').trim();
   const stderr = promptEntry.stderr.join('').trim();
   return [stdout, stderr].filter(Boolean).join('\n').trim();
+}
+
+function normalizeCompressionResult(compression) {
+  if (!compression || typeof compression !== 'object') {
+    return null;
+  }
+
+  return {
+    attempted: compression.attempted === true,
+    compressionStatus: String(compression.compressionStatus || ''),
+    originalTokenCount: Number(compression.originalTokenCount || 0),
+    newTokenCount: Number(compression.newTokenCount || 0),
+    successful: compression.successful === true,
+    shouldRecycleRuntime: compression.shouldRecycleRuntime === true,
+    message: String(compression.message || ''),
+  };
 }

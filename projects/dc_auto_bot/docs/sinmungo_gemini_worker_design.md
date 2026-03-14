@@ -38,6 +38,8 @@
 - 대신 moderation 메인 판정이 일정 횟수(`GEMINI_WORKER_COMPRESS_AFTER_JOBS`) 누적되면
   `config.getGeminiClient().tryCompressChat(..., true)`를 강제로 호출한다.
 - image analysis prompt는 shared session에 남기되, 압축 카운트에는 포함하지 않는다.
+- 강제 압축이 `COMPRESSED` 또는 `CONTENT_TRUNCATED`로 끝나지 않으면 압축 실패로 간주하고
+  현재 runtime을 즉시 폐기해 다음 `/judge`가 fresh session으로 다시 시작하게 한다.
 
 ### 5. self-test는 shared moderation session 밖으로 분리
 - `/self-test-image` 같은 진단 요청은 shared moderation session에 섞이지 않게 한다.
