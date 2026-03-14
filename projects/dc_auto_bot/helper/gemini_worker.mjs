@@ -43,6 +43,16 @@ parentPort.on('message', async (message) => {
     return;
   }
 
+  if (message.type === 'warm') {
+    const result = await warmRuntime(message.job || {});
+    parentPort.postMessage({
+      type: 'result',
+      jobId: String(message.job?.jobId || ''),
+      ...result,
+    });
+    return;
+  }
+
   if (message.type === 'shutdown') {
     await disposeWorkerRuntime();
     process.exit(0);
@@ -278,6 +288,26 @@ async function disposeWorkerRuntime() {
     } catch {
       // worker 종료 경로의 dispose 실패는 무시한다.
     }
+  }
+}
+
+async function warmRuntime(job) {
+  try {
+    await ensureWorkerRuntime(job);
+    return {
+      success: true,
+      rawText: '',
+      message: '',
+      failureType: '',
+    };
+  } catch (error) {
+    await disposeWorkerRuntime();
+    return {
+      success: false,
+      rawText: '',
+      message: error instanceof Error ? error.message : String(error),
+      failureType: 'runtime_error',
+    };
   }
 }
 

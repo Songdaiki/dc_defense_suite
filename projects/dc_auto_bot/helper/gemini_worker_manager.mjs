@@ -37,6 +37,7 @@ export function createGeminiWorkerManager(options = {}) {
     try {
       const result = await activeExclusiveEntry.taskFn({
         runPrompt,
+        warmRuntime,
       });
       activeExclusiveEntry.resolve(result);
     } catch (error) {
@@ -55,6 +56,14 @@ export function createGeminiWorkerManager(options = {}) {
   }
 
   async function runPrompt(taskInput) {
+    return runWorkerJob('run', taskInput);
+  }
+
+  async function warmRuntime(taskInput) {
+    return runWorkerJob('warm', taskInput);
+  }
+
+  async function runWorkerJob(jobType, taskInput) {
     if (!taskInput || typeof taskInput !== 'object') {
       throw new Error('Gemini worker prompt 입력이 비어 있습니다.');
     }
@@ -90,7 +99,7 @@ export function createGeminiWorkerManager(options = {}) {
     try {
       const ensuredWorker = await ensureWorker(packageRoot, runtimeFingerprint);
       ensuredWorker.postMessage({
-        type: 'run',
+        type: jobType,
         job: {
           jobId: taskId,
           packageRoot,

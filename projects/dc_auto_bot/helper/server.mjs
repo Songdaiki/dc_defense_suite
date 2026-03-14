@@ -19,6 +19,8 @@ const DEFAULT_GEMINI_COMMAND = String(process.env.GEMINI_COMMAND || getDefaultGe
 const DEFAULT_GEMINI_WORKER_IDLE_MS = normalizeNonNegativeInt(process.env.GEMINI_WORKER_IDLE_MS, 0);
 const DEFAULT_GEMINI_WORKER_MAX_JOBS = normalizeNonNegativeInt(process.env.GEMINI_WORKER_MAX_JOBS, 0);
 const DEFAULT_GEMINI_WORKER_COMPRESS_AFTER_JOBS = normalizeNonNegativeInt(process.env.GEMINI_WORKER_COMPRESS_AFTER_JOBS, 10);
+const DEFAULT_GEMINI_WORKER_PREWARM_ENABLED = String(process.env.GEMINI_WORKER_PREWARM_ENABLED || '1').trim() !== '0';
+const DEFAULT_GEMINI_WORKER_PREWARM_TIMEOUT_MS = normalizePositiveInt(process.env.GEMINI_WORKER_PREWARM_TIMEOUT_MS, 30000);
 const MAX_REQUEST_BYTES = 512 * 1024;
 const MAX_IMAGE_DOWNLOAD_BYTES = 8 * 1024 * 1024;
 const IMAGE_DOWNLOAD_TIMEOUT_MS = 10000;
@@ -477,6 +479,55 @@ function getGeminiWorkerManager() {
   }
 
   return geminiWorkerManager;
+}
+
+async function prewarmPersistentGeminiWorker(runtimeConfig) {
+  if (runtimeConfig.disablePersistentWorker === true || runtimeConfig.workerPrewarmEnabled !== true) {
+    return {
+      attempted: false,
+      success: false,
+      message: 'persistent worker prewarm 비활성화',
+    };
+  }
+
+  const availability = await checkGeminiCommandAvailability(runtimeConfig);
+  if (!availability.available) {
+    return {
+      attempted: false,
+      success: false,
+      message: availability.message,
+    };
+  }
+
+  const commandToRun = availability.commandPath || runtimeConfig.command;
+  const packageRoot = await resolveGeminiCliPackageRoot(commandToRun);
+  if (!packageRoot) {
+    return {
+      attempted: false,
+      success: false,
+      message: 'Gemini CLI package root를 찾지 못했습니다.',
+    };
+  }
+
+  const runtimeFingerprint = createGeminiWorkerRuntimeFingerprint(packageRoot, runtimeConfig);
+  const result = await getGeminiWorkerManager().runExclusive((executor) => executor.warmRuntime({
+    packageRoot,
+    cwd: runtimeConfig.helperRootDir,
+    runtimeFingerprint,
+    runtimeConfig: {
+      args: runtimeConfig.args,
+      timeoutMs: runtimeConfig.workerPrewarmTimeoutMs,
+      compressAfterJobs: runtimeConfig.workerCompressAfterJobs,
+      countTowardCompression: false,
+    },
+  }));
+
+  return {
+    attempted: true,
+    success: result.success === true,
+    message: String(result.message || ''),
+    failureType: String(result.failureType || ''),
+  };
 }
 
 function createGeminiWorkerRuntimeFingerprint(packageRoot, runtimeConfig) {
@@ -1095,6 +1146,8 @@ function buildRuntimeConfig() {
     judgeInputDir: process.env.TRANSPARENCY_JUDGE_INPUT_DIR || fileURLToPath(new URL('./gemini-inputs', import.meta.url)),
     helperRootDir: fileURLToPath(new URL('./', import.meta.url)),
     workerCompressAfterJobs: DEFAULT_GEMINI_WORKER_COMPRESS_AFTER_JOBS,
+    workerPrewarmEnabled: DEFAULT_GEMINI_WORKER_PREWARM_ENABLED,
+    workerPrewarmTimeoutMs: DEFAULT_GEMINI_WORKER_PREWARM_TIMEOUT_MS,
     workerSessionScope: 'moderation-main',
     thumbnailWidth: DEFAULT_THUMBNAIL_WIDTH,
     thumbnailBlurSigma: DEFAULT_THUMBNAIL_BLUR_SIGMA,
@@ -2094,6 +2147,20 @@ async function startServer(runtimeConfig = buildRuntimeConfig()) {
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(runtimeConfig.port, runtimeConfig.host, () => {
+      void prewarmPersistentGeminiWorker(runtimeConfig)
+        .then((result) => {
+          if (!result.attempted) {
+            return;
+          }
+          if (result.success) {
+            console.log('[CLI Helper] persistent Gemini worker prewarmed');
+          } else {
+            console.warn('[CLI Helper] persistent Gemini worker prewarm failed:', result.message || result.failureType || 'unknown');
+          }
+        })
+        .catch((error) => {
+          console.warn('[CLI Helper] persistent Gemini worker prewarm failed:', error?.message || String(error));
+        });
       resolve(server);
     });
   });

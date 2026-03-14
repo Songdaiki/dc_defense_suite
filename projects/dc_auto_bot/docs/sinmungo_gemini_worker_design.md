@@ -33,6 +33,8 @@
 ### 4. idle recycle 대신 장기 유지 + 주기적 강제 압축
 - 기본값에서는 worker를 idle timeout으로 종료하지 않는다.
 - 기본값에서는 `maxJobsPerWorker` 강제 recycle도 하지 않는다.
+- helper 시작 직후 shared moderation runtime을 한 번 prewarm 한다.
+- 따라서 첫 실제 `/judge` 전에 worker thread, config initialize, auth refresh를 미리 끝내는 것을 목표로 한다.
 - 대신 moderation 메인 판정이 일정 횟수(`GEMINI_WORKER_COMPRESS_AFTER_JOBS`) 누적되면
   `config.getGeminiClient().tryCompressChat(..., true)`를 강제로 호출한다.
 - image analysis prompt는 shared session에 남기되, 압축 카운트에는 포함하지 않는다.
