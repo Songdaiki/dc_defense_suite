@@ -27,6 +27,8 @@ const DEFAULT_THUMBNAIL_BLUR_SIGMA = normalizePositiveInt(process.env.TRANSPAREN
 const DEFAULT_THUMBNAIL_QUALITY = normalizePositiveInt(process.env.TRANSPARENCY_THUMBNAIL_WEBP_QUALITY, 64);
 const COMMAND_CHECK_CACHE_MS = 5000;
 const COMMAND_CHECK_TIMEOUT_MS = 2000;
+const GEMINI_AUTH_HEALTH_CACHE_MS = 2 * 60 * 1000;
+const GEMINI_AUTH_CHECK_TIMEOUT_MS = 10000;
 const VALID_DECISIONS = new Set(['allow', 'deny', 'review']);
 const IMAGE_ANALYSIS_TIMEOUT_FAILURE_TYPE = 'image_analysis_timeout';
 const VALID_POLICY_IDS = new Set([
@@ -86,6 +88,14 @@ const commandAvailabilityCache = {
   key: '',
   checkedAtMs: 0,
   result: null,
+};
+
+const geminiAuthHealthCache = {
+  key: '',
+  checkedAtMs: 0,
+  result: null,
+  pendingPromise: null,
+  activeJudgeCount: 0,
 };
 
 function buildGeminiCliPrompt(input) {
@@ -501,6 +511,216 @@ function normalizeJudgeDecisionForAutomation(result) {
   };
 }
 
+function buildGeminiAuthHealthPrompt() {
+  return [
+    'This is a Gemini CLI authentication self-check.',
+    'Return exactly one JSON object and nothing else.',
+    '{"ok":true}',
+  ].join('\n');
+}
+
+function parseGeminiAuthHealthJson(rawText) {
+  const normalizedText = String(rawText || '').trim();
+  if (!normalizedText) {
+    return {
+      success: false,
+      message: 'Gemini CLI 출력이 비어 있습니다.',
+    };
+  }
+
+  const candidates = [];
+  candidates.push(normalizedText);
+
+  const fencedBlocks = normalizedText.match(/```(?:json)?\s*([\s\S]*?)```/gi) || [];
+  for (const block of fencedBlocks) {
+    candidates.push(stripJsonFences(block));
+  }
+
+  const extractedObjects = extractJsonObjects(normalizedText);
+  for (const extracted of extractedObjects) {
+    candidates.push(extracted);
+  }
+
+  for (const candidate of candidates) {
+    const parsed = safeParseJson(candidate);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.ok === true) {
+      return {
+        success: true,
+      };
+    }
+  }
+
+  return {
+    success: false,
+    message: 'Gemini auth self-check 출력에서 {"ok":true} JSON object를 찾지 못했습니다.',
+  };
+}
+
+function summarizeDiagnosticText(value, maxLength = 200) {
+  const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  return normalized.slice(0, maxLength);
+}
+
+function isGeminiAuthRequiredMessage(text) {
+  const normalized = String(text || '').toLowerCase();
+  return [
+    'login',
+    'logged in',
+    'sign in',
+    'signin',
+    'authentication',
+    'authenticate',
+    'oauth',
+    'credential',
+    'credentials',
+    'token',
+    'unauthorized',
+    'forbidden',
+    'not logged',
+    'not authenticated',
+  ].some((keyword) => normalized.includes(keyword));
+}
+
+function isGeminiTimeoutMessage(text) {
+  const normalized = String(text || '').toLowerCase();
+  return normalized.includes('응답 대기 시간이 초과')
+    || normalized.includes('시간 초과')
+    || normalized.includes('timeout');
+}
+
+function buildGeminiAuthHealthResponse(runtimeConfig, availability, input = {}) {
+  return {
+    success: input.success === true,
+    status: String(input.status || (input.success === true ? 'healthy' : 'cli_error')),
+    message: String(input.message || ''),
+    checkedAt: new Date().toISOString(),
+    responseTimeMs: Math.max(0, Number(input.responseTimeMs) || 0),
+    host: runtimeConfig.host,
+    port: runtimeConfig.port,
+    geminiCommand: runtimeConfig.command,
+    commandPath: availability.commandPath || '',
+    geminiArgs: runtimeConfig.args,
+    geminiModel: extractConfiguredModel(runtimeConfig.args),
+    promptMode: runtimeConfig.promptMode,
+    timeoutMs: Number(input.timeoutMs || runtimeConfig.timeoutMs || 0),
+    detail: String(input.detail || ''),
+    diagnostic: String(input.diagnostic || ''),
+  };
+}
+
+async function checkGeminiAuthHealth(runtimeConfig, options = {}) {
+  const { force = false } = options;
+  const availability = await checkGeminiCommandAvailability(runtimeConfig);
+  if (!availability.available) {
+    return buildGeminiAuthHealthResponse(runtimeConfig, availability, {
+      success: false,
+      status: 'gemini_unavailable',
+      message: availability.message,
+      timeoutMs: Math.min(Number(runtimeConfig.timeoutMs || DEFAULT_TIMEOUT_MS), GEMINI_AUTH_CHECK_TIMEOUT_MS),
+    });
+  }
+
+  const cacheKey = JSON.stringify({
+    command: runtimeConfig.command,
+    commandPath: availability.commandPath || '',
+    args: runtimeConfig.args,
+    promptMode: runtimeConfig.promptMode,
+    promptFlag: runtimeConfig.promptFlag,
+  });
+  const now = Date.now();
+  const isCacheValid = geminiAuthHealthCache.result
+    && geminiAuthHealthCache.key === cacheKey
+    && (now - geminiAuthHealthCache.checkedAtMs) < GEMINI_AUTH_HEALTH_CACHE_MS;
+
+  if (!force && isCacheValid) {
+    return geminiAuthHealthCache.result;
+  }
+
+  if (geminiAuthHealthCache.pendingPromise && geminiAuthHealthCache.key === cacheKey) {
+    return geminiAuthHealthCache.pendingPromise;
+  }
+
+  if (geminiAuthHealthCache.activeJudgeCount > 0) {
+    if (geminiAuthHealthCache.result && geminiAuthHealthCache.key === cacheKey) {
+      return geminiAuthHealthCache.result;
+    }
+
+    return buildGeminiAuthHealthResponse(runtimeConfig, availability, {
+      success: false,
+      status: 'busy',
+      message: 'judge 실행 중이라 Gemini 로그인 상태 확인을 잠시 미뤘습니다.',
+      timeoutMs: Math.min(Number(runtimeConfig.timeoutMs || DEFAULT_TIMEOUT_MS), GEMINI_AUTH_CHECK_TIMEOUT_MS),
+    });
+  }
+
+  geminiAuthHealthCache.key = cacheKey;
+  geminiAuthHealthCache.pendingPromise = (async () => {
+    const startedAtMs = Date.now();
+    const authRuntimeConfig = {
+      ...runtimeConfig,
+      timeoutMs: Math.min(
+        Math.max(3000, Number(runtimeConfig.timeoutMs || DEFAULT_TIMEOUT_MS)),
+        GEMINI_AUTH_CHECK_TIMEOUT_MS,
+      ),
+    };
+    const result = await runGeminiCli(buildGeminiAuthHealthPrompt(), authRuntimeConfig);
+    const responseTimeMs = Date.now() - startedAtMs;
+
+    let healthResult = null;
+    if (!result.success) {
+      const combinedText = `${String(result.message || '')}\n${String(result.rawText || '')}`.trim();
+      const diagnostic = summarizeDiagnosticText(result.rawText || result.message || '');
+      const status = isGeminiTimeoutMessage(result.message || combinedText)
+        ? 'timeout'
+        : (isGeminiAuthRequiredMessage(combinedText) ? 'auth_required' : 'cli_error');
+      const message = status === 'auth_required'
+        ? 'Gemini CLI 로그인이 필요합니다.'
+        : String(result.message || 'Gemini auth self-check 실패');
+      healthResult = buildGeminiAuthHealthResponse(runtimeConfig, availability, {
+        success: false,
+        status,
+        message,
+        responseTimeMs,
+        timeoutMs: authRuntimeConfig.timeoutMs,
+        diagnostic,
+      });
+    } else {
+      const parsed = parseGeminiAuthHealthJson(result.rawText);
+      if (!parsed.success) {
+        healthResult = buildGeminiAuthHealthResponse(runtimeConfig, availability, {
+          success: false,
+          status: 'invalid_response',
+          message: parsed.message,
+          responseTimeMs,
+          timeoutMs: authRuntimeConfig.timeoutMs,
+          diagnostic: summarizeDiagnosticText(result.rawText),
+        });
+      } else {
+        healthResult = buildGeminiAuthHealthResponse(runtimeConfig, availability, {
+          success: true,
+          status: 'healthy',
+          message: 'Gemini 로그인 정상',
+          responseTimeMs,
+          timeoutMs: authRuntimeConfig.timeoutMs,
+          detail: '짧은 self-check 프롬프트 실행 성공',
+        });
+      }
+    }
+
+    geminiAuthHealthCache.result = healthResult;
+    geminiAuthHealthCache.checkedAtMs = Date.now();
+    return healthResult;
+  })().finally(() => {
+    geminiAuthHealthCache.pendingPromise = null;
+  });
+
+  return geminiAuthHealthCache.pendingPromise;
+}
+
 function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies = {}) {
   const store = dependencies.store || createModerationRecordStore(runtimeConfig.recordsFilePath);
   return http.createServer(async (request, response) => {
@@ -571,6 +791,14 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
           promptMode: runtimeConfig.promptMode,
           timeoutMs: runtimeConfig.timeoutMs,
         });
+        return;
+      }
+
+      if (request.method === 'GET' && requestUrl.pathname === '/gemini-auth-health') {
+        const healthResult = await checkGeminiAuthHealth(runtimeConfig, {
+          force: requestUrl.searchParams.get('force') === '1',
+        });
+        writeJson(response, 200, healthResult, request);
         return;
       }
 
@@ -777,62 +1005,67 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
         return;
       }
 
-      const judgeStartedAtMs = Date.now();
-      const preparedInputs = await prepareJudgeImageInputs(sanitized.payload, runtimeConfig);
-      let cliResult = null;
-      let imageAnalysisText = '';
+      geminiAuthHealthCache.activeJudgeCount += 1;
       try {
-        const imageAnalysisResult = await runImageAnalysis(preparedInputs.imageFileRefs, runtimeConfig, judgeStartedAtMs);
-        if (imageAnalysisResult.timedOut) {
+        const judgeStartedAtMs = Date.now();
+        const preparedInputs = await prepareJudgeImageInputs(sanitized.payload, runtimeConfig);
+        let cliResult = null;
+        let imageAnalysisText = '';
+        try {
+          const imageAnalysisResult = await runImageAnalysis(preparedInputs.imageFileRefs, runtimeConfig, judgeStartedAtMs);
+          if (imageAnalysisResult.timedOut) {
+            writeJson(response, 200, {
+              success: false,
+              failure_type: IMAGE_ANALYSIS_TIMEOUT_FAILURE_TYPE,
+              message: 'Gemini 이미지 분석 시간 초과',
+              rawText: imageAnalysisResult.rawText || '',
+            }, request);
+            return;
+          }
+          imageAnalysisText = imageAnalysisResult.text;
+          cliResult = await runGeminiCli(
+            buildGeminiCliPrompt({
+              ...sanitized.payload,
+              imageFileRefs: preparedInputs.imageFileRefs,
+              imageAnalysis: imageAnalysisText,
+            }),
+            withRemainingJudgeBudget(runtimeConfig, judgeStartedAtMs),
+          );
+        } finally {
+          await cleanupPreparedJudgeImageInputs(preparedInputs);
+        }
+        if (!cliResult.success) {
           writeJson(response, 200, {
             success: false,
-            failure_type: IMAGE_ANALYSIS_TIMEOUT_FAILURE_TYPE,
-            message: 'Gemini 이미지 분석 시간 초과',
-            rawText: imageAnalysisResult.rawText || '',
-          }, request);
+            message: cliResult.message,
+            rawText: cliResult.rawText || '',
+          });
           return;
         }
-        imageAnalysisText = imageAnalysisResult.text;
-        cliResult = await runGeminiCli(
-          buildGeminiCliPrompt({
-            ...sanitized.payload,
-            imageFileRefs: preparedInputs.imageFileRefs,
-            imageAnalysis: imageAnalysisText,
-          }),
-          withRemainingJudgeBudget(runtimeConfig, judgeStartedAtMs),
-        );
+
+        const parsed = parseGeminiCliJson(cliResult.rawText);
+        if (!parsed.success) {
+          writeJson(response, 200, {
+            success: false,
+            message: parsed.message,
+            rawText: cliResult.rawText,
+          });
+          return;
+        }
+
+        const normalizedDecision = normalizeJudgeDecisionForAutomation(parsed);
+
+        writeJson(response, 200, {
+          success: true,
+          decision: normalizedDecision.decision,
+          confidence: normalizedDecision.confidence,
+          policy_ids: normalizedDecision.policy_ids,
+          reason: normalizedDecision.reason,
+          rawText: normalizedDecision.rawText,
+        });
       } finally {
-        await cleanupPreparedJudgeImageInputs(preparedInputs);
+        geminiAuthHealthCache.activeJudgeCount = Math.max(0, geminiAuthHealthCache.activeJudgeCount - 1);
       }
-      if (!cliResult.success) {
-        writeJson(response, 200, {
-          success: false,
-          message: cliResult.message,
-          rawText: cliResult.rawText || '',
-        });
-        return;
-      }
-
-      const parsed = parseGeminiCliJson(cliResult.rawText);
-      if (!parsed.success) {
-        writeJson(response, 200, {
-          success: false,
-          message: parsed.message,
-          rawText: cliResult.rawText,
-        });
-        return;
-      }
-
-      const normalizedDecision = normalizeJudgeDecisionForAutomation(parsed);
-
-      writeJson(response, 200, {
-        success: true,
-        decision: normalizedDecision.decision,
-        confidence: normalizedDecision.confidence,
-        policy_ids: normalizedDecision.policy_ids,
-        reason: normalizedDecision.reason,
-        rawText: normalizedDecision.rawText,
-      });
     } catch (error) {
       writeJson(response, 500, {
         success: false,
@@ -1851,11 +2084,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 
 export {
   buildGeminiCliPrompt,
+  buildGeminiAuthHealthPrompt,
   buildImageAnalysisPrompt,
   buildRuntimeConfig,
+  checkGeminiAuthHealth,
   cleanupPreparedJudgeImageInputs,
   createHelperServer,
   normalizeJudgeDecisionForAutomation,
+  parseGeminiAuthHealthJson,
   prepareJudgeImageInputs,
   pickBestCommandPath,
   parseGeminiCliJson,

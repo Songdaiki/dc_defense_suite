@@ -61,6 +61,7 @@ class Scheduler {
       posts: [],
     };
     this.ensureLoginSession = null;
+    this.ensureGeminiAuth = null;
     this.handleLoginAccessFailure = null;
   }
 
@@ -468,6 +469,25 @@ class Scheduler {
       return;
     }
 
+    const geminiAuthResult = await this.ensureGeminiAuthForJudge();
+    if (!geminiAuthResult.success) {
+      this.totalFailedCommands += 1;
+      this.addLog(`❌ [${trustedUser.label}] Gemini 로그인 상태 확인 실패 #${parsedCommand.targetPostNo} - ${geminiAuthResult.message}`);
+      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+        id: recordId,
+        source: 'auto_report',
+        status: 'failed',
+        targetUrl: parsedCommand.targetUrl,
+        targetPostNo: parsedCommand.targetPostNo,
+        reportReason: parsedCommand.reasonText,
+        title: content.title,
+        bodyText: content.bodyText,
+        imageUrls: content.imageUrls,
+        reason: `Gemini 로그인 상태 확인 실패: ${geminiAuthResult.message}`,
+      }), signal);
+      return;
+    }
+
     const helperResult = await callCliHelperJudge(
       this.config,
       {
@@ -634,6 +654,14 @@ class Scheduler {
     }
 
     return this.ensureLoginSession();
+  }
+
+  async ensureGeminiAuthForJudge() {
+    if (typeof this.ensureGeminiAuth !== 'function') {
+      return { success: true };
+    }
+
+    return this.ensureGeminiAuth();
   }
 
   async notifyLoginAccessFailure(message) {

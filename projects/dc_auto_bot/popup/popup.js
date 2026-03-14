@@ -29,6 +29,8 @@ const logList = document.getElementById('logList');
 const resetBtn = document.getElementById('resetBtn');
 const llmAuthStatus = document.getElementById('llmAuthStatus');
 const llmAuthEmail = document.getElementById('llmAuthEmail');
+const geminiAuthStatus = document.getElementById('geminiAuthStatus');
+const geminiAuthDetail = document.getElementById('geminiAuthDetail');
 const loginAuthStatus = document.getElementById('loginAuthStatus');
 const loginAuthDetail = document.getElementById('loginAuthDetail');
 const llmTestTargetInput = document.getElementById('llmTestTargetInput');
@@ -219,6 +221,7 @@ function applyStatus(status) {
   const config = status.config || {};
   const llm = status.llm || {};
   const helperHealth = llm.helperHealth || {};
+  const geminiAuthHealth = llm.geminiAuthHealth || {};
   const login = status.login || {};
   const loginHealth = login.health || {};
 
@@ -257,6 +260,8 @@ function applyStatus(status) {
 
   llmAuthStatus.textContent = formatHelperHealthStatus(helperHealth, llm.config?.cliHelperEndpoint);
   llmAuthEmail.textContent = formatHelperHealthDetail(helperHealth, llm.config?.cliHelperEndpoint);
+  geminiAuthStatus.textContent = formatGeminiAuthHealthStatus(geminiAuthHealth, llm.config?.cliHelperEndpoint);
+  geminiAuthDetail.textContent = formatGeminiAuthHealthDetail(geminiAuthHealth, llm.config?.cliHelperEndpoint);
   loginAuthStatus.textContent = formatLoginHealthStatus(loginHealth, login.enabled, login.credentialsConfigured);
   loginAuthDetail.textContent = formatLoginHealthDetail(loginHealth, login.enabled, login.credentialsConfigured);
   llmLastTestAt.textContent = formatTimestamp(llm.lastTestAt);
@@ -423,6 +428,57 @@ function formatHelperHealthDetail(helperHealth, endpoint) {
   }
 
   return helperHealth.message || '';
+}
+
+function formatGeminiAuthHealthStatus(geminiAuthHealth, endpoint) {
+  if (!endpoint) {
+    return '⚪ Gemini 상태 확인 불가';
+  }
+
+  switch (geminiAuthHealth.status) {
+    case 'healthy':
+      return '🟢 Gemini 로그인 정상';
+    case 'checking':
+      return '🟡 Gemini 로그인 확인 중';
+    case 'busy':
+      return '🟡 Gemini 사용 중';
+    case 'auth_required':
+      return '🔴 Gemini 로그인 필요';
+    case 'timeout':
+      return '🟠 Gemini 응답 지연';
+    case 'cli_error':
+      return '🟠 Gemini CLI 확인 필요';
+    case 'dependency_error':
+      return '🟠 Gemini 상태 확인 실패';
+    case 'invalid_response':
+      return '🟠 Gemini 응답 이상';
+    case 'gemini_unavailable':
+      return '🔴 Gemini CLI 실행 불가';
+    case 'misconfigured':
+      return '⚪ helper 설정 오류';
+    case 'helper_unavailable':
+      return '🔴 helper 연결 실패';
+    case 'unreachable':
+      return '🔴 Gemini 상태 연결 실패';
+    default:
+      return '🟡 Gemini 상태 확인 대기';
+  }
+}
+
+function formatGeminiAuthHealthDetail(geminiAuthHealth, endpoint) {
+  if (!endpoint) {
+    return '-';
+  }
+
+  const details = geminiAuthHealth.details && typeof geminiAuthHealth.details === 'object'
+    ? geminiAuthHealth.details
+    : null;
+  const detail = String(details?.detail || details?.diagnostic || '').trim();
+  if (detail) {
+    return detail;
+  }
+
+  return String(geminiAuthHealth.message || '').trim() || '-';
 }
 
 function formatLoginHealthStatus(loginHealth, enabled, credentialsConfigured) {

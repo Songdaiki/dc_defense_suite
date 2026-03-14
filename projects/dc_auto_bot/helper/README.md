@@ -29,6 +29,7 @@ npm run start
 endpoint:
 
 - `GET /health`
+- `GET /gemini-auth-health`
 - `POST /judge`
 - `POST /record`
 - `GET /api/moderation-records`
