@@ -499,7 +499,7 @@ function getDisplayTitle(record) {
   }
 
   if (isLikelyAlreadyProcessedPost(record)) {
-    return '이미 처리된 게시물입니다.';
+    return '(이미 처리된 게시물입니다.)';
   }
 
   return rawTitle || '(제목 없음)';
