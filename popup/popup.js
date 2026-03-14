@@ -87,6 +87,8 @@ const FEATURE_DOM = {
     requestDelayInput: document.getElementById('commentRequestDelay'),
     cycleDelayInput: document.getElementById('commentCycleDelay'),
     postConcurrencyInput: document.getElementById('commentPostConcurrency'),
+    banOnDeleteInput: document.getElementById('commentBanOnDelete'),
+    avoidHourInput: document.getElementById('commentAvoidHour'),
     saveConfigBtn: document.getElementById('commentSaveConfigBtn'),
     resetBtn: document.getElementById('commentResetBtn'),
   },
@@ -456,6 +458,8 @@ function bindCommentEvents() {
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 100),
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
       postConcurrency: parseOptionalInt(dom.postConcurrencyInput.value, 50),
+      banOnDelete: dom.banOnDeleteInput.checked,
+      avoidHour: String(Math.max(1, parseOptionalInt(dom.avoidHourInput.value, 1))),
     };
 
     const response = await sendFeatureMessage('comment', { action: 'updateConfig', config });
@@ -854,6 +858,8 @@ function updateCommentUI(status) {
     [dom.requestDelayInput, status.config?.requestDelay ?? 100],
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
     [dom.postConcurrencyInput, status.config?.postConcurrency ?? 50],
+    [dom.banOnDeleteInput, status.config?.banOnDelete ?? false],
+    [dom.avoidHourInput, status.config?.avoidHour ?? '1'],
   ]);
   updateLogList(dom.logList, status.logs);
 }
@@ -1078,6 +1084,8 @@ function getFeatureConfigInputs(feature) {
       dom.requestDelayInput,
       dom.cycleDelayInput,
       dom.postConcurrencyInput,
+      dom.banOnDeleteInput,
+      dom.avoidHourInput,
     ];
   }
 

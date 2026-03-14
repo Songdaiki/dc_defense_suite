@@ -336,6 +336,71 @@ async function deleteComments(config = {}, postNo, commentNos) {
   }
 }
 
+/**
+ * 댓글 삭제 + IP 차단 (동시 수행)
+ *
+ * POST /ajax/minor_manager_board_ajax/update_avoid_list
+ * Body: ci_t, id, nos[] (댓글 번호), parent (게시물 번호),
+ *       avoid_hour, avoid_reason, avoid_reason_txt,
+ *       del_chk, _GALLTYPE_, avoid_type_chk
+ *
+ * @param {Object}   config     - 설정 객체
+ * @param {number}   postNo     - 댓글이 속한 게시물 번호
+ * @param {string[]} commentNos - 차단+삭제할 댓글 번호 배열
+ * @returns {Promise<{success: boolean, message: string}>}
+ */
+async function deleteAndBanComments(config = {}, postNo, commentNos) {
+  if (commentNos.length === 0) {
+    return { success: true, message: '차단할 댓글 없음' };
+  }
+
+  const resolved = resolveConfig(config);
+  const ciToken = await getCiToken(resolved.baseUrl);
+  if (!ciToken) {
+    return { success: false, message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.' };
+  }
+
+  const url = `${resolved.baseUrl}/ajax/minor_manager_board_ajax/update_avoid_list`;
+
+  const body = new URLSearchParams();
+  body.set('ci_t', ciToken);
+  body.set('id', resolved.galleryId);
+  body.set('parent', String(postNo));
+  body.set('avoid_hour', String(resolved.avoidHour || '1'));
+  body.set('avoid_reason', String(resolved.avoidReason || '0'));
+  body.set('avoid_reason_txt', String(resolved.avoidReasonText || ''));
+  body.set('del_chk', resolved.delChk === false ? '0' : '1');
+  body.set('_GALLTYPE_', resolved.galleryType);
+  body.set('avoid_type_chk', resolved.avoidTypeChk === false ? '0' : '1');
+
+  for (const cno of commentNos) {
+    body.append('nos[]', String(cno));
+  }
+
+  const response = await dcFetchWithRetry(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Referer': `${resolved.baseUrl}/mgallery/board/view/?id=${resolved.galleryId}&no=${postNo}`,
+      'Origin': resolved.baseUrl,
+    },
+    body: body.toString(),
+  });
+
+  const responseText = await response.text();
+
+  try {
+    const data = JSON.parse(responseText);
+    return {
+      success: isBanResponseSuccessful(response, data, responseText),
+      message: JSON.stringify(data),
+    };
+  } catch {
+    return { success: response.ok, message: responseText };
+  }
+}
+
 // ============================================================
 // 유틸리티
 // ============================================================
@@ -387,6 +452,22 @@ function isDeleteResponseSuccessful(response, data) {
   return result === 'success' || result === 'ok' || result === 'true';
 }
 
+function isBanResponseSuccessful(response, data, responseText) {
+  if (!response.ok) {
+    return false;
+  }
+
+  if (Array.isArray(data) && data[0]?.result === 'success') {
+    return true;
+  }
+
+  if (data?.result === 'success') {
+    return true;
+  }
+
+  return responseText.includes('"result":"success"');
+}
+
 // ============================================================
 // Export
 // ============================================================
@@ -399,5 +480,6 @@ export {
   fetchAllComments,
   getCiToken,
   deleteComments,
+  deleteAndBanComments,
   delay,
 };

@@ -10,6 +10,7 @@ import {
     extractEsno,
     fetchAllComments,
     deleteComments,
+    deleteAndBanComments,
     delay,
 } from './api.js';
 
@@ -47,6 +48,11 @@ class Scheduler {
             cycleDelay: 1000,      // 사이클 간 딜레이 (ms)
             postConcurrency: 50,   // 한 페이지에서 동시에 처리할 게시물 수
             commentPageConcurrency: 4, // 한 게시물의 댓글 페이지 동시 조회 수
+            banOnDelete: false,    // 삭제 시 IP 차단 동시 수행
+            avoidHour: '1',        // IP 차단 시간 (시)
+            avoidReason: '0',      // 차단 사유 코드 (기타)
+            avoidReasonText: '도배기로 인한 해당 유동IP차단',
+            avoidTypeChk: true,    // IP 차단 여부
         };
     }
 
@@ -201,11 +207,17 @@ class Scheduler {
                 return false;
             }
 
-            // 4. 댓글 삭제
+            // 4. 삭제 (+ 선택적 IP 차단)
             const commentNos = extractCommentNos(fluidComments);
-            this.log(`🗑️ #${postNo}: 유동닉 ${fluidComments.length}개 삭제 중...`);
+            let result;
 
-            const result = await deleteComments(this.config, postNo, commentNos);
+            if (this.config.banOnDelete) {
+                this.log(`🗑️⛔ #${postNo}: 유동닉 ${fluidComments.length}개 삭제+차단 중...`);
+                result = await deleteAndBanComments(this.config, postNo, commentNos);
+            } else {
+                this.log(`🗑️ #${postNo}: 유동닉 ${fluidComments.length}개 삭제 중...`);
+                result = await deleteComments(this.config, postNo, commentNos);
+            }
 
             if (result.success) {
                 const verification = await this.verifyDeletedComments(postNo, esno, commentNos, sharedEsno);

@@ -334,6 +334,14 @@
               <label for="commentPostConcurrency">동시 처리 수</label>
               <input type="number" id="commentPostConcurrency" min="1" max="50" value="50">
             </div>
+            <div class="setting-item">
+              <label for="commentBanOnDelete">삭제 시 IP 차단</label>
+              <input type="checkbox" id="commentBanOnDelete">
+            </div>
+            <div class="setting-item">
+              <label for="commentAvoidHour">차단 시간 (시)</label>
+              <input type="number" id="commentAvoidHour" min="1" max="720" value="1">
+            </div>
             <button id="commentSaveConfigBtn" class="btn btn-primary">설정 저장</button>
           </div>
         </details>
