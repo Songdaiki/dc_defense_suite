@@ -44,11 +44,12 @@ let currentStatus = null;
 let configDirty = false;
 let loginConfigDirty = false;
 let isRefreshingStatus = false;
+const STATUS_REFRESH_INTERVAL_MS = 3000;
 
 document.addEventListener('DOMContentLoaded', async () => {
   bindEvents();
   await refreshStatus();
-  setInterval(refreshStatus, 1000);
+  setInterval(refreshStatus, STATUS_REFRESH_INTERVAL_MS);
 });
 
 function bindEvents() {
