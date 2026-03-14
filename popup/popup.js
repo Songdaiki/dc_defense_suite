@@ -866,7 +866,7 @@ function updateCommentUI(status) {
 
   syncFeatureConfigInputs('comment', [
     [dom.minPageInput, status.config?.minPage ?? 1],
-    [dom.maxPageInput, status.config?.maxPage ?? 5],
+    [dom.maxPageInput, status.config?.maxPage ?? 1],
     [dom.requestDelayInput, status.config?.requestDelay ?? 100],
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
     [dom.postConcurrencyInput, status.config?.postConcurrency ?? 50],

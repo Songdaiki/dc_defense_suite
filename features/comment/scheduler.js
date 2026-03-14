@@ -1,7 +1,7 @@
 /**
  * DC Comment Protect - 스케줄러 모듈
  * 
- * 1~5페이지를 순회하며 각 게시물의 유동닉 댓글을 감지하고 삭제합니다.
+ * 기본적으로 1페이지를 순회하며 각 게시물의 유동닉 댓글을 감지하고 삭제합니다.
  */
 
 import {
@@ -43,7 +43,7 @@ class Scheduler {
         this.config = {
             galleryId: 'thesingularity',
             minPage: 1,            // 시작 페이지 (테스트용)
-            maxPage: 5,
+            maxPage: 1,
             requestDelay: 100,     // 워커별 게시물 처리 후 딜레이 (ms)
             cycleDelay: 1000,      // 사이클 간 딜레이 (ms)
             postConcurrency: 50,   // 한 페이지에서 동시에 처리할 게시물 수
