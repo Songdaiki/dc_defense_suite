@@ -411,7 +411,7 @@ function getDecisionLabel(decision, status = 'completed', record = null) {
       return { label: '처리 완료', className: 'done' };
     }
     if (record && isAuthorFilterFailed(record)) {
-      return { label: '조건 부합', className: 'filtered' };
+      return { label: '처리 불가', className: 'filtered' };
     }
     return { label: '처리 실패', className: 'unknown' };
   }
