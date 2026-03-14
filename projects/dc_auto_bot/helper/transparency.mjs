@@ -561,6 +561,11 @@ function formatReason(record) {
     return rawReason || '-';
   }
 
+  if (isInternalErrorFailed(record)) {
+    const reportReason = String(record?.reportReason || '').trim() || '알 수 없음';
+    return `AI판사 내부에러로 ${reportReason}(으)로 강제 승인합니다.`;
+  }
+
   return mapFailedReasonToPublicMessage(rawReason);
 }
 
