@@ -1,4 +1,4 @@
-import { fetchPostListHTML, delay } from '../post/api.js';
+import { deletePosts, fetchPostListHTML, delay } from '../post/api.js';
 import { parseBoardPosts } from '../post/parser.js';
 
 const STORAGE_KEY = 'monitorSchedulerState';
@@ -30,6 +30,9 @@ class Scheduler {
     this.lastMetrics = buildEmptyMetrics();
     this.lastSnapshot = [];
     this.attackSessionId = '';
+    this.attackCutoffPostNo = 0;
+    this.initialSweepCompleted = false;
+    this.pendingInitialSweepPostNos = [];
     this.managedPostStarted = false;
     this.managedIpStarted = false;
     this.managedIpRunId = '';
@@ -82,6 +85,9 @@ class Scheduler {
     this.lastMetrics = buildEmptyMetrics();
     this.lastSnapshot = [];
     this.attackSessionId = '';
+    this.attackCutoffPostNo = 0;
+    this.initialSweepCompleted = false;
+    this.pendingInitialSweepPostNos = [];
     this.managedPostStarted = false;
     this.managedIpStarted = false;
     this.managedIpRunId = '';
@@ -107,6 +113,9 @@ class Scheduler {
     this.lastPollAt = '';
     this.lastMetrics = buildEmptyMetrics();
     this.lastSnapshot = [];
+    this.attackCutoffPostNo = 0;
+    this.initialSweepCompleted = false;
+    this.pendingInitialSweepPostNos = [];
     this.log('🔴 자동 감시 중지.');
     await this.saveState();
   }
@@ -149,7 +158,7 @@ class Scheduler {
         );
 
         if (this.phase === PHASE.NORMAL) {
-          await this.evaluateNormalState(metrics);
+          await this.evaluateNormalState(metrics, currentSnapshot);
         } else if (this.phase === PHASE.ATTACKING) {
           await this.ensureManagedDefensesStarted();
           await this.evaluateAttackingState(metrics);
@@ -217,7 +226,7 @@ class Scheduler {
     };
   }
 
-  async evaluateNormalState(metrics) {
+  async evaluateNormalState(metrics, currentSnapshot) {
     const attackCondition = metrics.newPostCount >= this.config.attackNewPostThreshold
       && metrics.fluidRatio >= this.config.attackFluidRatioThreshold;
 
@@ -225,7 +234,7 @@ class Scheduler {
       this.attackHitCount += 1;
       this.log(`🚨 공격 감지 streak ${this.attackHitCount}/${this.config.attackConsecutiveCount}`);
       if (this.attackHitCount >= this.config.attackConsecutiveCount) {
-        await this.enterAttackMode();
+        await this.enterAttackMode(currentSnapshot);
       }
       return;
     }
@@ -256,14 +265,34 @@ class Scheduler {
     this.releaseHitCount = 0;
   }
 
-  async enterAttackMode() {
+  async enterAttackMode(currentSnapshot) {
+    const attackSnapshot = await this.resolveAttackCutoffSnapshot(currentSnapshot);
+    const attackCutoffPostNo = getMaxPostNo(attackSnapshot);
+    if (attackCutoffPostNo <= 0) {
+      throw new Error('공격 cutoff snapshot 추출에 실패했습니다.');
+    }
+
     this.phase = PHASE.ATTACKING;
     this.attackSessionId = `attack_${Date.now()}`;
+    this.attackCutoffPostNo = attackCutoffPostNo;
+    this.initialSweepCompleted = false;
+    this.pendingInitialSweepPostNos = buildInitialSweepPostNos(attackSnapshot);
     this.attackHitCount = 0;
     this.releaseHitCount = 0;
     this.totalAttackDetected += 1;
     this.log(`🚨 공격 상태 진입 (${this.attackSessionId})`);
+    this.log(`🧷 감시 자동화 cutoff 저장 (#${this.attackCutoffPostNo})`);
     await this.ensureManagedDefensesStarted();
+  }
+
+  async resolveAttackCutoffSnapshot(currentSnapshot) {
+    if (getMaxPostNo(currentSnapshot) > 0) {
+      return currentSnapshot;
+    }
+
+    this.log('⚠️ 공격 cutoff snapshot 추출 실패, 1000ms 후 1회 재시도');
+    await delay(1000);
+    return await this.pollBoardSnapshot();
   }
 
   async ensureManagedDefensesStarted() {
@@ -271,11 +300,35 @@ class Scheduler {
       return;
     }
 
+    if (!this.initialSweepCompleted) {
+      await this.performInitialSweep();
+    }
+
     if (!this.postScheduler.isRunning) {
       try {
-        await this.postScheduler.start();
+        await this.postScheduler.start({
+          cutoffPostNo: this.attackCutoffPostNo,
+          source: 'monitor',
+        });
       } catch (error) {
         this.log(`⚠️ 게시글 분류 자동 시작 실패 - ${error.message}`);
+      }
+    } else {
+      let postStateChanged = false;
+
+      if (Number(this.postScheduler.config.cutoffPostNo) !== Number(this.attackCutoffPostNo)) {
+        this.postScheduler.config.cutoffPostNo = this.attackCutoffPostNo;
+        postStateChanged = true;
+      }
+
+      if (!this.postScheduler.runPromise) {
+        this.postScheduler.log('🔁 감시 자동화 관리 대상 게시글 분류 복원');
+        this.postScheduler.ensureRunLoop();
+        postStateChanged = true;
+      }
+
+      if (postStateChanged) {
+        await this.postScheduler.saveState();
       }
     }
 
@@ -286,9 +339,35 @@ class Scheduler {
 
     if (!this.ipScheduler.isRunning) {
       try {
-        await this.ipScheduler.start();
+        await this.ipScheduler.start({
+          cutoffPostNo: this.attackCutoffPostNo,
+          delChk: true,
+          source: 'monitor',
+        });
       } catch (error) {
         this.log(`⚠️ IP 차단 자동 시작 실패 - ${error.message}`);
+      }
+    } else {
+      let ipStateChanged = false;
+
+      if (Number(this.ipScheduler.config.cutoffPostNo) !== Number(this.attackCutoffPostNo)) {
+        this.ipScheduler.config.cutoffPostNo = this.attackCutoffPostNo;
+        ipStateChanged = true;
+      }
+
+      if (!this.ipScheduler.config.delChk) {
+        this.ipScheduler.config.delChk = true;
+        ipStateChanged = true;
+      }
+
+      if (!this.ipScheduler.runPromise) {
+        this.ipScheduler.log('🔁 감시 자동화 관리 대상 IP 차단 복원');
+        this.ipScheduler.ensureRunLoop();
+        ipStateChanged = true;
+      }
+
+      if (ipStateChanged) {
+        await this.ipScheduler.saveState();
       }
     }
 
@@ -304,6 +383,45 @@ class Scheduler {
         this.log(`🧷 자동 해제 대상 runId 저장 (${nextRunId})`);
       }
     }
+  }
+
+  async performInitialSweep() {
+    if (!this.isRunning || this.phase !== PHASE.ATTACKING) {
+      return;
+    }
+
+    const targetPostNos = dedupePostNos(this.pendingInitialSweepPostNos);
+    if (targetPostNos.length === 0) {
+      this.initialSweepCompleted = true;
+      return;
+    }
+
+    try {
+      await performClassifyOnce(this.postScheduler, targetPostNos);
+    } catch (error) {
+      this.log(`⚠️ 감시 자동화 initial sweep 실패 - ${error.message}`);
+    }
+
+    try {
+      const deleteResult = await performDeleteOnce(this.postScheduler, targetPostNos);
+      if (deleteResult.successNos.length > 0) {
+        this.log(`🗑️ 감시 자동화 initial sweep 삭제 완료 (${deleteResult.successNos.length}개)`);
+      }
+      if (deleteResult.failedNos.length > 0) {
+        this.log(`⚠️ 감시 자동화 initial sweep 삭제 실패 ${deleteResult.failedNos.length}개 - ${deleteResult.failedNos.join(', ')}`);
+        if (deleteResult.message) {
+          this.log(`⚠️ 감시 자동화 initial sweep 삭제 상세: ${deleteResult.message}`);
+        }
+      }
+    } catch (error) {
+      this.log(`⚠️ 감시 자동화 initial sweep 삭제 오류 - ${error.message}`);
+    }
+
+    this.pendingInitialSweepPostNos = [];
+    this.initialSweepCompleted = true;
+    this.log(`✅ 감시 자동화 initial sweep 1회 처리 완료 (${targetPostNos.length}개 대상)`);
+
+    await this.saveState();
   }
 
   async enterRecoveringMode() {
@@ -378,6 +496,9 @@ class Scheduler {
 
   clearAttackSession() {
     this.attackSessionId = '';
+    this.attackCutoffPostNo = 0;
+    this.initialSweepCompleted = false;
+    this.pendingInitialSweepPostNos = [];
     this.managedPostStarted = false;
     this.managedIpStarted = false;
     this.managedIpRunId = '';
@@ -410,6 +531,9 @@ class Scheduler {
           lastMetrics: buildStoredMetrics(this.lastMetrics),
           lastSnapshot: this.lastSnapshot,
           attackSessionId: this.attackSessionId,
+          attackCutoffPostNo: this.attackCutoffPostNo,
+          initialSweepCompleted: this.initialSweepCompleted,
+          pendingInitialSweepPostNos: this.pendingInitialSweepPostNos,
           managedPostStarted: this.managedPostStarted,
           managedIpStarted: this.managedIpStarted,
           managedIpRunId: this.managedIpRunId,
@@ -444,6 +568,9 @@ class Scheduler {
       };
       this.lastSnapshot = Array.isArray(schedulerState.lastSnapshot) ? schedulerState.lastSnapshot : [];
       this.attackSessionId = schedulerState.attackSessionId || '';
+      this.attackCutoffPostNo = Number(schedulerState.attackCutoffPostNo) || 0;
+      this.initialSweepCompleted = Boolean(schedulerState.initialSweepCompleted);
+      this.pendingInitialSweepPostNos = dedupePostNos(schedulerState.pendingInitialSweepPostNos);
       this.managedPostStarted = Boolean(schedulerState.managedPostStarted);
       this.managedIpStarted = Boolean(schedulerState.managedIpStarted);
       this.managedIpRunId = schedulerState.managedIpRunId || '';
@@ -492,6 +619,9 @@ class Scheduler {
       lastPollAt: this.lastPollAt,
       lastMetrics: buildStoredMetrics(this.lastMetrics),
       attackSessionId: this.attackSessionId,
+      attackCutoffPostNo: this.attackCutoffPostNo,
+      initialSweepCompleted: this.initialSweepCompleted,
+      pendingInitialSweepPostNos: this.pendingInitialSweepPostNos,
       managedPostStarted: this.managedPostStarted,
       managedIpStarted: this.managedIpStarted,
       managedIpRunId: this.managedIpRunId,
@@ -511,6 +641,16 @@ function buildEmptyMetrics() {
     fluidRatio: 0,
     newPosts: [],
   };
+}
+
+async function performClassifyOnce(postScheduler, postNos) {
+  return postScheduler.classifyPostsOnce(postNos, {
+    logLabel: '감시 자동화 initial sweep',
+  });
+}
+
+async function performDeleteOnce(postScheduler, postNos) {
+  return deletePosts(postScheduler.config, postNos);
 }
 
 function buildStoredMetrics(metrics) {
@@ -540,6 +680,29 @@ async function waitForSchedulerRunLoop(scheduler, label) {
   } catch (error) {
     console.error(`[MonitorScheduler] ${label} 종료 대기 실패:`, error);
   }
+}
+
+function getMaxPostNo(posts) {
+  return (Array.isArray(posts) ? posts : []).reduce(
+    (maxPostNo, post) => Math.max(maxPostNo, Number(post?.no) || 0),
+    0,
+  );
+}
+
+function buildInitialSweepPostNos(snapshot) {
+  return dedupePostNos(
+    (Array.isArray(snapshot) ? snapshot : [])
+      .filter((post) => post?.isFluid)
+      .map((post) => post.no),
+  );
+}
+
+function dedupePostNos(postNos) {
+  return [...new Set(
+    (Array.isArray(postNos) ? postNos : [])
+      .map((postNo) => String(postNo || '').trim())
+      .filter((postNo) => /^\d+$/.test(postNo)),
+  )];
 }
 
 export { PHASE, Scheduler };

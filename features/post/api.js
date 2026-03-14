@@ -154,6 +154,52 @@ async function classifyPosts(config = {}, postNos, options = {}) {
     };
 }
 
+async function deletePosts(config = {}, postNos, options = {}) {
+    const resolved = resolveConfig(config);
+    if (postNos.length === 0) {
+        return {
+            success: true,
+            successNos: [],
+            failedNos: [],
+            message: '삭제할 게시물 없음',
+        };
+    }
+
+    const ciToken = await getCiToken(resolved.baseUrl);
+    if (!ciToken) {
+        return {
+            success: false,
+            successNos: [],
+            failedNos: [...postNos],
+            message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.',
+        };
+    }
+
+    const uniquePostNos = [...new Set(postNos.map((no) => String(no)))];
+    const chunks = chunkArray(uniquePostNos, resolved.classifyBatchSize);
+    const aggregate = {
+        successNos: [],
+        failedNos: [],
+        messages: [],
+    };
+
+    for (const chunk of chunks) {
+        const result = await deletePostsWithFallback(resolved, ciToken, chunk, options);
+        aggregate.successNos.push(...result.successNos);
+        aggregate.failedNos.push(...result.failedNos);
+        if (result.message) {
+            aggregate.messages.push(result.message);
+        }
+    }
+
+    return {
+        success: aggregate.failedNos.length === 0,
+        successNos: aggregate.successNos,
+        failedNos: aggregate.failedNos,
+        message: aggregate.messages.join(' | '),
+    };
+}
+
 async function classifyPostsWithFallback(config, ciToken, postNos, options = {}) {
     const batchResult = await classifyPostBatch(config, ciToken, postNos, options);
     if (batchResult.success) {
@@ -180,6 +226,37 @@ async function classifyPostsWithFallback(config, ciToken, postNos, options = {})
 
     return {
         successCount: leftResult.successCount + rightResult.successCount,
+        failedNos: [...leftResult.failedNos, ...rightResult.failedNos],
+        message: [leftResult.message, rightResult.message].filter(Boolean).join(' | '),
+    };
+}
+
+async function deletePostsWithFallback(config, ciToken, postNos, options = {}) {
+    const batchResult = await deletePostBatch(config, ciToken, postNos, options);
+    if (batchResult.success) {
+        return {
+            successNos: [...postNos],
+            failedNos: [],
+            message: '',
+        };
+    }
+
+    if (postNos.length === 1 || batchResult.shouldSplit === false) {
+        return {
+            successNos: [],
+            failedNos: [...postNos],
+            message: postNos.length === 1
+                ? `#${postNos[0]} 삭제 실패 - ${batchResult.message}`
+                : `${postNos.length}개 배치 삭제 실패 - ${batchResult.message}`,
+        };
+    }
+
+    const midpoint = Math.ceil(postNos.length / 2);
+    const leftResult = await deletePostsWithFallback(config, ciToken, postNos.slice(0, midpoint), options);
+    const rightResult = await deletePostsWithFallback(config, ciToken, postNos.slice(midpoint), options);
+
+    return {
+        successNos: [...leftResult.successNos, ...rightResult.successNos],
         failedNos: [...leftResult.failedNos, ...rightResult.failedNos],
         message: [leftResult.message, rightResult.message].filter(Boolean).join(' | '),
     };
@@ -222,15 +299,61 @@ async function classifyPostBatch(config, ciToken, postNos, options = {}) {
     try {
         const data = JSON.parse(responseText);
         return {
-            success: isClassifyResponseSuccessful(response, data, responseText),
+            success: isManagementResponseSuccessful(response, data, responseText),
             message: JSON.stringify(data),
             shouldSplit: shouldSplitClassificationFailure(response, responseText),
         };
     } catch {
         return {
-            success: isClassifyResponseSuccessful(response, null, responseText),
+            success: isManagementResponseSuccessful(response, null, responseText),
             message: summarizeResponseText(responseText),
             shouldSplit: shouldSplitClassificationFailure(response, responseText),
+        };
+    }
+}
+
+async function deletePostBatch(config, ciToken, postNos, options = {}) {
+    if (postNos.length === 0) {
+        return { success: true, message: '' };
+    }
+
+    const url = `${config.baseUrl}/ajax/minor_manager_board_ajax/delete_list`;
+    const bodyParts = [
+        `ci_t=${encodeURIComponent(ciToken)}`,
+        `id=${encodeURIComponent(config.galleryId)}`,
+        `_GALLTYPE_=${encodeURIComponent(config.galleryType)}`,
+    ];
+
+    for (const no of postNos) {
+        bodyParts.push(`nos%5B%5D=${encodeURIComponent(String(no))}`);
+    }
+
+    const response = await dcFetchWithRetry(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-Requested-With': 'XMLHttpRequest',
+            'Referer': `${config.baseUrl}/mgallery/board/lists/?id=${config.galleryId}`,
+            'Origin': config.baseUrl,
+        },
+        body: bodyParts.join('&'),
+        signal: options.signal,
+    });
+
+    const responseText = await response.text();
+
+    try {
+        const data = JSON.parse(responseText);
+        return {
+            success: isManagementResponseSuccessful(response, data, responseText),
+            message: JSON.stringify(data),
+            shouldSplit: shouldSplitDeletionFailure(response, responseText),
+        };
+    } catch {
+        return {
+            success: isManagementResponseSuccessful(response, null, responseText),
+            message: summarizeResponseText(responseText),
+            shouldSplit: shouldSplitDeletionFailure(response, responseText),
         };
     }
 }
@@ -271,7 +394,7 @@ function chunkArray(items, chunkSize) {
     return chunks;
 }
 
-function isClassifyResponseSuccessful(response, data, responseText) {
+function isManagementResponseSuccessful(response, data, responseText) {
     if (!response.ok) {
         return false;
     }
@@ -344,6 +467,18 @@ function shouldSplitClassificationFailure(response, responseText) {
     return true;
 }
 
+function shouldSplitDeletionFailure(response, responseText) {
+    if ([401, 403].includes(response.status)) {
+        return false;
+    }
+
+    if (/(정상적인 접근이 아닙니다|권한|로그인|forbidden|denied|ci_t)/i.test(responseText || '')) {
+        return false;
+    }
+
+    return true;
+}
+
 // ============================================================
 // Export
 // ============================================================
@@ -351,6 +486,7 @@ export {
     DC_CONFIG,
     fetchPostListHTML,
     classifyPosts,
+    deletePosts,
     getCiToken,
     delay,
 };

@@ -11,6 +11,7 @@ import {
   parseBlockListRows,
   parseTargetPosts,
 } from './parser.js';
+import { parseBoardPosts } from '../post/parser.js';
 
 const STORAGE_KEY = 'ipBanSchedulerState';
 
@@ -36,6 +37,7 @@ class Scheduler {
       maxPage: 5,
       requestDelay: 500,
       cycleDelay: 1000,
+      cutoffPostNo: 0,
       banBatchSize: DEFAULT_CONFIG.banBatchSize,
       releaseScanMaxPages: 40,
       releaseRequestDelay: 100,
@@ -47,14 +49,28 @@ class Scheduler {
     };
   }
 
-  async start() {
+  async start(options = {}) {
     if (this.isRunning) {
       this.log('⚠️ 이미 실행 중입니다.');
       return;
     }
 
+    const normalizedOptions = normalizeStartOptions(options);
+    const cutoffPostNo = normalizedOptions.hasExplicitCutoff
+      ? normalizedOptions.cutoffPostNo
+      : await this.captureCutoffPostNoWithRetry();
+
+    if (normalizedOptions.source === 'monitor' && cutoffPostNo <= 0) {
+      throw new Error('IP 차단 cutoff snapshot 추출에 실패했습니다.');
+    }
+
+    this.currentPage = 0;
+    this.config.cutoffPostNo = cutoffPostNo;
+    this.config.delChk = normalizedOptions.delChk;
     this.isRunning = true;
     this.currentRunId = createRunId();
+    this.log(`🧷 ${getCutoffSourceLabel(normalizedOptions.source)} cutoff 저장 (#${cutoffPostNo})`);
+    this.log(`🗑️ 게시물 삭제 요청 설정: del_chk=${this.config.delChk ? '1' : '0'}`);
     this.log(`🟢 자동 차단 시작! (runId=${this.currentRunId})`);
     await this.saveState();
     this.ensureRunLoop();
@@ -62,8 +78,39 @@ class Scheduler {
 
   async stop() {
     this.isRunning = false;
+    this.currentPage = 0;
     this.log('🔴 자동 차단 중지.');
     await this.saveState();
+  }
+
+  async captureCutoffPostNo() {
+    let maxPostNo = 0;
+    const [minPage, maxPage] = getNormalizedPageRange(this.config);
+
+    for (let page = minPage; page <= maxPage; page += 1) {
+      const html = await fetchTargetListHTML(this.config, page);
+      const posts = parseBoardPosts(html);
+      maxPostNo = Math.max(maxPostNo, getMaxPostNo(posts));
+    }
+
+    return maxPostNo;
+  }
+
+  async captureCutoffPostNoWithRetry() {
+    try {
+      const cutoffPostNo = await this.captureCutoffPostNo();
+      if (cutoffPostNo > 0) {
+        return cutoffPostNo;
+      }
+
+      this.log('⚠️ IP 차단 cutoff snapshot 추출 실패, 1000ms 후 1회 재시도');
+      await delay(1000);
+      return await this.captureCutoffPostNo();
+    } catch (error) {
+      this.log(`⚠️ IP 차단 cutoff snapshot 추출 오류, 1000ms 후 1회 재시도 - ${error.message}`);
+      await delay(1000);
+      return await this.captureCutoffPostNo();
+    }
   }
 
   async releaseTrackedBans(options = {}) {
@@ -171,9 +218,10 @@ class Scheduler {
     while (this.isRunning) {
       try {
         this.expireStaleBans();
-        const startPage = this.currentPage > 0 ? this.currentPage : this.config.minPage;
+        const [minPage, maxPage] = getNormalizedPageRange(this.config);
+        const startPage = this.currentPage > 0 ? this.currentPage : minPage;
 
-        for (let page = startPage; page <= this.config.maxPage; page += 1) {
+        for (let page = startPage; page <= maxPage; page += 1) {
           if (!this.isRunning) {
             break;
           }
@@ -185,9 +233,13 @@ class Scheduler {
           const html = await fetchTargetListHTML(this.config, page);
           const posts = parseTargetPosts(html, this.config.headtextName || '');
           const uniquePosts = dedupeBanCandidates(posts);
-          const candidates = uniquePosts.filter((post) => !this.hasActiveBanForPost(post));
+          const cutoffPosts = uniquePosts.filter((post) => isPostAfterCutoff(post, this.config.cutoffPostNo));
+          const candidates = cutoffPosts.filter((post) => !this.hasActiveBanForPost(post));
 
-          this.log(`📄 ${page}페이지: 유동 ${posts.length}개, 고유 후보 ${uniquePosts.length}개, 신규 차단 후보 ${candidates.length}개`);
+          this.log(
+            `📄 ${page}페이지: 유동 ${posts.length}개, 고유 후보 ${uniquePosts.length}개, `
+            + `cutoff 이후 ${cutoffPosts.length}개, 신규 차단 후보 ${candidates.length}개`,
+          );
 
           if (candidates.length > 0) {
             await this.processBanCandidates(candidates);
@@ -508,6 +560,39 @@ class Scheduler {
 
 function createRunId() {
   return `run_${Date.now()}`;
+}
+
+function normalizeStartOptions(options = {}) {
+  const source = String(options?.source || 'manual').trim() || 'manual';
+  const rawCutoffPostNo = options?.cutoffPostNo;
+  const hasExplicitCutoff = rawCutoffPostNo !== undefined && rawCutoffPostNo !== null && String(rawCutoffPostNo).trim() !== '';
+  const cutoffPostNo = hasExplicitCutoff ? Number(rawCutoffPostNo) : 0;
+  const hasExplicitDelChk = options?.delChk !== undefined;
+
+  return {
+    source,
+    cutoffPostNo,
+    hasExplicitCutoff: hasExplicitCutoff && Number.isFinite(cutoffPostNo),
+    delChk: hasExplicitDelChk ? Boolean(options.delChk) : true,
+  };
+}
+
+function getCutoffSourceLabel(source) {
+  return source === 'monitor' ? '감시 자동화' : '수동 IP 차단';
+}
+
+function getNormalizedPageRange(config = {}) {
+  const minPage = Math.max(1, Number(config.minPage) || 1);
+  const maxPage = Math.max(minPage, Number(config.maxPage) || minPage);
+  return [minPage, maxPage];
+}
+
+function getMaxPostNo(posts) {
+  return posts.reduce((maxPostNo, post) => Math.max(maxPostNo, Number(post?.no) || 0), 0);
+}
+
+function isPostAfterCutoff(post, cutoffPostNo) {
+  return Number(post?.no) > (Number(cutoffPostNo) || 0);
 }
 
 function normalizeReleaseOptions(options) {

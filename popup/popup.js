@@ -488,15 +488,21 @@ function bindPostEvents() {
   dom.toggleBtn.addEventListener('change', async () => {
     const action = dom.toggleBtn.checked ? 'start' : 'stop';
     const response = await sendFeatureMessage('post', { action });
-    if (response?.success) {
-      updatePostUI(response.status);
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
     }
+
+    updatePostUI(response.status);
   });
 
   dom.saveConfigBtn.addEventListener('click', async () => {
     const config = {
       minPage: parseOptionalInt(dom.minPageInput.value, 1),
-      maxPage: parseOptionalInt(dom.maxPageInput.value, 5),
+      maxPage: parseOptionalInt(dom.maxPageInput.value, 1),
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 500),
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
     };
@@ -527,9 +533,15 @@ function bindIpEvents() {
   dom.toggleBtn.addEventListener('change', async () => {
     const action = dom.toggleBtn.checked ? 'start' : 'stop';
     const response = await sendFeatureMessage('ip', { action });
-    if (response?.success) {
-      updateIpUI(response.status);
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
     }
+
+    updateIpUI(response.status);
   });
 
   dom.saveConfigBtn.addEventListener('click', async () => {
@@ -880,7 +892,7 @@ function updatePostUI(status) {
 
   syncFeatureConfigInputs('post', [
     [dom.minPageInput, status.config?.minPage ?? 1],
-    [dom.maxPageInput, status.config?.maxPage ?? 5],
+    [dom.maxPageInput, status.config?.maxPage ?? 1],
     [dom.requestDelayInput, status.config?.requestDelay ?? 500],
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
   ]);

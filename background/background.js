@@ -106,8 +106,7 @@ async function resumeAllSchedulers() {
   const monitorAttacking = monitorOwnsChildren && schedulers.monitor.phase === MONITOR_PHASE.ATTACKING;
 
   if (monitorAttacking) {
-    await resumeStandaloneScheduler(schedulers.post, '🔁 감시 자동화 관리 대상 게시글 분류 복원');
-    await resumeStandaloneScheduler(schedulers.ip, '🔁 감시 자동화 관리 대상 IP 차단 복원');
+    // 공격 중 복원은 monitor가 initial sweep 순서를 보장하면서 child를 다시 붙인다.
   } else if (monitorOwnsChildren) {
     await stopDormantMonitorChildSchedulers();
   } else {
@@ -123,7 +122,6 @@ async function resumeAllSchedulers() {
 
   await resumeStandaloneScheduler(schedulers.commentMonitor, '🔁 저장된 댓글 감시 자동화 상태 복원');
   await resumeStandaloneScheduler(schedulers.conceptMonitor, '🔁 저장된 개념글 방어 상태 복원');
-  await resumeStandaloneScheduler(schedulers.monitor, '🔁 저장된 자동 감시 상태 복원');
 
   if (commentMonitorAttacking) {
     await schedulers.commentMonitor.ensureManagedDefenseStarted();
@@ -134,6 +132,8 @@ async function resumeAllSchedulers() {
     await schedulers.monitor.ensureManagedDefensesStarted();
     await schedulers.monitor.saveState();
   }
+
+  await resumeStandaloneScheduler(schedulers.monitor, '🔁 저장된 자동 감시 상태 복원');
 }
 
 function getScheduler(feature) {
@@ -350,9 +350,12 @@ function resetSchedulerStats(feature, scheduler) {
   }
 
   if (feature === 'monitor') {
+    scheduler.phase = MONITOR_PHASE.SEEDING;
+    scheduler.currentPollPage = 0;
     scheduler.cycleCount = 0;
     scheduler.attackHitCount = 0;
     scheduler.releaseHitCount = 0;
+    scheduler.lastPollAt = '';
     scheduler.lastMetrics = {
       snapshotPostCount: 0,
       newPostCount: 0,
@@ -360,8 +363,16 @@ function resetSchedulerStats(feature, scheduler) {
       fluidRatio: 0,
       newPosts: [],
     };
+    scheduler.lastSnapshot = [];
+    scheduler.attackSessionId = '';
     scheduler.totalAttackDetected = 0;
     scheduler.totalAttackReleased = 0;
+    scheduler.attackCutoffPostNo = 0;
+    scheduler.initialSweepCompleted = false;
+    scheduler.pendingInitialSweepPostNos = [];
+    scheduler.managedPostStarted = false;
+    scheduler.managedIpStarted = false;
+    scheduler.managedIpRunId = '';
     scheduler.logs = [];
   }
 }
@@ -512,15 +523,15 @@ function getMonitorManualLockMessage(feature, action) {
     return '감시 자동화를 시작하기 전에 반고닉 분류를 먼저 정지하세요.';
   }
 
-  const baseLockedActions = new Set(['start', 'stop', 'updateConfig', 'releaseTrackedBans']);
+  const baseLockedActions = new Set(['start', 'stop', 'updateConfig', 'resetStats', 'releaseTrackedBans']);
   if (schedulers.monitor.isRunning && ['post', 'semiPost', 'ip'].includes(feature) && baseLockedActions.has(action)) {
     return '감시 자동화 실행 중에는 게시글 분류 / 반고닉 분류 / IP 차단을 수동으로 조작할 수 없습니다.';
   }
 
   if (schedulers.monitor.isRunning
-    && feature === 'semiPost'
+    && feature === 'monitor'
     && action === 'resetStats') {
-    return '감시 자동화 실행 중에는 반고닉 분류 통계와 로그를 초기화할 수 없습니다.';
+    return '감시 자동화 실행 중에는 통계와 로그를 초기화할 수 없습니다.';
   }
 
   if (schedulers.commentMonitor.isRunning && feature === 'commentMonitor' && action === 'resetStats') {
@@ -669,6 +680,7 @@ function resetPostSchedulerState(message) {
   scheduler.currentPage = 0;
   scheduler.totalClassified = 0;
   scheduler.cycleCount = 0;
+  scheduler.config.cutoffPostNo = 0;
   scheduler.logs = [];
   scheduler.log(message);
 }
@@ -693,6 +705,8 @@ function resetIpSchedulerState(message) {
   scheduler.currentRunId = '';
   scheduler.activeBans = [];
   scheduler.isReleaseRunning = false;
+  scheduler.config.cutoffPostNo = 0;
+  scheduler.config.delChk = false;
   scheduler.logs = [];
   scheduler.log(message);
 }
@@ -714,6 +728,9 @@ function resetMonitorSchedulerState(message) {
   };
   scheduler.lastSnapshot = [];
   scheduler.attackSessionId = '';
+  scheduler.attackCutoffPostNo = 0;
+  scheduler.initialSweepCompleted = false;
+  scheduler.pendingInitialSweepPostNos = [];
   scheduler.managedPostStarted = false;
   scheduler.managedIpStarted = false;
   scheduler.managedIpRunId = '';
