@@ -53,11 +53,6 @@
       </div>
 
       <div class="llm-auth-box">
-        <span id="geminiAuthStatus" class="llm-auth-status">⚪ Gemini 로그인 상태 확인 전</span>
-        <span id="geminiAuthDetail" class="llm-auth-email">-</span>
-      </div>
-
-      <div class="llm-auth-box">
         <span id="loginAuthStatus" class="llm-auth-status">⚪ login 자동화 비활성화</span>
         <span id="loginAuthDetail" class="llm-auth-email">-</span>
       </div>
@@ -229,12 +224,7 @@ npm run start</textarea>
       </div>
 
       <div class="helper-guide-block">
-        <span class="status-label">4. Gemini 로그인 상태 확인</span>
-        <textarea class="helper-guide-textarea" readonly>Invoke-WebRequest http://127.0.0.1:4317/gemini-auth-health | Select-Object -Expand Content</textarea>
-      </div>
-
-      <div class="helper-guide-block">
-        <span class="status-label">5. Windows에서 여전히 Gemini CLI를 못 찾을 때</span>
+        <span class="status-label">4. Windows에서 여전히 Gemini CLI를 못 찾을 때</span>
         <textarea class="helper-guide-textarea" readonly>$env:GEMINI_COMMAND="gemini.cmd"
 cd C:\Users\eorb915\projects\dc_defense_suite\projects\dc_auto_bot\helper
 npm run start</textarea>

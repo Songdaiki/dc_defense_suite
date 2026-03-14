@@ -7,8 +7,6 @@ const LLM_STORAGE_KEY = 'reportBotLlmState';
 const LOGIN_AUTOMATION_RUNTIME_KEY = 'reportBotLoginAutomationRuntime';
 const HELPER_HEALTH_CACHE_MS = 1500;
 const HELPER_HEALTH_TIMEOUT_MS = 3000;
-const GEMINI_AUTH_HEALTH_CACHE_MS = 2 * 60 * 1000;
-const GEMINI_AUTH_HEALTH_TIMEOUT_MS = 12000;
 const LOGIN_CHECK_ALARM_NAME = 'loginSessionCheck';
 const LOGIN_CHECK_INTERVAL_MINUTES = 0.5;
 const LOGIN_HEALTH_CACHE_MS = 25000;
@@ -40,17 +38,6 @@ const helperHealthState = {
   lastCheckAtMs: 0,
 };
 
-const geminiAuthHealthState = {
-  status: 'unknown',
-  checkedAt: '',
-  message: 'Gemini 로그인 상태를 아직 확인하지 않았습니다.',
-  endpoint: '',
-  responseTimeMs: 0,
-  details: null,
-  pendingPromise: null,
-  lastCheckAtMs: 0,
-};
-
 const loginAutomationState = {
   status: 'disabled',
   checkedAt: '',
@@ -66,7 +53,6 @@ const loginAutomationState = {
 };
 
 scheduler.ensureLoginSession = ensureLoginSessionBeforeAction;
-scheduler.ensureGeminiAuth = ensureGeminiAuthBeforeJudge;
 scheduler.handleLoginAccessFailure = handleLoginAccessFailure;
 
 void initialize();
@@ -152,11 +138,6 @@ async function handleMessage(message) {
   switch (message.action) {
     case 'getStatus':
       await refreshHelperHealth();
-      if (getHelperHealthSnapshot().isHealthy) {
-        void refreshGeminiAuthHealth();
-      } else {
-        syncGeminiAuthHealthWithHelper(getHelperHealthSnapshot());
-      }
       return { success: true, status: buildCombinedStatus() };
 
     case 'start':
@@ -168,20 +149,6 @@ async function handleMessage(message) {
 
     case 'refreshHelperHealth':
       await refreshHelperHealth(true);
-      if (getHelperHealthSnapshot().isHealthy) {
-        await refreshGeminiAuthHealth(true);
-      } else {
-        syncGeminiAuthHealthWithHelper(getHelperHealthSnapshot());
-      }
-      return { success: true, status: buildCombinedStatus() };
-
-    case 'refreshGeminiAuthHealth':
-      await refreshHelperHealth(true);
-      if (getHelperHealthSnapshot().isHealthy) {
-        await refreshGeminiAuthHealth(true);
-      } else {
-        syncGeminiAuthHealthWithHelper(getHelperHealthSnapshot());
-      }
       return { success: true, status: buildCombinedStatus() };
 
     case 'updateConfig':
@@ -230,7 +197,6 @@ function buildCombinedStatus() {
       helperEndpoint: scheduler.config.cliHelperEndpoint || '',
       helperTimeoutMs: scheduler.config.cliHelperTimeoutMs || 240000,
       helperHealth: getHelperHealthSnapshot(),
-      geminiAuthHealth: getGeminiAuthHealthSnapshot(),
       config: {
         cliHelperEndpoint: scheduler.config.cliHelperEndpoint || '',
         cliHelperTimeoutMs: scheduler.config.cliHelperTimeoutMs || 240000,
@@ -338,7 +304,6 @@ async function updateConfig(config) {
 
   scheduler.config = nextConfig;
   invalidateHelperHealth();
-  invalidateGeminiAuthHealth();
 
   if (reportTargetChanged || galleryChanged) {
     scheduler.phase = 'IDLE';
@@ -364,12 +329,7 @@ async function updateConfig(config) {
   ) {
     await reconcileLoginAutomation();
   }
-  const helperHealth = await refreshHelperHealth(true);
-  if (helperHealth.isHealthy) {
-    void refreshGeminiAuthHealth(true);
-  } else {
-    syncGeminiAuthHealthWithHelper(helperHealth);
-  }
+  await refreshHelperHealth(true);
   return { success: true, status: buildCombinedStatus() };
 }
 
@@ -393,19 +353,9 @@ async function updateLoginAutomation(config) {
 async function startAutomation() {
   const helperHealth = await refreshHelperHealth(true);
   if (!helperHealth.isHealthy) {
-    syncGeminiAuthHealthWithHelper(helperHealth);
     return {
       success: false,
       message: `CLI helper 상태를 확인하세요. ${helperHealth.message}`,
-      status: buildCombinedStatus(),
-    };
-  }
-
-  const geminiAuthHealth = await refreshGeminiAuthHealth(true);
-  if (!geminiAuthHealth.isHealthy) {
-    return {
-      success: false,
-      message: `Gemini 로그인 상태를 확인하세요. ${geminiAuthHealth.message}`,
       status: buildCombinedStatus(),
     };
   }
@@ -475,19 +425,9 @@ async function runLlmTest(targetUrl, reportReason) {
 
   const helperHealth = await refreshHelperHealth(true);
   if (!helperHealth.isHealthy) {
-    syncGeminiAuthHealthWithHelper(helperHealth);
     return {
       success: false,
       message: `CLI helper 상태를 확인하세요. ${helperHealth.message}`,
-      status: buildCombinedStatus(),
-    };
-  }
-
-  const geminiAuthHealth = await refreshGeminiAuthHealth(true);
-  if (!geminiAuthHealth.isHealthy) {
-    return {
-      success: false,
-      message: `Gemini 로그인 상태를 확인하세요. ${geminiAuthHealth.message}`,
       status: buildCombinedStatus(),
     };
   }
@@ -662,29 +602,6 @@ async function runLlmTest(targetUrl, reportReason) {
   };
 }
 
-async function ensureGeminiAuthBeforeJudge() {
-  const helperHealth = await refreshHelperHealth();
-  if (!helperHealth.isHealthy) {
-    syncGeminiAuthHealthWithHelper(helperHealth);
-    return {
-      success: false,
-      message: `CLI helper 상태를 확인하세요. ${helperHealth.message}`,
-    };
-  }
-
-  const geminiAuthHealth = await refreshGeminiAuthHealth(
-    getGeminiAuthHealthSnapshot().isHealthy !== true,
-  );
-  if (geminiAuthHealth.isHealthy) {
-    return { success: true };
-  }
-
-  return {
-    success: false,
-    message: geminiAuthHealth.message || 'Gemini 로그인 상태를 확인하세요.',
-  };
-}
-
 function clampConfidenceThreshold(value) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) {
@@ -764,18 +681,6 @@ function getHelperHealthSnapshot() {
   };
 }
 
-function getGeminiAuthHealthSnapshot() {
-  return {
-    status: geminiAuthHealthState.status,
-    isHealthy: geminiAuthHealthState.status === 'healthy',
-    checkedAt: geminiAuthHealthState.checkedAt,
-    message: geminiAuthHealthState.message,
-    endpoint: geminiAuthHealthState.endpoint,
-    responseTimeMs: geminiAuthHealthState.responseTimeMs,
-    details: geminiAuthHealthState.details,
-  };
-}
-
 function invalidateHelperHealth() {
   helperHealthState.status = 'unknown';
   helperHealthState.checkedAt = '';
@@ -785,17 +690,6 @@ function invalidateHelperHealth() {
   helperHealthState.details = null;
   helperHealthState.lastCheckAtMs = 0;
   helperHealthState.pendingPromise = null;
-}
-
-function invalidateGeminiAuthHealth() {
-  geminiAuthHealthState.status = 'unknown';
-  geminiAuthHealthState.checkedAt = '';
-  geminiAuthHealthState.message = 'Gemini 로그인 상태를 아직 확인하지 않았습니다.';
-  geminiAuthHealthState.endpoint = '';
-  geminiAuthHealthState.responseTimeMs = 0;
-  geminiAuthHealthState.details = null;
-  geminiAuthHealthState.lastCheckAtMs = 0;
-  geminiAuthHealthState.pendingPromise = null;
 }
 
 async function refreshHelperHealth(force = false) {
@@ -925,167 +819,10 @@ function setHelperHealthState(nextState) {
   helperHealthState.lastCheckAtMs = Date.now();
 }
 
-async function refreshGeminiAuthHealth(force = false) {
-  const endpointResult = normalizeCliHelperEndpoint(scheduler.config.cliHelperEndpoint);
-  if (!endpointResult.success) {
-    setGeminiAuthHealthState({
-      status: 'misconfigured',
-      message: endpointResult.message,
-      endpoint: '',
-      responseTimeMs: 0,
-      details: null,
-    });
-    return getGeminiAuthHealthSnapshot();
-  }
-
-  const authHealthUrl = buildGeminiAuthHealthUrl(endpointResult.endpoint);
-  const authHealthRequestUrl = buildGeminiAuthHealthUrl(endpointResult.endpoint, force);
-  const now = Date.now();
-  const isCacheValid = geminiAuthHealthState.endpoint === authHealthUrl
-    && geminiAuthHealthState.status === 'healthy'
-    && (now - geminiAuthHealthState.lastCheckAtMs) < GEMINI_AUTH_HEALTH_CACHE_MS;
-
-  if (!force && isCacheValid) {
-    return getGeminiAuthHealthSnapshot();
-  }
-
-  if (geminiAuthHealthState.pendingPromise && geminiAuthHealthState.endpoint === authHealthUrl) {
-    return geminiAuthHealthState.pendingPromise;
-  }
-
-  geminiAuthHealthState.endpoint = authHealthUrl;
-  setGeminiAuthHealthState({
-    status: 'checking',
-    message: 'Gemini 로그인 상태 확인 중입니다.',
-    endpoint: authHealthUrl,
-    responseTimeMs: 0,
-    details: geminiAuthHealthState.details,
-  });
-
-  geminiAuthHealthState.pendingPromise = (async () => {
-    const controller = new AbortController();
-    const startedAt = Date.now();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-    }, GEMINI_AUTH_HEALTH_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(authHealthRequestUrl, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: {
-          'Cache-Control': 'no-cache',
-        },
-      });
-
-      const responseTimeMs = Date.now() - startedAt;
-      const responseText = await response.text();
-      const parsed = safeParseJson(responseText);
-
-      if (!response.ok) {
-        setGeminiAuthHealthState({
-          status: 'unreachable',
-          message: `Gemini auth check HTTP ${response.status}`,
-          endpoint: authHealthUrl,
-          responseTimeMs,
-          details: parsed,
-        });
-        return getGeminiAuthHealthSnapshot();
-      }
-
-      if (!parsed || typeof parsed !== 'object') {
-        setGeminiAuthHealthState({
-          status: 'invalid_response',
-          message: 'Gemini auth check 응답 형식이 올바르지 않습니다.',
-          endpoint: authHealthUrl,
-          responseTimeMs,
-          details: parsed,
-        });
-        return getGeminiAuthHealthSnapshot();
-      }
-
-      setGeminiAuthHealthState({
-        status: String(parsed.status || (parsed.success === true ? 'healthy' : 'dependency_error')),
-        message: String(parsed.message || (parsed.success === true ? 'Gemini 로그인 정상' : 'Gemini auth 확인 실패')),
-        endpoint: authHealthUrl,
-        responseTimeMs,
-        details: parsed,
-      });
-      return getGeminiAuthHealthSnapshot();
-    } catch (error) {
-      const responseTimeMs = Date.now() - startedAt;
-      const message = error?.name === 'AbortError'
-        ? `Gemini auth check timeout (${GEMINI_AUTH_HEALTH_TIMEOUT_MS}ms)`
-        : `Gemini auth 연결 실패: ${error.message}`;
-      setGeminiAuthHealthState({
-        status: 'unreachable',
-        message,
-        endpoint: authHealthUrl,
-        responseTimeMs,
-        details: null,
-      });
-      return getGeminiAuthHealthSnapshot();
-    } finally {
-      clearTimeout(timeoutId);
-      geminiAuthHealthState.pendingPromise = null;
-    }
-  })();
-
-  return geminiAuthHealthState.pendingPromise;
-}
-
-function setGeminiAuthHealthState(nextState) {
-  geminiAuthHealthState.status = String(nextState.status || 'unknown');
-  geminiAuthHealthState.checkedAt = new Date().toISOString();
-  geminiAuthHealthState.message = String(nextState.message || '');
-  geminiAuthHealthState.endpoint = String(nextState.endpoint || '');
-  geminiAuthHealthState.responseTimeMs = Math.max(0, Number(nextState.responseTimeMs) || 0);
-  geminiAuthHealthState.details = nextState.details && typeof nextState.details === 'object'
-    ? nextState.details
-    : null;
-  geminiAuthHealthState.lastCheckAtMs = Date.now();
-}
-
-function syncGeminiAuthHealthWithHelper(helperHealth = getHelperHealthSnapshot()) {
-  const helperStatus = String(helperHealth?.status || 'unknown');
-  const message = String(helperHealth?.message || '').trim();
-  const endpoint = String(helperHealth?.endpoint || '').trim();
-  const details = helperHealth?.details && typeof helperHealth.details === 'object'
-    ? { helperStatus, helperMessage: message }
-    : { helperStatus };
-
-  if (helperStatus === 'healthy') {
-    return;
-  }
-
-  const nextStatus = helperStatus === 'misconfigured'
-    ? 'misconfigured'
-    : (helperStatus === 'unknown' ? 'unknown' : 'helper_unavailable');
-  const nextMessage = helperStatus === 'misconfigured'
-    ? message
-    : (message || 'helper 연결 상태를 먼저 확인하세요.');
-
-  setGeminiAuthHealthState({
-    status: nextStatus,
-    message: nextMessage,
-    endpoint,
-    responseTimeMs: Math.max(0, Number(helperHealth?.responseTimeMs) || 0),
-    details,
-  });
-}
-
 function buildHelperHealthUrl(judgeEndpoint) {
   const url = new URL(judgeEndpoint);
   url.pathname = '/health';
   url.search = '';
-  url.hash = '';
-  return url.toString();
-}
-
-function buildGeminiAuthHealthUrl(judgeEndpoint, force = false) {
-  const url = new URL(judgeEndpoint);
-  url.pathname = '/gemini-auth-health';
-  url.search = force ? 'force=1' : '';
   url.hash = '';
   return url.toString();
 }

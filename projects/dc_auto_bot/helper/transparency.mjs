@@ -606,10 +606,6 @@ function mapFailedReasonToPublicMessage(reason) {
     return 'AI 판정 결과를 해석하지 못해 자동 처리를 중단했습니다.';
   }
 
-  if (rawReason.startsWith('Gemini 로그인 상태 확인 실패:')) {
-    return 'Gemini 로그인 상태를 확인하지 못해 자동 처리를 중단했습니다.';
-  }
-
   if (rawReason.includes('후 처리 실패: 로그인 세션 실패:')) {
     return '로그인 상태를 확인하지 못해 자동 처리를 중단했습니다.';
   }
