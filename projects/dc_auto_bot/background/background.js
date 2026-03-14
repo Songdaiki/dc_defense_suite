@@ -402,7 +402,7 @@ async function startAutomation() {
   }
 
   const geminiAuthHealth = await refreshGeminiAuthHealth(true);
-  if (!geminiAuthHealth.isHealthy) {
+  if (shouldBlockOnGeminiAuthHealth(geminiAuthHealth)) {
     return {
       success: false,
       message: `Gemini 로그인 상태를 확인하세요. ${geminiAuthHealth.message}`,
@@ -484,7 +484,7 @@ async function runLlmTest(targetUrl, reportReason) {
   }
 
   const geminiAuthHealth = await refreshGeminiAuthHealth(true);
-  if (!geminiAuthHealth.isHealthy) {
+  if (shouldBlockOnGeminiAuthHealth(geminiAuthHealth)) {
     return {
       success: false,
       message: `Gemini 로그인 상태를 확인하세요. ${geminiAuthHealth.message}`,
@@ -675,7 +675,7 @@ async function ensureGeminiAuthBeforeJudge() {
   const geminiAuthHealth = await refreshGeminiAuthHealth(
     getGeminiAuthHealthSnapshot().isHealthy !== true,
   );
-  if (geminiAuthHealth.isHealthy) {
+  if (!shouldBlockOnGeminiAuthHealth(geminiAuthHealth)) {
     return { success: true };
   }
 
@@ -683,6 +683,11 @@ async function ensureGeminiAuthBeforeJudge() {
     success: false,
     message: geminiAuthHealth.message || 'Gemini 로그인 상태를 확인하세요.',
   };
+}
+
+function shouldBlockOnGeminiAuthHealth(geminiAuthHealth) {
+  const status = String(geminiAuthHealth?.status || '');
+  return status === 'auth_required' || status === 'gemini_unavailable';
 }
 
 function clampConfidenceThreshold(value) {
