@@ -542,6 +542,7 @@ async function callCliHelperJudge(config = {}, input, signal) {
       : [],
     reportReason: String(input?.reportReason || '').trim(),
     requestLabel: String(input?.requestLabel || '').trim(),
+    authorNick: String(input?.authorNick || '').trim(),
     authorFilter: String(input?.authorFilter || '').trim() || 'unknown',
   };
 

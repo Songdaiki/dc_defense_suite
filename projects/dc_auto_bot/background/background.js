@@ -524,6 +524,7 @@ async function runLlmTest(targetUrl, reportReason) {
         imageUrls: content.imageUrls,
         reportReason,
         requestLabel: 'manual_test',
+        authorNick: authorCheck.authorNick || '',
         authorFilter,
       });
 

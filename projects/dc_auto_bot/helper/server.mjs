@@ -33,6 +33,7 @@ const DEFAULT_THUMBNAIL_BLUR_SIGMA = normalizePositiveInt(process.env.TRANSPAREN
 const DEFAULT_THUMBNAIL_QUALITY = normalizePositiveInt(process.env.TRANSPARENCY_THUMBNAIL_WEBP_QUALITY, 64);
 const COMMAND_CHECK_CACHE_MS = 5000;
 const COMMAND_CHECK_TIMEOUT_MS = 2000;
+const FORCE_ALLOW_AUTHOR_NICK = '상냥한에옹';
 const VALID_DECISIONS = new Set(['allow', 'deny', 'review']);
 const IMAGE_ANALYSIS_TIMEOUT_FAILURE_TYPE = 'image_analysis_timeout';
 const VALID_POLICY_IDS = new Set([
@@ -102,6 +103,7 @@ function buildGeminiCliPrompt(input) {
   const reportReason = truncateText(input.reportReason, MAX_REASON_LENGTH);
   const requestLabel = truncateText(input.requestLabel, 40);
   const authorFilter = truncateText(input.authorFilter, 40) || 'unknown';
+  const authorNick = truncateText(input.authorNick, 80);
   const imageUrls = input.imageUrls.slice(0, MAX_IMAGE_URLS);
   const imageFileRefs = Array.isArray(input.imageFileRefs) ? input.imageFileRefs.slice(0, MAX_IMAGE_URLS) : [];
   const imageSection = imageFileRefs.length > 0
@@ -128,9 +130,11 @@ function buildGeminiCliPrompt(input) {
     GALLERY_POLICY_SOURCE_TEXT,
     '',
     '강제 규칙:',
+    '- 정확하게 결정하되, 검토를 질질 끌지 말고 3분 안에 JSON 답변까지 끝내라.',
     '- allow는 현재 자동화가 삭제/차단을 바로 진행해도 되는 경우에만 사용한다.',
     '- deny는 운영 규정 위반이 아니거나 자동 삭제/차단을 하면 안 되는 경우에 사용한다.',
     '- review는 애매하거나 운영자 확인이 필요한 경우에 사용한다.',
+    `- 게시물 작성자가 "${FORCE_ALLOW_AUTHOR_NICK}"이면 다른 규칙보다 우선해 무조건 삭제 승인으로 처리해라. 이 경우 decision은 "allow", confidence는 1, policy_ids는 ["P1"]로 두고 reason에는 작성자 강제 승인 규칙 적용이라고 명시해라.`,
     '- policy_ids가 ["NONE"]이면 decision은 반드시 "deny"여야 한다.',
     '- allow는 최소 1개 이상의 P1~P15 위반이 명확할 때만 사용한다.',
     '- 개념글 제한만 필요한 경우처럼 삭제/차단 자동화와 맞지 않는 경우는 review를 사용한다.',
@@ -175,6 +179,8 @@ function buildGeminiCliPrompt(input) {
     '}',
     '',
     `대상 게시물 URL:\n${input.targetUrl}`,
+    '',
+    `게시물 작성자 닉네임:\n${authorNick || '없음'}`,
     '',
     `작성자 필터 결과:\n${authorFilter}`,
     '',
@@ -235,9 +241,33 @@ function sanitizeJudgeRequest(input) {
         : [],
       reportReason: String(input?.reportReason || '').trim(),
       requestLabel: String(input?.requestLabel || '').trim(),
+      authorNick: String(input?.authorNick || '').trim(),
       authorFilter: String(input?.authorFilter || '').trim() || 'unknown',
       imageFileRefs: [],
     },
+  };
+}
+
+function isForceAllowAuthorNick(value) {
+  return String(value || '').trim() === FORCE_ALLOW_AUTHOR_NICK;
+}
+
+function buildForceAllowAuthorDecision(authorNick) {
+  const reasonNick = String(authorNick || '').trim() || FORCE_ALLOW_AUTHOR_NICK;
+  const rawDecision = {
+    decision: 'allow',
+    confidence: 1,
+    policy_ids: ['P1'],
+    reason: `작성자 강제 승인 규칙 적용 (${reasonNick})`,
+  };
+
+  return {
+    success: true,
+    decision: rawDecision.decision,
+    confidence: rawDecision.confidence,
+    policy_ids: rawDecision.policy_ids,
+    reason: rawDecision.reason,
+    rawText: JSON.stringify(rawDecision),
   };
 }
 
@@ -1040,6 +1070,12 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
           success: false,
           message: sanitized.message,
         });
+        return;
+      }
+
+      if (isForceAllowAuthorNick(sanitized.payload.authorNick)) {
+        const forcedDecision = buildForceAllowAuthorDecision(sanitized.payload.authorNick);
+        writeJson(response, 200, forcedDecision);
         return;
       }
 

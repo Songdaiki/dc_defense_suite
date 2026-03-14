@@ -31,6 +31,7 @@ const POST_DOMINANT_RATIO_THRESHOLD = 0.9;
 const RECENT_REGULAR_POST_LIMIT = 100;
 const RECENT_REGULAR_POST_CACHE_MS = 5000;
 const RECENT_REGULAR_POST_MAX_PAGES = 10;
+const FORCE_ALLOW_AUTHOR_NICK = '상냥한에옹';
 const PHASE = {
   IDLE: 'IDLE',
   SEEDING: 'SEEDING',
@@ -478,6 +479,7 @@ class Scheduler {
         imageUrls: content.imageUrls,
         reportReason: parsedCommand.reasonText,
         requestLabel: trustedUser.label,
+        authorNick: authorCheck.authorNick || '',
         authorFilter: mapAuthorFilterResult(authorCheck),
       },
       signal,
@@ -780,26 +782,47 @@ class Scheduler {
       ...(config || {}),
     };
 
-    if (evaluationConfig.applyAuthorFilter === false) {
-      return { success: true, allowed: true, message: '작성자 필터 비활성화' };
+    const authorMeta = extractPostAuthorMeta(pageHtml);
+    const authorNick = authorMeta.success ? String(authorMeta.nick || '').trim() : '';
+    if (authorNick === FORCE_ALLOW_AUTHOR_NICK) {
+      return {
+        success: true,
+        allowed: true,
+        message: `강제 허용 작성자(${authorNick})`,
+        authorNick,
+        forcedAllow: true,
+      };
     }
 
-    const authorMeta = extractPostAuthorMeta(pageHtml);
+    if (evaluationConfig.applyAuthorFilter === false) {
+      return {
+        success: true,
+        allowed: true,
+        message: '작성자 필터 비활성화',
+        authorNick,
+      };
+    }
+
     if (!authorMeta.success) {
-      return { success: false, message: authorMeta.message };
+      return { success: false, message: authorMeta.message, authorNick: '' };
     }
 
     if (!authorMeta.uid && authorMeta.ip) {
-      return { success: true, allowed: true, message: `유동(${authorMeta.nick || 'ㅇㅇ'} ${authorMeta.ip})` };
+      return {
+        success: true,
+        allowed: true,
+        message: `유동(${authorMeta.nick || 'ㅇㅇ'} ${authorMeta.ip})`,
+        authorNick,
+      };
     }
 
     if (!authorMeta.uid) {
-      return { success: false, message: '작성자 uid/ip를 모두 확인하지 못했습니다.' };
+      return { success: false, message: '작성자 uid/ip를 모두 확인하지 못했습니다.', authorNick };
     }
 
     const stats = await fetchUserActivityStats(evaluationConfig, authorMeta.uid, signal);
     if (!stats.success) {
-      return { success: false, message: `활동 통계 조회 실패: ${stats.message}` };
+      return { success: false, message: `활동 통계 조회 실패: ${stats.message}`, authorNick };
     }
 
     const threshold = Math.max(1, Number(evaluationConfig.lowActivityThreshold) || 100);
@@ -813,6 +836,7 @@ class Scheduler {
         success: true,
         allowed: true,
         message: `깡계(${authorMeta.nick || authorMeta.uid} ${totalActivityCount})`,
+        authorNick,
       };
     }
 
@@ -821,6 +845,7 @@ class Scheduler {
         success: true,
         allowed: true,
         message: `글편중(${authorMeta.nick || authorMeta.uid} 글 ${postCount} 댓글 ${commentCount} 비중 ${postRatio.toFixed(2)})`,
+        authorNick,
       };
     }
 
@@ -828,6 +853,7 @@ class Scheduler {
       success: true,
       allowed: false,
       message: `일반 계정(${authorMeta.nick || authorMeta.uid} 글 ${postCount} 댓글 ${commentCount} 비중 ${postRatio.toFixed(2)})`,
+      authorNick,
     };
   }
 
