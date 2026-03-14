@@ -43,6 +43,7 @@ const llmTestResult = document.getElementById('llmTestResult');
 let currentStatus = null;
 let configDirty = false;
 let loginConfigDirty = false;
+let isRefreshingStatus = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
   bindEvents();
@@ -204,12 +205,21 @@ function bindEvents() {
 }
 
 async function refreshStatus() {
-  const response = await sendMessage({ action: 'getStatus' });
-  if (!response?.success) {
+  if (isRefreshingStatus) {
     return;
   }
 
-  applyStatus(response.status);
+  isRefreshingStatus = true;
+  try {
+    const response = await sendMessage({ action: 'getStatus' });
+    if (!response?.success) {
+      return;
+    }
+
+    applyStatus(response.status);
+  } finally {
+    isRefreshingStatus = false;
+  }
 }
 
 function applyStatus(status) {
