@@ -414,6 +414,12 @@ a:hover {
   border: 1px solid #e0e0e0;
 }
 
+.badge-filtered {
+  background: #fdecea;
+  color: #c62828;
+  border: 1px solid #ef9a9a;
+}
+
 .badge-done {
   background: #e0f2f1;
   color: #00695c;

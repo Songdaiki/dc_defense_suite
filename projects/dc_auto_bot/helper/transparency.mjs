@@ -410,6 +410,9 @@ function getDecisionLabel(decision, status = 'completed', record = null) {
     if (record && isLikelyAlreadyProcessedPost(record)) {
       return { label: '처리 완료', className: 'done' };
     }
+    if (record && isAuthorFilterFailed(record)) {
+      return { label: '조건 부합', className: 'filtered' };
+    }
     return { label: '처리 실패', className: 'unknown' };
   }
 
@@ -525,6 +528,15 @@ function isLikelyAlreadyProcessedPost(record) {
       rawReason.includes('본문 작성자 메타를 찾지 못했습니다.')
       || rawReason.includes('작성자 uid/ip를 모두 확인하지 못했습니다.')
     );
+}
+
+/**
+ * 작성자 필터 미통과로 자동 처리를 건너뛴 케이스인지 확인
+ * (일반 활동 계정으로 분류된 경우)
+ */
+function isAuthorFilterFailed(record) {
+  const rawReason = String(record?.reason || '').trim();
+  return rawReason.startsWith('v2 core 작성자 필터 미통과:');
 }
 
 function formatReason(record) {
