@@ -153,10 +153,7 @@ async function handleMessage(message) {
     case 'getStatus':
       await refreshHelperHealth();
       if (getHelperHealthSnapshot().isHealthy) {
-        const geminiAuthHealth = getGeminiAuthHealthSnapshot();
-        if (geminiAuthHealth.status === 'unknown') {
-          void refreshGeminiAuthHealth();
-        }
+        await refreshGeminiAuthHealth();
       } else {
         syncGeminiAuthHealthWithHelper(getHelperHealthSnapshot());
       }
