@@ -76,6 +76,7 @@ function renderTransparencyListPage({ records, nextCursor, total, healthStatus, 
 function renderTransparencyDetailPage(record, healthStatus, options = {}) {
   const showDebugReason = Boolean(options?.showDebugReason);
   const decision = getDecisionLabel(record.decision, record.status);
+  const displayTitle = getDisplayTitle(record);
   const autoRefreshScript = record.status === 'pending'
     ? `
       <script>
@@ -98,7 +99,7 @@ function renderTransparencyDetailPage(record, healthStatus, options = {}) {
   const debugReasonSection = buildDebugReasonSection(record, formattedReason, showDebugReason);
 
   return renderPageLayout(
-    `${record.publicTitle || record.targetPostNo || '운영 내역'}`,
+    `${displayTitle || record.targetPostNo || '운영 내역'}`,
     `
       <div class="main-content">
         <a class="back-link" href="/transparency">목록으로 돌아가기</a>
@@ -108,7 +109,7 @@ function renderTransparencyDetailPage(record, healthStatus, options = {}) {
             <div class="detail-header-top">
               <span class="badge badge-${escapeAttribute(decision.className)}">${escapeHtml(decision.label)}</span>
             </div>
-            <h1 class="detail-title">${escapeHtml(record.publicTitle || '(제목 없음)')}</h1>
+            <h1 class="detail-title">${escapeHtml(displayTitle)}</h1>
             <div class="detail-meta">
               <span><span class="detail-meta-label">기록 시각</span> ${escapeHtml(formatDateTime(record.createdAt))}</span>
               <span><span class="detail-meta-label">게시물 번호</span> ${escapeHtml(record.targetPostNo || '-')}</span>
@@ -312,7 +313,7 @@ function renderSidebar(total, stats) {
 function renderTableRow(record) {
   const decision = getDecisionLabel(record.decision, record.status);
   const postNo = record.targetPostNo || '-';
-  const title = record.publicTitle || '(제목 없음)';
+  const title = getDisplayTitle(record);
   const detailHref = `/transparency/${encodeURIComponent(record.id)}`;
   const policyText = formatPolicyIds(record.policyIds);
 
@@ -489,6 +490,38 @@ function formatPolicyIds(values, status = 'completed') {
   return policyIds
     .map((policyId) => (policyId.toUpperCase() === 'NONE' ? '위반 없음' : policyId))
     .join(', ');
+}
+
+function getDisplayTitle(record) {
+  const rawTitle = String(record?.publicTitle || '').trim();
+  if (rawTitle && rawTitle !== '(제목 없음)') {
+    return rawTitle;
+  }
+
+  if (isLikelyAlreadyProcessedPost(record)) {
+    return '이미 처리된 게시물입니다.';
+  }
+
+  return rawTitle || '(제목 없음)';
+}
+
+function isLikelyAlreadyProcessedPost(record) {
+  const status = String(record?.status || '').trim().toLowerCase();
+  if (status !== 'failed') {
+    return false;
+  }
+
+  const rawBody = String(record?.publicBody || '').trim();
+  if (rawBody) {
+    return false;
+  }
+
+  const rawReason = String(record?.reason || '').trim();
+  return rawReason.startsWith('작성자 판정 실패:')
+    && (
+      rawReason.includes('본문 작성자 메타를 찾지 못했습니다.')
+      || rawReason.includes('작성자 uid/ip를 모두 확인하지 못했습니다.')
+    );
 }
 
 function formatReason(record) {
