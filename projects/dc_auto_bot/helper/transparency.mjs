@@ -413,6 +413,9 @@ function getDecisionLabel(decision, status = 'completed', record = null) {
     if (record && isAuthorFilterFailed(record)) {
       return { label: '처리 불가', className: 'filtered' };
     }
+    if (record && isInternalErrorFailed(record)) {
+      return { label: '강제 승인', className: 'forced' };
+    }
     return { label: '처리 실패', className: 'unknown' };
   }
 
@@ -537,6 +540,14 @@ function isLikelyAlreadyProcessedPost(record) {
 function isAuthorFilterFailed(record) {
   const rawReason = String(record?.reason || '').trim();
   return rawReason.startsWith('v2 core 작성자 필터 미통과:');
+}
+
+/**
+ * reason이 비어있어 내부 오류로 처리된 케이스인지 확인
+ */
+function isInternalErrorFailed(record) {
+  const rawReason = String(record?.reason || '').trim();
+  return rawReason === '';
 }
 
 function formatReason(record) {

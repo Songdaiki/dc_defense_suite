@@ -420,6 +420,12 @@ a:hover {
   border: 1px solid #ef9a9a;
 }
 
+.badge-forced {
+  background: #1a1a1a;
+  color: #ffffff;
+  border: 1px solid #000000;
+}
+
 .badge-done {
   background: #e0f2f1;
   color: #00695c;
