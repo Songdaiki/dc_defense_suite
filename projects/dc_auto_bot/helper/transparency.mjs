@@ -75,7 +75,7 @@ function renderTransparencyListPage({ records, nextCursor, total, healthStatus, 
 
 function renderTransparencyDetailPage(record, healthStatus, options = {}) {
   const showDebugReason = Boolean(options?.showDebugReason);
-  const decision = getDecisionLabel(record.decision, record.status);
+  const decision = getDecisionLabel(record.decision, record.status, record);
   const displayTitle = getDisplayTitle(record);
   const autoRefreshScript = record.status === 'pending'
     ? `
@@ -311,7 +311,7 @@ function renderSidebar(total, stats) {
 }
 
 function renderTableRow(record) {
-  const decision = getDecisionLabel(record.decision, record.status);
+  const decision = getDecisionLabel(record.decision, record.status, record);
   const postNo = record.targetPostNo || '-';
   const title = getDisplayTitle(record);
   const detailHref = `/transparency/${encodeURIComponent(record.id)}`;
@@ -401,12 +401,15 @@ function countDecisions(records) {
   return { allow, deny, review };
 }
 
-function getDecisionLabel(decision, status = 'completed') {
+function getDecisionLabel(decision, status = 'completed', record = null) {
   const normalizedStatus = String(status || '').trim().toLowerCase();
   if (normalizedStatus === 'pending') {
     return { label: '검토중', className: 'pending' };
   }
   if (normalizedStatus === 'failed') {
+    if (record && isLikelyAlreadyProcessedPost(record)) {
+      return { label: '처리 완료', className: 'done' };
+    }
     return { label: '처리 실패', className: 'unknown' };
   }
 

@@ -414,6 +414,12 @@ a:hover {
   border: 1px solid #e0e0e0;
 }
 
+.badge-done {
+  background: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #90caf9;
+}
+
 /* ============ Pager ============ */
 .pager {
   display: flex;
