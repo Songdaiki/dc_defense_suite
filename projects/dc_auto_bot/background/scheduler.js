@@ -489,6 +489,18 @@ class Scheduler {
         if (!loginSessionResult.success) {
           this.totalFailedCommands += 1;
           this.addLog(`❌ [${trustedUser.label}] 로그인 세션 실패 #${parsedCommand.targetPostNo} - ${loginSessionResult.message}`);
+          await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+            id: recordId,
+            source: 'auto_report',
+            status: 'failed',
+            targetUrl: parsedCommand.targetUrl,
+            targetPostNo: parsedCommand.targetPostNo,
+            reportReason: parsedCommand.reasonText,
+            title: content.title,
+            bodyText: content.bodyText,
+            imageUrls: content.imageUrls,
+            reason: buildTimeoutFallbackFailureReason(helperTimeoutFallback, `로그인 세션 실패: ${loginSessionResult.message}`),
+          }), signal);
           return;
         }
 
@@ -525,6 +537,18 @@ class Scheduler {
 
         this.totalFailedCommands += 1;
         this.addLog(`❌ [${trustedUser.label}] ${helperTimeoutFallback.logLabel} 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`);
+        await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
+          id: recordId,
+          source: 'auto_report',
+          status: 'failed',
+          targetUrl: parsedCommand.targetUrl,
+          targetPostNo: parsedCommand.targetPostNo,
+          reportReason: parsedCommand.reasonText,
+          title: content.title,
+          bodyText: content.bodyText,
+          imageUrls: content.imageUrls,
+          reason: buildTimeoutFallbackFailureReason(helperTimeoutFallback, actionResult.message || '응답 확인 실패'),
+        }), signal);
         await this.notifyLoginAccessFailure(actionResult.message || '');
         return;
       }
@@ -955,6 +979,12 @@ function getHelperTimeoutFallback(helperResult, content) {
   }
 
   return null;
+}
+
+function buildTimeoutFallbackFailureReason(helperTimeoutFallback, failureMessage) {
+  const fallbackReason = String(helperTimeoutFallback?.reason || '').trim() || 'LLM helper timeout fallback';
+  const detail = String(failureMessage || '').trim() || '응답 확인 실패';
+  return `${fallbackReason} 후 처리 실패: ${detail}`;
 }
 
 function normalizeDailyUsage(dailyUsage) {

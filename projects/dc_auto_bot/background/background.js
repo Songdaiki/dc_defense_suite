@@ -19,7 +19,7 @@ const LOGIN_NOTIFICATION_ID = 'report-bot-login-automation';
 const SESSION_CHECK_TAB_HASH = '#dc-auto-bot-session-check';
 const LOGIN_FAILURE_URL_TOKEN = '/login/member_check';
 const LOGIN_PROMPT_TEXT = '로그인해 주세요.';
-const LOGIN_ACCESS_FAILURE_MESSAGES = ['정상적인 접근이 아닙니다', '관리권한이 없습니다'];
+const LOGIN_ACCESS_FAILURE_MESSAGES = ['정상적인접근이아닙니다', '관리권한이없습니다'];
 
 const llmState = {
   lastTestResult: null,
@@ -1423,7 +1423,7 @@ async function handleLoginAccessFailure(message) {
     return;
   }
 
-  const normalizedMessage = String(message || '');
+  const normalizedMessage = normalizeLoginAccessFailureMessage(message);
   if (!LOGIN_ACCESS_FAILURE_MESSAGES.some((keyword) => normalizedMessage.includes(keyword))) {
     return;
   }
@@ -1433,6 +1433,10 @@ async function handleLoginAccessFailure(message) {
     passive: false,
     reason: 'access_failure',
   });
+}
+
+function normalizeLoginAccessFailureMessage(message) {
+  return String(message || '').replace(/\s+/g, '').trim();
 }
 
 function isSessionCheckTab(tab, targetUrl) {

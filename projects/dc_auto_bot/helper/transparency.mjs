@@ -573,6 +573,18 @@ function mapFailedReasonToPublicMessage(reason) {
     return 'AI 판정 결과를 해석하지 못해 자동 처리를 중단했습니다.';
   }
 
+  if (rawReason.includes('후 처리 실패: 로그인 세션 실패:')) {
+    return '로그인 상태를 확인하지 못해 자동 처리를 중단했습니다.';
+  }
+
+  if (rawReason.includes('후 처리 실패: 관리 권한이 없습니다.')) {
+    return '관리자 권한을 확인하지 못해 자동 처리를 중단했습니다.';
+  }
+
+  if (rawReason.includes('후 처리 실패:')) {
+    return '자동 삭제 시도 중 오류가 발생해 처리를 중단했습니다.';
+  }
+
   return '자동 처리 중 내부 오류가 발생했습니다.';
 }
 
