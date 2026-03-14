@@ -32,6 +32,7 @@ const FEATURE_DOM = {
     totalUnclearCount: document.getElementById('conceptMonitorTotalUnclearCount'),
     logList: document.getElementById('conceptMonitorLogList'),
     pollIntervalMsInput: document.getElementById('conceptMonitorPollIntervalMs'),
+    snapshotPostLimitInput: document.getElementById('conceptMonitorSnapshotPostLimit'),
     fluidRatioThresholdInput: document.getElementById('conceptMonitorFluidRatioThreshold'),
     testModeInput: document.getElementById('conceptMonitorTestMode'),
     saveConfigBtn: document.getElementById('conceptMonitorSaveConfigBtn'),
@@ -297,6 +298,7 @@ function bindConceptMonitorEvents() {
 
     const config = {
       pollIntervalMs: Math.max(1000, parseOptionalInt(dom.pollIntervalMsInput.value, 30000)),
+      snapshotPostLimit: Math.max(1, parseOptionalInt(dom.snapshotPostLimitInput.value, 5)),
       fluidRatioThresholdPercent: clampPercent(dom.fluidRatioThresholdInput.value, 90, 0),
       testMode: nextTestMode,
     };
@@ -762,6 +764,7 @@ function updateConceptMonitorUI(status) {
 
   syncFeatureConfigInputs('conceptMonitor', [
     [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 30000],
+    [dom.snapshotPostLimitInput, status.config?.snapshotPostLimit ?? 5],
     [dom.fluidRatioThresholdInput, status.config?.fluidRatioThresholdPercent ?? 90],
     [dom.testModeInput, status.config?.testMode !== false],
   ]);
@@ -1049,6 +1052,7 @@ function getFeatureConfigInputs(feature) {
   if (feature === 'conceptMonitor') {
     return [
       dom.pollIntervalMsInput,
+      dom.snapshotPostLimitInput,
       dom.fluidRatioThresholdInput,
       dom.testModeInput,
     ];

@@ -11,7 +11,7 @@ import {
 } from './parser.js';
 
 const STORAGE_KEY = 'conceptMonitorSchedulerState';
-const SNAPSHOT_LIMIT = 5;
+const DEFAULT_SNAPSHOT_POST_LIMIT = 5;
 const BLOCK_COOLDOWN_MS = 30 * 60 * 1000;
 const TARGET_INSPECT_DELAY_MS = 5000;
 const INSPECT_DELAY_JITTER_MS = 500;
@@ -36,6 +36,7 @@ class Scheduler {
     this.config = {
       galleryId: DEFAULT_CONFIG.galleryId,
       pollIntervalMs: 30000,
+      snapshotPostLimit: DEFAULT_SNAPSHOT_POST_LIMIT,
       fluidRatioThresholdPercent: 90,
       testMode: true,
     };
@@ -122,7 +123,8 @@ class Scheduler {
     this.currentPostNo = 0;
 
     const listHtml = await fetchConceptListHTML(this.config);
-    const snapshotPosts = parseConceptListPosts(listHtml, SNAPSHOT_LIMIT);
+    const snapshotLimit = Math.max(1, Number(this.config.snapshotPostLimit) || DEFAULT_SNAPSHOT_POST_LIMIT);
+    const snapshotPosts = parseConceptListPosts(listHtml, snapshotLimit);
     this.lastScanCount = snapshotPosts.length;
 
     if (snapshotPosts.length === 0) {
@@ -165,6 +167,12 @@ class Scheduler {
     }
 
     const progressLabel = formatProgressLabel(position, totalPosts);
+    const currentHead = normalizeBoardHead(post?.currentHead);
+
+    if (!isGeneralBoardHead(currentHead)) {
+      this.log(`ℹ️ ${progressLabel} #${postNo} 스킵 - 머릿말 ${formatBoardHeadLabel(currentHead)}는 일반 글이 아님`);
+      return;
+    }
 
     let viewHtml = '';
     try {
@@ -366,6 +374,7 @@ class Scheduler {
         ...this.config,
         ...(schedulerState.config || {}),
         galleryId: String(schedulerState.config?.galleryId || this.config.galleryId).trim() || DEFAULT_CONFIG.galleryId,
+        snapshotPostLimit: Math.max(1, Number(schedulerState.config?.snapshotPostLimit) || this.config.snapshotPostLimit),
         testMode: schedulerState.config?.testMode !== false,
       };
     } catch (error) {
@@ -464,6 +473,19 @@ function formatProgressLabel(position, totalPosts) {
   }
 
   return `검사 ${normalizedPosition}/${normalizedTotal}`;
+}
+
+function normalizeBoardHead(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function isGeneralBoardHead(currentHead) {
+  return normalizeBoardHead(currentHead) === '일반';
+}
+
+function formatBoardHeadLabel(currentHead) {
+  const normalized = normalizeBoardHead(currentHead);
+  return normalized || '(없음)';
 }
 
 async function delayWhileRunning(scheduler, waitMs) {
