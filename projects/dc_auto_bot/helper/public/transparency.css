@@ -809,8 +809,9 @@ a:hover {
   }
 
 
-  .col-date {
-    width: 52px;
+  .col-date,
+  .cell-date {
+    display: none;
   }
 
   .badge {
