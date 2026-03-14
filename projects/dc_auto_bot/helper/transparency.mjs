@@ -543,11 +543,43 @@ function isAuthorFilterFailed(record) {
 }
 
 /**
- * reason이 비어있어 내부 오류로 처리된 케이스인지 확인
+ * 알려진 실패 사유에 해당하지 않는 케이스인지 확인
+ * (reason이 비어있거나, mapFailedReasonToPublicMessage에서 fallback에 도달하는 경우)
  */
 function isInternalErrorFailed(record) {
   const rawReason = String(record?.reason || '').trim();
-  return rawReason === '';
+  return !isKnownFailedReason(rawReason);
+}
+
+/**
+ * mapFailedReasonToPublicMessage에서 명시적으로 처리하는 알려진 실패 사유인지 확인
+ */
+function isKnownFailedReason(rawReason) {
+  if (!rawReason) return false;
+  if (rawReason.startsWith('작성자 판정 실패:')) return true;
+  if (rawReason.startsWith('v2 core 작성자 필터 미통과:')) return true;
+  if (rawReason.startsWith('개념글 판정 실패:')) return true;
+  if (rawReason === '개념글은 자동 삭제/차단하지 않습니다.') return true;
+  if (rawReason.startsWith('최근 100개 판정 실패:')) return true;
+  if (rawReason === '최근 100개 regular row 밖 게시물입니다.') return true;
+  if (rawReason === 'CLI helper endpoint 형식이 올바르지 않습니다.') return true;
+  if (rawReason === 'CLI helper endpoint는 http://localhost 또는 http://127.0.0.1 주소만 허용됩니다.') return true;
+  if (rawReason === 'CLI helper endpoint는 localhost 계열 주소만 허용됩니다.') return true;
+  if (rawReason.startsWith('CLI helper 연결 실패:')) return true;
+  if (rawReason === 'CLI helper 응답 대기 시간이 초과되었습니다.') return true;
+  if (rawReason === 'CLI helper 응답 JSON 파싱 실패') return true;
+  if (rawReason === 'decision 값이 올바르지 않습니다.') return true;
+  if (rawReason === 'confidence 값이 올바르지 않습니다.') return true;
+  if (rawReason === 'policy_ids가 비어 있습니다.') return true;
+  if (rawReason === 'policy_ids에 허용되지 않은 값이 포함되어 있습니다.') return true;
+  if (rawReason === 'reason 값이 비어 있습니다.') return true;
+  if (rawReason === 'policy_ids에 NONE과 다른 정책이 동시에 포함될 수 없습니다.') return true;
+  if (rawReason === 'policy_ids가 ["NONE"]이면 decision은 deny여야 합니다.') return true;
+  if (rawReason === 'P15 단독 allow는 자동 삭제/차단 대상으로 처리할 수 없습니다.') return true;
+  if (rawReason === 'allow 결정에는 최소 1개 이상의 정책 ID가 필요합니다.') return true;
+  if (rawReason === 'CLI helper 판정 실패') return true;
+  if (rawReason.includes('후 처리 실패:')) return true;
+  return false;
 }
 
 function formatReason(record) {
