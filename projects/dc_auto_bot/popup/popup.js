@@ -456,7 +456,7 @@ function formatGeminiAuthHealthStatus(geminiAuthHealth, endpoint) {
     case 'auth_required':
       return '🔴 Gemini 로그인 필요';
     case 'timeout':
-      return '🟠 Gemini 응답 지연';
+      return '🟠 Gemini 확인 지연';
     case 'cli_error':
       return '🟠 Gemini CLI 확인 필요';
     case 'dependency_error':

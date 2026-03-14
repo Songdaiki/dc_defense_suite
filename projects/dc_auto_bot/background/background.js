@@ -1020,11 +1020,12 @@ async function refreshGeminiAuthHealth(force = false) {
       return getGeminiAuthHealthSnapshot();
     } catch (error) {
       const responseTimeMs = Date.now() - startedAt;
-      const message = error?.name === 'AbortError'
+      const isTimeout = error?.name === 'AbortError';
+      const message = isTimeout
         ? `Gemini auth check timeout (${GEMINI_AUTH_HEALTH_TIMEOUT_MS}ms)`
         : `Gemini auth 연결 실패: ${error.message}`;
       setGeminiAuthHealthState({
-        status: 'unreachable',
+        status: isTimeout ? 'timeout' : 'unreachable',
         message,
         endpoint: authHealthUrl,
         responseTimeMs,
