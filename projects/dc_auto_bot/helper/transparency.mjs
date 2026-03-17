@@ -99,6 +99,7 @@ function renderTransparencyDetailPage(record, healthStatus, options = {}) {
     : '';
   const formattedReason = formatReason(record);
   const debugReasonSection = buildDebugReasonSection(record, formattedReason, showDebugReason);
+  const actionDebugSection = buildActionDebugSection(record, showDebugReason);
 
   return renderPageLayout(
     `${displayTitle || record.targetPostNo || '운영 내역'}`,
@@ -152,6 +153,7 @@ function renderTransparencyDetailPage(record, healthStatus, options = {}) {
             <h3><img class="gemini-icon" src="/gemini-icon.webp" alt="Gemini" width="14" height="14"> Gemini 판단 이유</h3>
             <p class="reason-text">${escapeHtml(formattedReason)}</p>
             ${debugReasonSection}
+            ${actionDebugSection}
           </div>
 
           <div class="detail-footer">
@@ -735,6 +737,58 @@ function buildDebugReasonSection(record, formattedReason, showDebugReason) {
     <details class="debug-reason-box">
       <summary>원문 사유 보기</summary>
       <pre class="debug-reason-text">${escapeHtml(rawReason)}</pre>
+    </details>
+  `;
+}
+
+function buildActionDebugSection(record, showDebugReason) {
+  if (!showDebugReason) {
+    return '';
+  }
+
+  const failureType = String(record?.debugFailureType || '').trim();
+  const failureStatus = Number(record?.debugFailureStatus);
+  const failureMessage = String(record?.debugFailureMessage || '').trim();
+  const failureRawText = String(record?.debugFailureRawText || '').trim();
+  const recoveryAttempted = record?.debugRecoveryAttempted === true;
+  const recoveredByLoginRetry = record?.debugRecoveredByLoginRetry === true;
+  const hasAnyDebugValue = Boolean(
+    failureType
+    || (Number.isFinite(failureStatus) && failureStatus > 0)
+    || failureMessage
+    || failureRawText
+    || recoveryAttempted
+    || recoveredByLoginRetry
+  );
+
+  if (!hasAnyDebugValue) {
+    return '';
+  }
+
+  const rows = [];
+  if (failureType) {
+    rows.push(`failureType: ${failureType}`);
+  }
+  if (Number.isFinite(failureStatus) && failureStatus > 0) {
+    rows.push(`status: ${failureStatus}`);
+  }
+  if (failureMessage) {
+    rows.push(`message: ${failureMessage}`);
+  }
+  rows.push(`recoveryAttempted: ${recoveryAttempted ? 'true' : 'false'}`);
+  rows.push(`recoveredByLoginRetry: ${recoveredByLoginRetry ? 'true' : 'false'}`);
+  if (failureRawText) {
+    rows.push(`rawText:\n${failureRawText}`);
+  }
+
+  if (rows.length === 0) {
+    return '';
+  }
+
+  return `
+    <details class="debug-reason-box">
+      <summary>삭제/차단 응답 디버그 보기</summary>
+      <pre class="debug-reason-text">${escapeHtml(rows.join('\n'))}</pre>
     </details>
   `;
 }

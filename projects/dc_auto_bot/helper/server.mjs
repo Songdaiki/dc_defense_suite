@@ -1464,6 +1464,14 @@ function sanitizeRecordRequest(input) {
   }
 
   const source = String(input.source || 'auto_report').trim();
+  const debugFailureType = String(input.debugFailureType || '').trim();
+  const debugFailureStatus = Number.isFinite(Number(input.debugFailureStatus))
+    ? Number(input.debugFailureStatus)
+    : null;
+  const debugFailureMessage = String(input.debugFailureMessage || '').trim().slice(0, 1000);
+  const debugFailureRawText = String(input.debugFailureRawText || '').trim().slice(0, 4000);
+  const debugRecoveryAttempted = input.debugRecoveryAttempted === true;
+  const debugRecoveredByLoginRetry = input.debugRecoveredByLoginRetry === true;
   if (source !== 'auto_report' && source !== 'manual_test') {
     return {
       success: false,
@@ -1492,6 +1500,12 @@ function sanitizeRecordRequest(input) {
         confidence: null,
         policyIds: [],
         reason: String(input.reason || '').trim() || '검토중',
+        debugFailureType,
+        debugFailureStatus,
+        debugFailureMessage,
+        debugFailureRawText,
+        debugRecoveryAttempted,
+        debugRecoveredByLoginRetry,
       },
     };
   }
@@ -1524,6 +1538,12 @@ function sanitizeRecordRequest(input) {
         confidence: null,
         policyIds: [],
         reason,
+        debugFailureType,
+        debugFailureStatus,
+        debugFailureMessage,
+        debugFailureRawText,
+        debugRecoveryAttempted,
+        debugRecoveredByLoginRetry,
       },
     };
   }
@@ -1569,6 +1589,12 @@ function sanitizeRecordRequest(input) {
         confidence: null,
         policyIds: [],
         reason,
+        debugFailureType,
+        debugFailureStatus,
+        debugFailureMessage,
+        debugFailureRawText,
+        debugRecoveryAttempted,
+        debugRecoveredByLoginRetry,
       },
     };
   }
@@ -1605,6 +1631,12 @@ function sanitizeRecordRequest(input) {
       confidence: validatedDecision.confidence,
       policyIds: validatedDecision.policy_ids,
       reason: validatedDecision.reason,
+      debugFailureType,
+      debugFailureStatus,
+      debugFailureMessage,
+      debugFailureRawText,
+      debugRecoveryAttempted,
+      debugRecoveredByLoginRetry,
     },
   };
 }
@@ -1637,6 +1669,12 @@ async function preparePublicRecord(input, runtimeConfig) {
     confidence: input.confidence,
     policyIds: input.policyIds,
     reason: input.reason,
+    debugFailureType: String(input.debugFailureType || '').trim(),
+    debugFailureStatus: Number.isFinite(Number(input.debugFailureStatus)) ? Number(input.debugFailureStatus) : null,
+    debugFailureMessage: String(input.debugFailureMessage || '').trim(),
+    debugFailureRawText: String(input.debugFailureRawText || '').trim(),
+    debugRecoveryAttempted: input.debugRecoveryAttempted === true,
+    debugRecoveredByLoginRetry: input.debugRecoveredByLoginRetry === true,
     blurredThumbnailPath,
     imageCount: Array.isArray(input.imageUrls) ? input.imageUrls.length : 0,
   };

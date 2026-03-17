@@ -542,7 +542,10 @@ class Scheduler {
         }
 
         this.totalFailedCommands += 1;
-        this.addLog(`❌ [${trustedUser.label}] ${helperForceAllowFallback.logLabel} 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`);
+        this.addLog(
+          `❌ [${trustedUser.label}] ${helperForceAllowFallback.logLabel} 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`
+          + buildDeleteActionDiagnosticSuffix(actionResult),
+        );
         await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
           id: recordId,
           source: 'auto_report',
@@ -554,6 +557,7 @@ class Scheduler {
           bodyText: content.bodyText,
           imageUrls: content.imageUrls,
           reason: buildHelperForceAllowFallbackFailureReason(helperForceAllowFallback, actionResult.message || '응답 확인 실패'),
+          ...buildDeleteActionDebugFields(actionResult),
         }), signal);
         return;
       }
@@ -648,7 +652,10 @@ class Scheduler {
     }
 
     this.totalFailedCommands += 1;
-    this.addLog(`❌ [${trustedUser.label}] 처리 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`);
+    this.addLog(
+      `❌ [${trustedUser.label}] 처리 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`
+      + buildDeleteActionDiagnosticSuffix(actionResult),
+    );
     await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
       id: recordId,
       source: 'auto_report',
@@ -663,6 +670,7 @@ class Scheduler {
       confidence: helperResult.confidence,
       policyIds: helperResult.policy_ids || [],
       reason: buildDeleteActionFailureReason(actionResult),
+      ...buildDeleteActionDebugFields(actionResult),
     }), signal);
   }
 
@@ -682,6 +690,7 @@ class Scheduler {
 
     if (initialResult.authFailureDetected) {
       this.addLog(`⚠️ 권한/세션 실패 감지 #${targetPostNo} - 세션 강제 재검증 시작`);
+      logDeleteActionDiagnostic('initial', targetPostNo, initialResult);
     }
 
     const recoveryResult = await this.tryRecoverLoginAccessFailure(initialResult);
@@ -701,6 +710,10 @@ class Scheduler {
         recoveryAttempted: true,
         recoveredByLoginRetry: true,
       };
+    }
+
+    if (retriedResult.authFailureDetected) {
+      logDeleteActionDiagnostic('retry', targetPostNo, retriedResult);
     }
 
     return {
@@ -1040,6 +1053,12 @@ function buildTransparencyRecord(input) {
     confidence: input.confidence ?? null,
     policyIds: Array.isArray(input.policyIds) ? input.policyIds : [],
     reason: String(input.reason || ''),
+    debugFailureType: String(input.debugFailureType || ''),
+    debugFailureStatus: input.debugFailureStatus ?? null,
+    debugFailureMessage: String(input.debugFailureMessage || ''),
+    debugFailureRawText: String(input.debugFailureRawText || ''),
+    debugRecoveryAttempted: input.debugRecoveryAttempted === true,
+    debugRecoveredByLoginRetry: input.debugRecoveredByLoginRetry === true,
   };
 }
 
@@ -1206,6 +1225,88 @@ function buildDeleteActionFailureReason(actionResult) {
   }
 
   return `삭제/차단 실패: ${detail}`;
+}
+
+function buildDeleteActionDebugFields(actionResult) {
+  const failureType = String(
+    actionResult?.confirmedFailureType
+    || actionResult?.failureType
+    || '',
+  ).trim();
+  const status = Number(actionResult?.status || 0);
+  const message = String(actionResult?.message || '').trim();
+  const rawText = String(actionResult?.rawText || '').trim();
+  const recoveryAttempted = actionResult?.recoveryAttempted === true;
+  const recoveredByLoginRetry = actionResult?.recoveredByLoginRetry === true;
+
+  if (!failureType && !status && !message && !rawText && !recoveryAttempted && !recoveredByLoginRetry) {
+    return {};
+  }
+
+  return {
+    debugFailureType: failureType,
+    debugFailureStatus: status > 0 ? status : null,
+    debugFailureMessage: message,
+    debugFailureRawText: truncateSingleLine(rawText, 4000),
+    debugRecoveryAttempted: recoveryAttempted,
+    debugRecoveredByLoginRetry: recoveredByLoginRetry,
+  };
+}
+
+function buildDeleteActionDiagnosticSuffix(actionResult) {
+  const failureType = String(
+    actionResult?.confirmedFailureType
+    || actionResult?.failureType
+    || '',
+  ).trim();
+  if (!failureType) {
+    return '';
+  }
+
+  if (!['manager_permission_denied', 'session_access_denied', 'ci_token_missing'].includes(failureType)) {
+    return '';
+  }
+
+  const status = Number(actionResult?.status || 0);
+  const rawSnippet = truncateSingleLine(actionResult?.rawText || '', 160);
+  const parts = [`type=${failureType}`];
+  if (status > 0) {
+    parts.push(`status=${status}`);
+  }
+  if (rawSnippet) {
+    parts.push(`raw=${rawSnippet}`);
+  }
+
+  return parts.length > 0 ? ` [${parts.join(' / ')}]` : '';
+}
+
+function logDeleteActionDiagnostic(stage, targetPostNo, actionResult) {
+  const failureType = String(actionResult?.failureType || '').trim();
+  if (!failureType) {
+    return;
+  }
+
+  if (!['manager_permission_denied', 'session_access_denied', 'ci_token_missing'].includes(failureType)) {
+    return;
+  }
+
+  console.warn('[Sinmungo] delete action diagnostic', {
+    stage: String(stage || 'unknown'),
+    targetPostNo: String(targetPostNo || ''),
+    failureType,
+    status: Number(actionResult?.status || 0),
+    message: String(actionResult?.message || ''),
+    rawText: String(actionResult?.rawText || ''),
+  });
+}
+
+function truncateSingleLine(value, maxLength = 160) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text || text.length <= maxLength) {
+    return text;
+  }
+
+  return `${text.slice(0, Math.max(0, maxLength - 1))}…`;
 }
 
 function normalizeDailyUsage(dailyUsage) {

@@ -152,6 +152,12 @@ function normalizePublicModerationRecord(input) {
     confidence: normalizeNullableNumber(input.confidence),
     policyIds: normalizePolicyIds(input.policyIds || input.policy_ids),
     reason: normalizeOptionalString(input.reason),
+    debugFailureType: normalizeOptionalString(input.debugFailureType),
+    debugFailureStatus: normalizeNullableNumber(input.debugFailureStatus),
+    debugFailureMessage: normalizeOptionalString(input.debugFailureMessage),
+    debugFailureRawText: normalizeOptionalString(input.debugFailureRawText),
+    debugRecoveryAttempted: input.debugRecoveryAttempted === true,
+    debugRecoveredByLoginRetry: input.debugRecoveredByLoginRetry === true,
     blurredThumbnailPath: normalizePublicAssetPath(input.blurredThumbnailPath),
     imageCount: normalizeImageCount(input.imageCount ?? input.imageUrls?.length),
   };

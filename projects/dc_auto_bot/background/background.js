@@ -636,6 +636,12 @@ function buildTransparencyRecord(input) {
     confidence: input.confidence ?? null,
     policyIds: Array.isArray(input.policyIds) ? input.policyIds : [],
     reason: String(input.reason || ''),
+    debugFailureType: String(input.debugFailureType || ''),
+    debugFailureStatus: input.debugFailureStatus ?? null,
+    debugFailureMessage: String(input.debugFailureMessage || ''),
+    debugFailureRawText: String(input.debugFailureRawText || ''),
+    debugRecoveryAttempted: input.debugRecoveryAttempted === true,
+    debugRecoveredByLoginRetry: input.debugRecoveredByLoginRetry === true,
   };
 }
 
