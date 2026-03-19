@@ -235,7 +235,7 @@ class Scheduler {
     const nextState = this.evaluateAutoCutState(metrics.totalIncrease);
     this.autoCutState = nextState;
     this.lastRecommendSnapshot = snapshotPosts;
-    this.logAutoCutStateChange(metrics, previousState, nextState);
+    this.logAutoCutCycle(metrics, previousState, nextState);
     await this.ensureRecommendCutApplied(nextState);
   }
 
@@ -402,15 +402,21 @@ class Scheduler {
     return this.autoCutState;
   }
 
-  logAutoCutStateChange(metrics, previousState, nextState) {
-    if (nextState === AUTO_CUT_STATE.DEFENDING && previousState !== AUTO_CUT_STATE.DEFENDING) {
-      this.log(`📈 전체글 1페이지 추천 증가량 ${metrics.totalIncrease} -> 방어 진입 후보 (비교 ${metrics.comparedPostCount}개)`);
-      return;
-    }
+  logAutoCutCycle(metrics, previousState, nextState) {
+    const attackThreshold = Math.max(0, Number(this.config.autoCutAttackRecommendThreshold) || DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD);
+    const releaseThreshold = Math.max(0, Number(this.config.autoCutReleaseRecommendThreshold) || DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD);
+    const attackConsecutiveCount = Math.max(1, Number(this.config.autoCutAttackConsecutiveCount) || DEFAULT_AUTO_CUT_ATTACK_CONSECUTIVE_COUNT);
+    const releaseConsecutiveCount = Math.max(1, Number(this.config.autoCutReleaseConsecutiveCount) || DEFAULT_AUTO_CUT_RELEASE_CONSECUTIVE_COUNT);
+    const stateSummary = previousState === nextState
+      ? `${nextState} 유지`
+      : `${previousState} -> ${nextState}`;
 
-    if (nextState === AUTO_CUT_STATE.NORMAL && previousState !== AUTO_CUT_STATE.NORMAL) {
-      this.log(`📉 전체글 1페이지 추천 증가량 ${metrics.totalIncrease} -> 복귀 후보 (비교 ${metrics.comparedPostCount}개)`);
-    }
+    this.log(
+      `📊 개념컷 자동조절 - 증가량 ${metrics.totalIncrease} / 비교 ${metrics.comparedPostCount}개 / 상태 ${stateSummary}`
+      + ` / 공격 ${this.autoCutAttackHitCount}/${attackConsecutiveCount}`
+      + ` / 복귀 ${this.autoCutReleaseHitCount}/${releaseConsecutiveCount}`
+      + ` / 기준 ${attackThreshold}/${releaseThreshold}`,
+    );
   }
 
   async ensureRecommendCutApplied(state) {
