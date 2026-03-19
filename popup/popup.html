@@ -239,6 +239,9 @@
               <label for="commentMonitorPages">감시 페이지 수</label>
               <input type="number" id="commentMonitorPages" min="1" max="10" value="2">
             </div>
+            <div class="subfeature-divider">
+              <span>기본 공격 조건</span>
+            </div>
             <div class="setting-item">
               <label for="commentMonitorAttackNewCommentThreshold">공격 감지 새 댓글 수</label>
               <input type="number" id="commentMonitorAttackNewCommentThreshold" min="1" max="5000" value="30">
@@ -246,6 +249,17 @@
             <div class="setting-item">
               <label for="commentMonitorAttackChangedPostThreshold">공격 감지 변화 글 수</label>
               <input type="number" id="commentMonitorAttackChangedPostThreshold" min="1" max="500" value="20">
+            </div>
+            <div class="subfeature-divider">
+              <span>보조 OR 공격 조건</span>
+            </div>
+            <div class="setting-item">
+              <label for="commentMonitorAttackAltNewCommentThreshold">보조 OR 새 댓글 수</label>
+              <input type="number" id="commentMonitorAttackAltNewCommentThreshold" min="1" max="5000" value="50">
+            </div>
+            <div class="setting-item">
+              <label for="commentMonitorAttackAltChangedPostThreshold">보조 OR 변화 글 수</label>
+              <input type="number" id="commentMonitorAttackAltChangedPostThreshold" min="1" max="500" value="9">
             </div>
             <div class="setting-item">
               <label for="commentMonitorAttackConsecutiveCount">공격 감지 연속 횟수</label>

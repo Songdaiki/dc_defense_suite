@@ -40,6 +40,8 @@ class Scheduler {
       pollIntervalMs: 20000,
       attackNewCommentThreshold: 30,
       attackChangedPostThreshold: 20,
+      attackAltNewCommentThreshold: 50,
+      attackAltChangedPostThreshold: 9,
       attackConsecutiveCount: 2,
       releaseNewCommentThreshold: 30,
       releaseVerifiedDeleteThreshold: 10,
@@ -272,14 +274,13 @@ class Scheduler {
       return;
     }
 
-    const attackCondition = metrics.newCommentCount >= this.config.attackNewCommentThreshold
-      && metrics.changedPostCount >= this.config.attackChangedPostThreshold;
+    const attackEvaluation = this.evaluateAttackCondition(metrics);
 
-    if (attackCondition) {
+    if (attackEvaluation.matched) {
       this.attackHitCount += 1;
       this.log(
         `🚨 댓글 공격 감지 streak ${this.attackHitCount}/${this.config.attackConsecutiveCount} `
-        + `(새 댓글 ${metrics.newCommentCount} / 변화 글 ${metrics.changedPostCount})`,
+        + `(새 댓글 ${metrics.newCommentCount} / 변화 글 ${metrics.changedPostCount} / 조건 ${attackEvaluation.ruleLabel})`,
       );
       if (this.attackHitCount >= this.config.attackConsecutiveCount) {
         await this.enterAttackMode();
@@ -292,6 +293,39 @@ class Scheduler {
     }
     this.attackHitCount = 0;
     this.releaseHitCount = 0;
+  }
+
+  evaluateAttackCondition(metrics) {
+    const primaryNewCommentThreshold = Math.max(1, Number(this.config.attackNewCommentThreshold) || 30);
+    const primaryChangedPostThreshold = Math.max(1, Number(this.config.attackChangedPostThreshold) || 20);
+    const altNewCommentThreshold = Math.max(1, Number(this.config.attackAltNewCommentThreshold) || 50);
+    const altChangedPostThreshold = Math.max(1, Number(this.config.attackAltChangedPostThreshold) || 9);
+
+    const primaryMatched = metrics.newCommentCount >= primaryNewCommentThreshold
+      && metrics.changedPostCount >= primaryChangedPostThreshold;
+    if (primaryMatched) {
+      return {
+        matched: true,
+        ruleKey: 'primary',
+        ruleLabel: `${primaryNewCommentThreshold}/${primaryChangedPostThreshold}`,
+      };
+    }
+
+    const altMatched = metrics.newCommentCount >= altNewCommentThreshold
+      && metrics.changedPostCount >= altChangedPostThreshold;
+    if (altMatched) {
+      return {
+        matched: true,
+        ruleKey: 'alt',
+        ruleLabel: `${altNewCommentThreshold}/${altChangedPostThreshold}`,
+      };
+    }
+
+    return {
+      matched: false,
+      ruleKey: '',
+      ruleLabel: '',
+    };
   }
 
   async evaluateAttackingState(metrics) {
