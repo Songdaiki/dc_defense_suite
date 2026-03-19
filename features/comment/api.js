@@ -13,6 +13,9 @@ const DC_CONFIG = {
   galleryType: 'M',           // M = 마이너 갤러리
   baseUrl: 'https://gall.dcinside.com',
 };
+const COMMENT_ACTION_BATCH_LIMIT = 50;
+const COMMENT_ACTION_CHUNK_JITTER_MIN_MS = 100;
+const COMMENT_ACTION_CHUNK_JITTER_MAX_MS = 300;
 
 function resolveConfig(config = {}) {
   return {
@@ -288,7 +291,8 @@ async function getCiToken(baseUrl = DC_CONFIG.baseUrl) {
  * @returns {Promise<{success: boolean, message: string}>}
  */
 async function deleteComments(config = {}, postNo, commentNos) {
-  if (commentNos.length === 0) {
+  const normalizedCommentNos = normalizeCommentNos(commentNos);
+  if (normalizedCommentNos.length === 0) {
     return { success: true, message: '삭제할 댓글 없음' };
   }
 
@@ -298,42 +302,28 @@ async function deleteComments(config = {}, postNo, commentNos) {
     return { success: false, message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.' };
   }
 
-  const url = `${resolved.baseUrl}/ajax/minor_manager_board_ajax/delete_comment`;
+  const commentNoChunks = chunkArray(normalizedCommentNos, COMMENT_ACTION_BATCH_LIMIT);
+  for (let index = 0; index < commentNoChunks.length; index += 1) {
+    const chunk = commentNoChunks[index];
+    const chunkResult = await deleteCommentsChunk(resolved, postNo, ciToken, chunk);
+    if (!chunkResult.success) {
+      return {
+        success: false,
+        message: buildChunkFailureMessage('댓글 삭제', index, commentNoChunks.length, chunkResult.message),
+      };
+    }
 
-  // cmt_nos[]는 배열 파라미터 → 수동 직렬화
-  const bodyParts = [
-    `ci_t=${encodeURIComponent(ciToken)}`,
-    `id=${encodeURIComponent(resolved.galleryId)}`,
-    `_GALLTYPE_=${encodeURIComponent(resolved.galleryType)}`,
-    `pno=${encodeURIComponent(String(postNo))}`,
-  ];
-
-  for (const cno of commentNos) {
-    bodyParts.push(`cmt_nos%5B%5D=${encodeURIComponent(String(cno))}`);
+    if (index < commentNoChunks.length - 1) {
+      await delay(getChunkJitterDelayMs());
+    }
   }
 
-  const response = await dcFetchWithRetry(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      'X-Requested-With': 'XMLHttpRequest',
-      'Referer': `${resolved.baseUrl}/mgallery/board/view/?id=${resolved.galleryId}&no=${postNo}`,
-      'Origin': resolved.baseUrl,
-    },
-    body: bodyParts.join('&'),
-  });
-
-  const responseText = await response.text();
-
-  try {
-    const data = JSON.parse(responseText);
-    return {
-      success: isDeleteResponseSuccessful(response, data),
-      message: JSON.stringify(data),
-    };
-  } catch {
-    return { success: response.ok, message: responseText };
-  }
+  return {
+    success: true,
+    message: commentNoChunks.length > 1
+      ? `댓글 삭제 완료 (${normalizedCommentNos.length}개 / ${commentNoChunks.length}회 분할)`
+      : '댓글 삭제 완료',
+  };
 }
 
 /**
@@ -350,7 +340,8 @@ async function deleteComments(config = {}, postNo, commentNos) {
  * @returns {Promise<{success: boolean, message: string}>}
  */
 async function deleteAndBanComments(config = {}, postNo, commentNos) {
-  if (commentNos.length === 0) {
+  const normalizedCommentNos = normalizeCommentNos(commentNos);
+  if (normalizedCommentNos.length === 0) {
     return { success: true, message: '차단할 댓글 없음' };
   }
 
@@ -360,45 +351,28 @@ async function deleteAndBanComments(config = {}, postNo, commentNos) {
     return { success: false, message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.' };
   }
 
-  const url = `${resolved.baseUrl}/ajax/minor_manager_board_ajax/update_avoid_list`;
+  const commentNoChunks = chunkArray(normalizedCommentNos, COMMENT_ACTION_BATCH_LIMIT);
+  for (let index = 0; index < commentNoChunks.length; index += 1) {
+    const chunk = commentNoChunks[index];
+    const chunkResult = await deleteAndBanCommentsChunk(resolved, postNo, ciToken, chunk);
+    if (!chunkResult.success) {
+      return {
+        success: false,
+        message: buildChunkFailureMessage('댓글 삭제+차단', index, commentNoChunks.length, chunkResult.message),
+      };
+    }
 
-  const body = new URLSearchParams();
-  body.set('ci_t', ciToken);
-  body.set('id', resolved.galleryId);
-  body.set('parent', String(postNo));
-  body.set('avoid_hour', String(resolved.avoidHour || '1'));
-  body.set('avoid_reason', String(resolved.avoidReason || '0'));
-  body.set('avoid_reason_txt', String(resolved.avoidReasonText || ''));
-  body.set('del_chk', resolved.delChk === false ? '0' : '1');
-  body.set('_GALLTYPE_', resolved.galleryType);
-  body.set('avoid_type_chk', resolved.avoidTypeChk === false ? '0' : '1');
-
-  for (const cno of commentNos) {
-    body.append('nos[]', String(cno));
+    if (index < commentNoChunks.length - 1) {
+      await delay(getChunkJitterDelayMs());
+    }
   }
 
-  const response = await dcFetchWithRetry(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      'X-Requested-With': 'XMLHttpRequest',
-      'Referer': `${resolved.baseUrl}/mgallery/board/view/?id=${resolved.galleryId}&no=${postNo}`,
-      'Origin': resolved.baseUrl,
-    },
-    body: body.toString(),
-  });
-
-  const responseText = await response.text();
-
-  try {
-    const data = JSON.parse(responseText);
-    return {
-      success: isBanResponseSuccessful(response, data, responseText),
-      message: JSON.stringify(data),
-    };
-  } catch {
-    return { success: response.ok, message: responseText };
-  }
+  return {
+    success: true,
+    message: commentNoChunks.length > 1
+      ? `댓글 삭제+차단 완료 (${normalizedCommentNos.length}개 / ${commentNoChunks.length}회 분할)`
+      : '댓글 삭제+차단 완료',
+  };
 }
 
 // ============================================================
@@ -466,6 +440,116 @@ function isBanResponseSuccessful(response, data, responseText) {
   }
 
   return responseText.includes('"result":"success"');
+}
+
+async function deleteCommentsChunk(resolvedConfig, postNo, ciToken, commentNos) {
+  const url = `${resolvedConfig.baseUrl}/ajax/minor_manager_board_ajax/delete_comment`;
+  const bodyParts = [
+    `ci_t=${encodeURIComponent(ciToken)}`,
+    `id=${encodeURIComponent(resolvedConfig.galleryId)}`,
+    `_GALLTYPE_=${encodeURIComponent(resolvedConfig.galleryType)}`,
+    `pno=${encodeURIComponent(String(postNo))}`,
+  ];
+
+  for (const cno of commentNos) {
+    bodyParts.push(`cmt_nos%5B%5D=${encodeURIComponent(String(cno))}`);
+  }
+
+  const response = await dcFetchWithRetry(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Referer': `${resolvedConfig.baseUrl}/mgallery/board/view/?id=${resolvedConfig.galleryId}&no=${postNo}`,
+      'Origin': resolvedConfig.baseUrl,
+    },
+    body: bodyParts.join('&'),
+  });
+
+  const responseText = await response.text();
+
+  try {
+    const data = JSON.parse(responseText);
+    return {
+      success: isDeleteResponseSuccessful(response, data),
+      message: JSON.stringify(data),
+    };
+  } catch {
+    return { success: response.ok, message: responseText };
+  }
+}
+
+async function deleteAndBanCommentsChunk(resolvedConfig, postNo, ciToken, commentNos) {
+  const url = `${resolvedConfig.baseUrl}/ajax/minor_manager_board_ajax/update_avoid_list`;
+  const body = new URLSearchParams();
+  body.set('ci_t', ciToken);
+  body.set('id', resolvedConfig.galleryId);
+  body.set('parent', String(postNo));
+  body.set('avoid_hour', String(resolvedConfig.avoidHour || '1'));
+  body.set('avoid_reason', String(resolvedConfig.avoidReason || '0'));
+  body.set('avoid_reason_txt', String(resolvedConfig.avoidReasonText || ''));
+  body.set('del_chk', resolvedConfig.delChk === false ? '0' : '1');
+  body.set('_GALLTYPE_', resolvedConfig.galleryType);
+  body.set('avoid_type_chk', resolvedConfig.avoidTypeChk === false ? '0' : '1');
+
+  for (const cno of commentNos) {
+    body.append('nos[]', String(cno));
+  }
+
+  const response = await dcFetchWithRetry(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Referer': `${resolvedConfig.baseUrl}/mgallery/board/view/?id=${resolvedConfig.galleryId}&no=${postNo}`,
+      'Origin': resolvedConfig.baseUrl,
+    },
+    body: body.toString(),
+  });
+
+  const responseText = await response.text();
+
+  try {
+    const data = JSON.parse(responseText);
+    return {
+      success: isBanResponseSuccessful(response, data, responseText),
+      message: JSON.stringify(data),
+    };
+  } catch {
+    return { success: response.ok, message: responseText };
+  }
+}
+
+function normalizeCommentNos(commentNos) {
+  return [...new Set(
+    (Array.isArray(commentNos) ? commentNos : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean),
+  )];
+}
+
+function chunkArray(items, size) {
+  const normalizedSize = Math.max(1, Number(size) || 1);
+  const chunks = [];
+  for (let index = 0; index < items.length; index += normalizedSize) {
+    chunks.push(items.slice(index, index + normalizedSize));
+  }
+  return chunks;
+}
+
+function buildChunkFailureMessage(actionLabel, chunkIndex, totalChunks, detail) {
+  const normalizedDetail = String(detail || '응답 확인 실패').trim();
+  if (totalChunks <= 1) {
+    return normalizedDetail;
+  }
+
+  return `${actionLabel} ${chunkIndex + 1}/${totalChunks} 실패 - ${normalizedDetail}`;
+}
+
+function getChunkJitterDelayMs() {
+  const range = COMMENT_ACTION_CHUNK_JITTER_MAX_MS - COMMENT_ACTION_CHUNK_JITTER_MIN_MS;
+  const randomOffset = Math.floor(Math.random() * (range + 1));
+  return COMMENT_ACTION_CHUNK_JITTER_MIN_MS + randomOffset;
 }
 
 // ============================================================
