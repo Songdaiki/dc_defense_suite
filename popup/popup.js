@@ -142,6 +142,7 @@ const FEATURE_DOM = {
     requestDelayInput: document.getElementById('ipRequestDelay'),
     cycleDelayInput: document.getElementById('ipCycleDelay'),
     releaseScanMaxPagesInput: document.getElementById('ipReleaseScanMaxPages'),
+    includeExistingTargetsOnStartInput: document.getElementById('ipIncludeExistingTargetsOnStart'),
     saveConfigBtn: document.getElementById('ipSaveConfigBtn'),
     releaseBtn: document.getElementById('ipReleaseBtn'),
     resetBtn: document.getElementById('ipResetBtn'),
@@ -555,6 +556,7 @@ function bindIpEvents() {
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 500),
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
       releaseScanMaxPages: parseOptionalInt(dom.releaseScanMaxPagesInput.value, 40),
+      includeExistingTargetsOnStart: dom.includeExistingTargetsOnStartInput.checked,
     };
 
     const response = await sendFeatureMessage('ip', { action: 'updateConfig', config });
@@ -876,7 +878,7 @@ function updateCommentUI(status) {
     [dom.requestDelayInput, status.config?.requestDelay ?? 100],
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
     [dom.postConcurrencyInput, status.config?.postConcurrency ?? 50],
-    [dom.banOnDeleteInput, status.config?.banOnDelete ?? false],
+    [dom.banOnDeleteInput, status.config?.banOnDelete ?? true],
     [dom.avoidHourInput, status.config?.avoidHour ?? '1'],
   ]);
   updateLogList(dom.logList, status.logs);
@@ -915,6 +917,8 @@ function updateIpUI(status) {
 
   if (status.isReleaseRunning) {
     updateStatusText(dom.statusText, '🟠 해제 중', 'status-warn');
+  } else if (status.isRunning && status.runtimeDeleteEnabled === false) {
+    updateStatusText(dom.statusText, '🟠 차단만 유지 중', 'status-warn');
   } else if (status.isRunning) {
     updateStatusText(dom.statusText, '🟢 차단 중', 'status-on');
   } else {
@@ -937,6 +941,7 @@ function updateIpUI(status) {
     [dom.requestDelayInput, status.config?.requestDelay ?? 500],
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
     [dom.releaseScanMaxPagesInput, status.config?.releaseScanMaxPages ?? 40],
+    [dom.includeExistingTargetsOnStartInput, Boolean(status.config?.includeExistingTargetsOnStart)],
   ]);
   updateLogList(dom.logList, status.logs);
 }
@@ -1164,6 +1169,7 @@ function getFeatureConfigInputs(feature) {
       dom.requestDelayInput,
       dom.cycleDelayInput,
       dom.releaseScanMaxPagesInput,
+      dom.includeExistingTargetsOnStartInput,
     ];
   }
 

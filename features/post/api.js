@@ -46,6 +46,8 @@ async function dcFetch(url, options = {}) {
  * 레이트 리밋 대응 재시도 래퍼
  */
 async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
+    let lastError = null;
+
     for (let i = 0; i < maxRetries; i++) {
         try {
             const response = await dcFetch(url, options);
@@ -68,12 +70,17 @@ async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
             if (error?.name === 'AbortError') {
                 throw error;
             }
+            lastError = error;
             console.error(`[API] 네트워크 에러: ${error.message}. 재시도 ${i + 1}/${maxRetries}`);
             await delay(1000);
         }
     }
 
-    throw new Error('[API] 최대 재시도 횟수 초과');
+    throw new Error(
+        lastError?.message
+            ? `[API] 최대 재시도 횟수 초과 - ${lastError.message}`
+            : '[API] 최대 재시도 횟수 초과',
+    );
 }
 
 // ============================================================
@@ -162,6 +169,7 @@ async function deletePosts(config = {}, postNos, options = {}) {
             successNos: [],
             failedNos: [],
             message: '삭제할 게시물 없음',
+            deleteLimitExceeded: false,
         };
     }
 
@@ -172,6 +180,7 @@ async function deletePosts(config = {}, postNos, options = {}) {
             successNos: [],
             failedNos: [...postNos],
             message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.',
+            deleteLimitExceeded: false,
         };
     }
 
@@ -181,22 +190,37 @@ async function deletePosts(config = {}, postNos, options = {}) {
         successNos: [],
         failedNos: [],
         messages: [],
+        deleteLimitExceeded: false,
     };
 
-    for (const chunk of chunks) {
+    for (let index = 0; index < chunks.length; index += 1) {
+        const chunk = chunks[index];
         const result = await deletePostsWithFallback(resolved, ciToken, chunk, options);
         aggregate.successNos.push(...result.successNos);
-        aggregate.failedNos.push(...result.failedNos);
         if (result.message) {
             aggregate.messages.push(result.message);
         }
+
+        if (result.deleteLimitExceeded) {
+            aggregate.deleteLimitExceeded = true;
+            aggregate.failedNos.push(
+                ...dedupePostNos([
+                    ...result.failedNos,
+                    ...chunks.slice(index + 1).flat(),
+                ]),
+            );
+            break;
+        }
+
+        aggregate.failedNos.push(...result.failedNos);
     }
 
     return {
         success: aggregate.failedNos.length === 0,
-        successNos: aggregate.successNos,
-        failedNos: aggregate.failedNos,
+        successNos: dedupePostNos(aggregate.successNos),
+        failedNos: dedupePostNos(aggregate.failedNos),
         message: aggregate.messages.join(' | '),
+        deleteLimitExceeded: aggregate.deleteLimitExceeded,
     };
 }
 
@@ -238,6 +262,7 @@ async function deletePostsWithFallback(config, ciToken, postNos, options = {}) {
             successNos: [...postNos],
             failedNos: [],
             message: '',
+            deleteLimitExceeded: false,
         };
     }
 
@@ -248,17 +273,28 @@ async function deletePostsWithFallback(config, ciToken, postNos, options = {}) {
             message: postNos.length === 1
                 ? `#${postNos[0]} 삭제 실패 - ${batchResult.message}`
                 : `${postNos.length}개 배치 삭제 실패 - ${batchResult.message}`,
+            deleteLimitExceeded: batchResult.failureType === 'delete_limit_exceeded',
         };
     }
 
     const midpoint = Math.ceil(postNos.length / 2);
     const leftResult = await deletePostsWithFallback(config, ciToken, postNos.slice(0, midpoint), options);
+    if (leftResult.deleteLimitExceeded) {
+        const rightNos = postNos.slice(midpoint);
+        return {
+            successNos: [...leftResult.successNos],
+            failedNos: dedupePostNos([...leftResult.failedNos, ...rightNos]),
+            message: leftResult.message,
+            deleteLimitExceeded: true,
+        };
+    }
     const rightResult = await deletePostsWithFallback(config, ciToken, postNos.slice(midpoint), options);
 
     return {
         successNos: [...leftResult.successNos, ...rightResult.successNos],
-        failedNos: [...leftResult.failedNos, ...rightResult.failedNos],
+        failedNos: dedupePostNos([...leftResult.failedNos, ...rightResult.failedNos]),
         message: [leftResult.message, rightResult.message].filter(Boolean).join(' | '),
+        deleteLimitExceeded: rightResult.deleteLimitExceeded,
     };
 }
 
@@ -344,16 +380,20 @@ async function deletePostBatch(config, ciToken, postNos, options = {}) {
 
     try {
         const data = JSON.parse(responseText);
+        const failureType = inferDeletionFailureType(response, data, responseText);
         return {
             success: isManagementResponseSuccessful(response, data, responseText),
             message: JSON.stringify(data),
-            shouldSplit: shouldSplitDeletionFailure(response, responseText),
+            shouldSplit: shouldSplitDeletionFailure(response, responseText, failureType),
+            failureType,
         };
     } catch {
+        const failureType = inferDeletionFailureType(response, null, responseText);
         return {
             success: isManagementResponseSuccessful(response, null, responseText),
             message: summarizeResponseText(responseText),
-            shouldSplit: shouldSplitDeletionFailure(response, responseText),
+            shouldSplit: shouldSplitDeletionFailure(response, responseText, failureType),
+            failureType,
         };
     }
 }
@@ -455,6 +495,40 @@ function summarizeResponseText(responseText) {
         .slice(0, 200);
 }
 
+function normalizeFailureText(value) {
+    return String(value || '')
+        .replace(/\s+/g, '')
+        .trim();
+}
+
+function isDeleteLimitExceededText(value) {
+    return /(일일삭제횟수가초과되어삭제할수없습니다|추가삭제가필요한경우신고게시판에문의)/.test(
+        normalizeFailureText(value),
+    );
+}
+
+function inferDeletionFailureType(response, data, responseText) {
+    const normalizedText = normalizeFailureText(
+        data && typeof data === 'object'
+            ? JSON.stringify(data)
+            : responseText,
+    );
+
+    if (isDeleteLimitExceededText(normalizedText)) {
+        return 'delete_limit_exceeded';
+    }
+
+    if ([401, 403].includes(response.status)) {
+        return 'auth_or_permission';
+    }
+
+    if (/(정상적인접근이아닙니다|권한|로그인|forbidden|denied|ci_t)/i.test(normalizedText)) {
+        return 'auth_or_permission';
+    }
+
+    return 'unknown';
+}
+
 function shouldSplitClassificationFailure(response, responseText) {
     if ([401, 403].includes(response.status)) {
         return false;
@@ -467,7 +541,11 @@ function shouldSplitClassificationFailure(response, responseText) {
     return true;
 }
 
-function shouldSplitDeletionFailure(response, responseText) {
+function shouldSplitDeletionFailure(response, responseText, failureType = '') {
+    if (failureType === 'delete_limit_exceeded') {
+        return false;
+    }
+
     if ([401, 403].includes(response.status)) {
         return false;
     }
@@ -477,6 +555,14 @@ function shouldSplitDeletionFailure(response, responseText) {
     }
 
     return true;
+}
+
+function dedupePostNos(postNos) {
+    return [...new Set(
+        (Array.isArray(postNos) ? postNos : [])
+            .map((postNo) => String(postNo || '').trim())
+            .filter((postNo) => /^\d+$/.test(postNo)),
+    )];
 }
 
 // ============================================================

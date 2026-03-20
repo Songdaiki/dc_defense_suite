@@ -23,7 +23,7 @@
       <button class="tab-button" data-tab="comment">댓글 방어</button>
       <button class="tab-button" data-tab="post"><span class="tab-label">게시글<br>분류</span></button>
       <button class="tab-button" data-tab="semiPost"><span class="tab-label">반고닉<br>분류</span></button>
-      <button class="tab-button" data-tab="ip">IP 차단</button>
+      <button class="tab-button" data-tab="ip"><span class="tab-label">IP차단<br>삭제</span></button>
     </nav>
 
     <main class="panels">
@@ -350,7 +350,7 @@
             </div>
             <div class="setting-item">
               <label for="commentBanOnDelete">삭제 시 IP 차단</label>
-              <input type="checkbox" id="commentBanOnDelete">
+              <input type="checkbox" id="commentBanOnDelete" checked>
             </div>
             <div class="setting-item">
               <label for="commentAvoidHour">차단 시간 (시)</label>
@@ -495,7 +495,7 @@
               <input type="number" id="semiPostMinTotalActivityCount" min="1" max="100000" value="20">
             </div>
             <div class="setting-item">
-              <label for="semiPostMinPostRatioPercent">최소 게시물 비율 (%)</label>
+              <label for="semiPostMinPostRatioPercent">게시물/댓글 비율(%)</label>
               <input type="number" id="semiPostMinPostRatioPercent" min="1" max="100" value="90">
             </div>
             <button id="semiPostSaveConfigBtn" class="btn btn-primary">설정 저장</button>
@@ -513,8 +513,8 @@
       <section class="panel" data-feature="ip">
         <div class="feature-header feature-ip">
           <div>
-            <h2>IP 차단</h2>
-            <p>도배기 탭 유동 게시물 자동 차단 / 수동 해제</p>
+            <h2>IP차단/삭제</h2>
+            <p>도배기 탭 유동 게시물 자동 차단 / 삭제 / 수동 해제</p>
           </div>
           <div class="toggle-section">
             <label class="toggle-switch">
@@ -523,6 +523,17 @@
             </label>
             <span id="ipToggleLabel" class="toggle-label">OFF</span>
           </div>
+        </div>
+
+        <div class="compact-option-row">
+          <div class="compact-option-copy">
+            <strong>도배기탭 삭제기</strong>
+            <small>토글 ON 시 기존에 쌓인 도배기탭 글 시점상관없이 처리</small>
+          </div>
+          <label class="toggle-switch toggle-switch-small">
+            <input type="checkbox" id="ipIncludeExistingTargetsOnStart">
+            <span class="slider"></span>
+          </label>
         </div>
 
         <div class="status-grid">

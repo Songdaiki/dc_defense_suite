@@ -22,6 +22,7 @@ async function dcFetch(url, options = {}) {
 
 async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
   const retries = Math.max(1, maxRetries);
+  let lastError = null;
 
   for (let attempt = 0; attempt < retries; attempt += 1) {
     try {
@@ -40,13 +41,19 @@ async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
       return response;
     } catch (error) {
       if (attempt === retries - 1) {
-        throw error;
+        lastError = error;
+        break;
       }
+      lastError = error;
       await delay(1000);
     }
   }
 
-  throw new Error('최대 재시도 횟수 초과');
+  throw new Error(
+    lastError?.message
+      ? `최대 재시도 횟수 초과 - ${lastError.message}`
+      : '최대 재시도 횟수 초과',
+  );
 }
 
 function buildBoardListUrl(config, page = 1) {
@@ -124,20 +131,43 @@ async function banPosts(config, postNos) {
     messages: [],
   };
 
-  for (const chunk of chunks) {
+  for (let index = 0; index < chunks.length; index += 1) {
+    const chunk = chunks[index];
     const result = await banPostsWithFallback(resolved, ciToken, chunk);
     aggregate.successNos.push(...result.successNos);
-    aggregate.failedNos.push(...result.failedNos);
     if (result.message) {
       aggregate.messages.push(result.message);
     }
+
+    if (result.deleteLimitExceeded) {
+      const remainingNos = dedupePostNos([
+        ...result.deleteLimitExceededNos,
+        ...chunks.slice(index + 1).flat(),
+      ]);
+      aggregate.failedNos.push(...remainingNos);
+
+      return {
+        success: false,
+        successNos: dedupePostNos(aggregate.successNos),
+        failedNos: dedupePostNos(aggregate.failedNos),
+        message: aggregate.messages.join(' | '),
+        failureType: 'delete_limit_exceeded',
+        deleteLimitExceeded: true,
+        deleteLimitExceededNos: remainingNos,
+      };
+    }
+
+    aggregate.failedNos.push(...result.failedNos);
   }
 
   return {
     success: aggregate.failedNos.length === 0,
-    successNos: aggregate.successNos,
-    failedNos: aggregate.failedNos,
+    successNos: dedupePostNos(aggregate.successNos),
+    failedNos: dedupePostNos(aggregate.failedNos),
     message: aggregate.messages.join(' | '),
+    failureType: '',
+    deleteLimitExceeded: false,
+    deleteLimitExceededNos: [],
   };
 }
 
@@ -149,25 +179,47 @@ async function banPostsWithFallback(config, ciToken, postNos) {
       successNos: [...postNos],
       failedNos: [],
       message: '',
+      failureType: '',
+      deleteLimitExceeded: false,
+      deleteLimitExceededNos: [],
     };
   }
 
   if (postNos.length === 1 || batchResult.shouldSplit === false) {
+    const deleteLimitExceeded = batchResult.failureType === 'delete_limit_exceeded';
     return {
       successNos: [],
       failedNos: [...postNos],
       message: batchResult.message,
+      failureType: batchResult.failureType,
+      deleteLimitExceeded,
+      deleteLimitExceededNos: deleteLimitExceeded ? [...postNos] : [],
     };
   }
 
   const middleIndex = Math.ceil(postNos.length / 2);
   const leftResult = await banPostsWithFallback(config, ciToken, postNos.slice(0, middleIndex));
+  if (leftResult.deleteLimitExceeded) {
+    const rightNos = postNos.slice(middleIndex);
+    return {
+      successNos: [...leftResult.successNos],
+      failedNos: dedupePostNos([...leftResult.failedNos, ...rightNos]),
+      message: leftResult.message,
+      failureType: leftResult.failureType,
+      deleteLimitExceeded: true,
+      deleteLimitExceededNos: dedupePostNos([...leftResult.deleteLimitExceededNos, ...rightNos]),
+    };
+  }
+
   const rightResult = await banPostsWithFallback(config, ciToken, postNos.slice(middleIndex));
 
   return {
     successNos: [...leftResult.successNos, ...rightResult.successNos],
-    failedNos: [...leftResult.failedNos, ...rightResult.failedNos],
+    failedNos: dedupePostNos([...leftResult.failedNos, ...rightResult.failedNos]),
     message: [leftResult.message, rightResult.message].filter(Boolean).join(' | '),
+    failureType: rightResult.failureType || leftResult.failureType,
+    deleteLimitExceeded: rightResult.deleteLimitExceeded,
+    deleteLimitExceededNos: [...rightResult.deleteLimitExceededNos],
   };
 }
 
@@ -203,11 +255,14 @@ async function banPostBatch(config, ciToken, postNos) {
 
   const responseText = await response.text();
   const parsed = safeParseJson(responseText);
+  const failureType = inferBanFailureType(response, parsed, responseText);
 
   return {
     success: isBanResponseSuccessful(response, parsed, responseText),
     message: summarizeResponse(parsed, responseText),
-    shouldSplit: shouldSplitBanFailure(response, responseText),
+    rawText: summarizeText(responseText),
+    failureType,
+    shouldSplit: shouldSplitBanFailure(response, responseText, failureType),
   };
 }
 
@@ -302,7 +357,11 @@ function isBanResponseSuccessful(response, data, responseText) {
   return responseText.includes('"result":"success"');
 }
 
-function shouldSplitBanFailure(response, responseText) {
+function shouldSplitBanFailure(response, responseText, failureType = '') {
+  if (failureType === 'delete_limit_exceeded') {
+    return false;
+  }
+
   if (!response.ok) {
     return response.status !== 403 && response.status !== 429;
   }
@@ -316,6 +375,27 @@ function shouldSplitBanFailure(response, responseText) {
   ];
 
   return !hardFailurePatterns.some((pattern) => responseText.includes(pattern));
+}
+
+function inferBanFailureType(response, data, responseText) {
+  const normalizedText = normalizeFailureText(data, responseText);
+
+  if (isDeleteLimitExceededText(normalizedText)) {
+    return 'delete_limit_exceeded';
+  }
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      return 'auth_or_permission';
+    }
+    return 'http_error';
+  }
+
+  if (/(정상적인접근이아닙니다|권한|로그인|forbidden|denied|ci_t)/i.test(normalizedText)) {
+    return 'auth_or_permission';
+  }
+
+  return 'unknown';
 }
 
 function isReleaseResponseSuccessful(response, data, responseText) {
@@ -368,6 +448,17 @@ function summarizeText(value) {
     .slice(0, 200);
 }
 
+function normalizeFailureText(data, responseText) {
+  const summarized = summarizeResponse(data, responseText);
+  return String(summarized || responseText || '')
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+function isDeleteLimitExceededText(value) {
+  return /(일일삭제횟수가초과되어삭제할수없습니다|일일삭제횟수가초과되어삭제할수없|추가삭제가필요한경우신고게시판에문의)/.test(String(value || ''));
+}
+
 function chunkArray(items, chunkSize) {
   const normalizedChunkSize = Math.max(1, Number(chunkSize) || 1);
   const chunks = [];
@@ -377,6 +468,14 @@ function chunkArray(items, chunkSize) {
   }
 
   return chunks;
+}
+
+function dedupePostNos(postNos) {
+  return [...new Set(
+    (Array.isArray(postNos) ? postNos : [])
+      .map((postNo) => String(postNo || '').trim())
+      .filter((postNo) => /^\d+$/.test(postNo)),
+  )];
 }
 
 function normalizeReleaseTargets(releaseIds) {

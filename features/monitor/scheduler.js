@@ -33,8 +33,11 @@ class Scheduler {
     this.attackCutoffPostNo = 0;
     this.initialSweepCompleted = false;
     this.pendingInitialSweepPostNos = [];
+    this.pendingInitialSweepPosts = [];
+    this.pendingManagedIpBanOnlyPosts = [];
     this.managedPostStarted = false;
     this.managedIpStarted = false;
+    this.managedIpDeleteEnabled = true;
     this.totalAttackDetected = 0;
     this.totalAttackReleased = 0;
     this.logs = [];
@@ -87,8 +90,11 @@ class Scheduler {
     this.attackCutoffPostNo = 0;
     this.initialSweepCompleted = false;
     this.pendingInitialSweepPostNos = [];
+    this.pendingInitialSweepPosts = [];
+    this.pendingManagedIpBanOnlyPosts = [];
     this.managedPostStarted = false;
     this.managedIpStarted = false;
+    this.managedIpDeleteEnabled = true;
     this.log('🟢 자동 감시 시작!');
     await this.saveState();
     this.ensureRunLoop();
@@ -114,6 +120,8 @@ class Scheduler {
     this.attackCutoffPostNo = 0;
     this.initialSweepCompleted = false;
     this.pendingInitialSweepPostNos = [];
+    this.pendingInitialSweepPosts = [];
+    this.pendingManagedIpBanOnlyPosts = [];
     this.log('🔴 자동 감시 중지.');
     await this.saveState();
   }
@@ -274,7 +282,9 @@ class Scheduler {
     this.attackSessionId = `attack_${Date.now()}`;
     this.attackCutoffPostNo = attackCutoffPostNo;
     this.initialSweepCompleted = false;
-    this.pendingInitialSweepPostNos = buildInitialSweepPostNos(attackSnapshot);
+    this.pendingInitialSweepPosts = buildInitialSweepPosts(attackSnapshot);
+    this.pendingInitialSweepPostNos = buildInitialSweepPostNos(this.pendingInitialSweepPosts);
+    this.pendingManagedIpBanOnlyPosts = [];
     this.attackHitCount = 0;
     this.releaseHitCount = 0;
     this.totalAttackDetected += 1;
@@ -301,6 +311,8 @@ class Scheduler {
     if (!this.initialSweepCompleted) {
       await this.performInitialSweep();
     }
+
+    this.syncManagedIpDeleteModeFromChild();
 
     if (!this.postScheduler.isRunning) {
       try {
@@ -339,7 +351,7 @@ class Scheduler {
       try {
         await this.ipScheduler.start({
           cutoffPostNo: this.attackCutoffPostNo,
-          delChk: true,
+          delChk: this.managedIpDeleteEnabled,
           source: 'monitor',
         });
       } catch (error) {
@@ -353,8 +365,7 @@ class Scheduler {
         ipStateChanged = true;
       }
 
-      if (!this.ipScheduler.config.delChk) {
-        this.ipScheduler.config.delChk = true;
+      if (this.ipScheduler.syncManagedDeleteEnabled(this.managedIpDeleteEnabled)) {
         ipStateChanged = true;
       }
 
@@ -370,6 +381,8 @@ class Scheduler {
     }
 
     if (this.ipScheduler.isRunning) {
+      await this.flushPendingManagedIpBanOnlyPosts();
+
       if (!this.managedIpStarted) {
         this.managedIpStarted = true;
         this.log('🛡️ IP 차단 자동 대응 ON');
@@ -383,7 +396,8 @@ class Scheduler {
       return;
     }
 
-    const targetPostNos = dedupePostNos(this.pendingInitialSweepPostNos);
+    const targetPosts = dedupePostsByNo(this.pendingInitialSweepPosts);
+    const targetPostNos = buildInitialSweepPostNos(targetPosts);
     if (targetPostNos.length === 0) {
       this.initialSweepCompleted = true;
       return;
@@ -405,12 +419,28 @@ class Scheduler {
         if (deleteResult.message) {
           this.log(`⚠️ 감시 자동화 initial sweep 삭제 상세: ${deleteResult.message}`);
         }
+
+        if (deleteResult.deleteLimitExceeded || isDeleteLimitExceededText(deleteResult.message)) {
+          this.pendingManagedIpBanOnlyPosts = dedupePostsByNo([
+            ...this.pendingManagedIpBanOnlyPosts,
+            ...pickPostsByNos(targetPosts, deleteResult.failedNos),
+          ]);
+          this.activateManagedIpBanOnly(deleteResult.message);
+        }
       }
     } catch (error) {
       this.log(`⚠️ 감시 자동화 initial sweep 삭제 오류 - ${error.message}`);
+      if (isDeleteLimitExceededText(error.message)) {
+        this.pendingManagedIpBanOnlyPosts = dedupePostsByNo([
+          ...this.pendingManagedIpBanOnlyPosts,
+          ...targetPosts,
+        ]);
+        this.activateManagedIpBanOnly(error.message);
+      }
     }
 
     this.pendingInitialSweepPostNos = [];
+    this.pendingInitialSweepPosts = [];
     this.initialSweepCompleted = true;
     this.log(`✅ 감시 자동화 initial sweep 1회 처리 완료 (${targetPostNos.length}개 대상)`);
 
@@ -463,10 +493,82 @@ class Scheduler {
     this.attackCutoffPostNo = 0;
     this.initialSweepCompleted = false;
     this.pendingInitialSweepPostNos = [];
+    this.pendingInitialSweepPosts = [];
+    this.pendingManagedIpBanOnlyPosts = [];
     this.managedPostStarted = false;
     this.managedIpStarted = false;
+    this.managedIpDeleteEnabled = true;
     this.attackHitCount = 0;
     this.releaseHitCount = 0;
+  }
+
+  activateManagedIpBanOnly(message = '') {
+    const trimmedMessage = String(message || '').trim();
+    if (!this.managedIpDeleteEnabled) {
+      return false;
+    }
+
+    this.managedIpDeleteEnabled = false;
+    this.log('⚠️ 삭제 한도 초과 감지 - 이번 공격 세션 동안 IP 차단만 유지');
+    if (trimmedMessage) {
+      this.log(`⚠️ 삭제 한도 상세: ${trimmedMessage}`);
+    }
+
+    if (this.ipScheduler.currentSource === 'monitor') {
+      this.ipScheduler.activateDeleteLimitBanOnly(trimmedMessage);
+    }
+
+    return true;
+  }
+
+  syncManagedIpDeleteModeFromChild() {
+    if (!this.managedIpDeleteEnabled) {
+      return false;
+    }
+
+    if (this.ipScheduler.currentSource !== 'monitor') {
+      return false;
+    }
+
+    if (this.ipScheduler.runtimeDeleteEnabled) {
+      return false;
+    }
+
+    if (!this.ipScheduler.lastDeleteLimitExceededAt && !this.ipScheduler.lastDeleteLimitMessage) {
+      return false;
+    }
+
+    this.managedIpDeleteEnabled = false;
+    this.log('⚠️ 삭제 한도 초과 상태 확인 - 이번 공격 세션 동안 IP 차단만 유지');
+    return true;
+  }
+
+  async flushPendingManagedIpBanOnlyPosts() {
+    const targetPosts = dedupePostsByNo(this.pendingManagedIpBanOnlyPosts);
+    if (targetPosts.length === 0) {
+      return false;
+    }
+
+    if (!this.ipScheduler.isRunning || this.ipScheduler.currentSource !== 'monitor') {
+      return false;
+    }
+
+    const result = await this.ipScheduler.banPostsOnce(targetPosts, {
+      deleteEnabled: false,
+      logLabel: '감시 자동화 initial sweep IP 차단',
+    });
+
+    if (result.failedNos.length > 0) {
+      this.pendingManagedIpBanOnlyPosts = dedupePostsByNo(
+        pickPostsByNos(targetPosts, result.failedNos),
+      );
+      await this.saveState();
+      return false;
+    }
+
+    this.pendingManagedIpBanOnlyPosts = [];
+    await this.saveState();
+    return true;
   }
 
   log(message) {
@@ -497,8 +599,11 @@ class Scheduler {
           attackCutoffPostNo: this.attackCutoffPostNo,
           initialSweepCompleted: this.initialSweepCompleted,
           pendingInitialSweepPostNos: this.pendingInitialSweepPostNos,
+          pendingInitialSweepPosts: this.pendingInitialSweepPosts,
+          pendingManagedIpBanOnlyPosts: this.pendingManagedIpBanOnlyPosts,
           managedPostStarted: this.managedPostStarted,
           managedIpStarted: this.managedIpStarted,
+          managedIpDeleteEnabled: this.managedIpDeleteEnabled,
           totalAttackDetected: this.totalAttackDetected,
           totalAttackReleased: this.totalAttackReleased,
           logs: this.logs.slice(0, 50),
@@ -533,8 +638,13 @@ class Scheduler {
       this.attackCutoffPostNo = Number(schedulerState.attackCutoffPostNo) || 0;
       this.initialSweepCompleted = Boolean(schedulerState.initialSweepCompleted);
       this.pendingInitialSweepPostNos = dedupePostNos(schedulerState.pendingInitialSweepPostNos);
+      this.pendingInitialSweepPosts = dedupePostsByNo(schedulerState.pendingInitialSweepPosts);
+      this.pendingManagedIpBanOnlyPosts = dedupePostsByNo(schedulerState.pendingManagedIpBanOnlyPosts);
       this.managedPostStarted = Boolean(schedulerState.managedPostStarted);
       this.managedIpStarted = Boolean(schedulerState.managedIpStarted);
+      this.managedIpDeleteEnabled = schedulerState.managedIpDeleteEnabled === undefined
+        ? true
+        : Boolean(schedulerState.managedIpDeleteEnabled);
       this.totalAttackDetected = schedulerState.totalAttackDetected || 0;
       this.totalAttackReleased = schedulerState.totalAttackReleased || 0;
       this.logs = Array.isArray(schedulerState.logs) ? schedulerState.logs : [];
@@ -583,8 +693,11 @@ class Scheduler {
       attackCutoffPostNo: this.attackCutoffPostNo,
       initialSweepCompleted: this.initialSweepCompleted,
       pendingInitialSweepPostNos: this.pendingInitialSweepPostNos,
+      pendingInitialSweepPosts: this.pendingInitialSweepPosts,
+      pendingManagedIpBanOnlyPosts: this.pendingManagedIpBanOnlyPosts,
       managedPostStarted: this.managedPostStarted,
       managedIpStarted: this.managedIpStarted,
+      managedIpDeleteEnabled: this.managedIpDeleteEnabled,
       totalAttackDetected: this.totalAttackDetected,
       totalAttackReleased: this.totalAttackReleased,
       logs: this.logs.slice(0, 20),
@@ -651,9 +764,16 @@ function getMaxPostNo(posts) {
 
 function buildInitialSweepPostNos(snapshot) {
   return dedupePostNos(
-    (Array.isArray(snapshot) ? snapshot : [])
+    dedupePostsByNo(snapshot)
       .filter((post) => post?.isFluid)
       .map((post) => post.no),
+  );
+}
+
+function buildInitialSweepPosts(snapshot) {
+  return dedupePostsByNo(
+    (Array.isArray(snapshot) ? snapshot : [])
+      .filter((post) => post?.isFluid),
   );
 }
 
@@ -663,6 +783,31 @@ function dedupePostNos(postNos) {
       .map((postNo) => String(postNo || '').trim())
       .filter((postNo) => /^\d+$/.test(postNo)),
   )];
+}
+
+function dedupePostsByNo(posts) {
+  const postMap = new Map();
+
+  for (const post of Array.isArray(posts) ? posts : []) {
+    const postNo = String(post?.no || '').trim();
+    if (!/^\d+$/.test(postNo) || postMap.has(postNo)) {
+      continue;
+    }
+    postMap.set(postNo, post);
+  }
+
+  return [...postMap.values()];
+}
+
+function pickPostsByNos(posts, postNos) {
+  const targetNos = new Set(dedupePostNos(postNos));
+  return dedupePostsByNo(
+    (Array.isArray(posts) ? posts : []).filter((post) => targetNos.has(String(post?.no || '').trim())),
+  );
+}
+
+function isDeleteLimitExceededText(value) {
+  return /(일일\s*삭제\s*횟수가\s*초과되어\s*삭제할\s*수\s*없습니다|추가\s*삭제가\s*필요한\s*경우\s*신고\s*게시판에\s*문의)/.test(String(value || ''));
 }
 
 export { PHASE, Scheduler };

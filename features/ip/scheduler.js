@@ -27,6 +27,10 @@ class Scheduler {
     this.logs = [];
     this.currentRunId = '';
     this.activeBans = [];
+    this.currentSource = 'manual';
+    this.runtimeDeleteEnabled = false;
+    this.lastDeleteLimitExceededAt = '';
+    this.lastDeleteLimitMessage = '';
 
     this.config = {
       galleryId: DEFAULT_CONFIG.galleryId,
@@ -46,6 +50,7 @@ class Scheduler {
       avoidReasonText: DEFAULT_CONFIG.avoidReasonText,
       delChk: DEFAULT_CONFIG.delChk,
       avoidTypeChk: DEFAULT_CONFIG.avoidTypeChk,
+      includeExistingTargetsOnStart: false,
     };
   }
 
@@ -56,9 +61,12 @@ class Scheduler {
     }
 
     const normalizedOptions = normalizeStartOptions(options);
+    const includeExistingTargets = shouldIncludeExistingTargetsOnManualStart(this.config, normalizedOptions);
     const cutoffPostNo = normalizedOptions.hasExplicitCutoff
       ? normalizedOptions.cutoffPostNo
-      : await this.captureCutoffPostNoWithRetry();
+      : includeExistingTargets
+        ? 0
+        : await this.captureCutoffPostNoWithRetry();
 
     if (normalizedOptions.source === 'monitor' && cutoffPostNo <= 0) {
       throw new Error('IP 차단 cutoff snapshot 추출에 실패했습니다.');
@@ -69,8 +77,16 @@ class Scheduler {
     this.config.delChk = normalizedOptions.delChk;
     this.isRunning = true;
     this.currentRunId = createRunId();
-    this.log(`🧷 ${getCutoffSourceLabel(normalizedOptions.source)} cutoff 저장 (#${cutoffPostNo})`);
-    this.log(`🗑️ 게시물 삭제 요청 설정: del_chk=${this.config.delChk ? '1' : '0'}`);
+    this.currentSource = normalizedOptions.source;
+    this.runtimeDeleteEnabled = normalizedOptions.delChk;
+    this.lastDeleteLimitExceededAt = '';
+    this.lastDeleteLimitMessage = '';
+    if (includeExistingTargets) {
+      this.log('🧹 수동 도배기탭 삭제기 모드 시작 - 기존 도배기 글도 같이 처리합니다.');
+    } else {
+      this.log(`🧷 ${getCutoffSourceLabel(normalizedOptions.source)} cutoff 저장 (#${cutoffPostNo})`);
+    }
+    this.log(`🗑️ 게시물 삭제 요청 설정: del_chk=${this.runtimeDeleteEnabled ? '1' : '0'}`);
     this.log(`🟢 자동 차단 시작! (runId=${this.currentRunId})`);
     await this.saveState();
     this.ensureRunLoop();
@@ -79,6 +95,10 @@ class Scheduler {
   async stop() {
     this.isRunning = false;
     this.currentPage = 0;
+    this.currentSource = 'manual';
+    this.runtimeDeleteEnabled = Boolean(this.config.delChk);
+    this.lastDeleteLimitExceededAt = '';
+    this.lastDeleteLimitMessage = '';
     this.log('🔴 자동 차단 중지.');
     await this.saveState();
   }
@@ -276,30 +296,164 @@ class Scheduler {
 
   async processBanCandidates(posts) {
     const postMap = new Map(posts.map((post) => [String(post.no), post]));
-    const result = await banPosts(this.config, posts.map((post) => post.no));
+    const effectiveDeleteEnabled = this.runtimeDeleteEnabled;
+    const initialResult = await banPosts(
+      { ...this.config, delChk: effectiveDeleteEnabled },
+      posts.map((post) => post.no),
+    );
+    const aggregate = {
+      successNos: [],
+      failedNos: [],
+      messages: [],
+    };
 
-    for (const successNo of result.successNos) {
+    this.recordBanSuccesses(postMap, initialResult.successNos, effectiveDeleteEnabled);
+    aggregate.successNos.push(...initialResult.successNos);
+    if (initialResult.message) {
+      aggregate.messages.push(initialResult.message);
+    }
+
+    let deleteLimitRetrySuccessCount = 0;
+    const deleteLimitRetryNos = dedupePostNos(initialResult.deleteLimitExceededNos);
+    const otherFailedNos = dedupePostNos(
+      initialResult.failedNos.filter((postNo) => !deleteLimitRetryNos.includes(String(postNo))),
+    );
+    aggregate.failedNos.push(...otherFailedNos);
+
+    if (this.shouldSwitchRunToBanOnly(initialResult)) {
+      this.activateDeleteLimitBanOnly(initialResult.message);
+
+      if (deleteLimitRetryNos.length > 0) {
+        const retryResult = await banPosts(
+          { ...this.config, delChk: false },
+          deleteLimitRetryNos,
+        );
+        this.recordBanSuccesses(postMap, retryResult.successNos, false);
+        aggregate.successNos.push(...retryResult.successNos);
+        aggregate.failedNos.push(...retryResult.failedNos);
+        deleteLimitRetrySuccessCount = retryResult.successNos.length;
+
+        if (retryResult.message) {
+          aggregate.messages.push(retryResult.message);
+        }
+      }
+    } else {
+      aggregate.failedNos.push(...deleteLimitRetryNos);
+    }
+
+    aggregate.successNos = dedupePostNos(aggregate.successNos);
+    aggregate.failedNos = dedupePostNos(aggregate.failedNos);
+
+    if (aggregate.successNos.length > 0) {
+      this.log(`⛔ ${aggregate.successNos.length}개 차단 완료 (총 ${this.totalBanned}건)`);
+    }
+
+    if (deleteLimitRetrySuccessCount > 0) {
+      this.log(`🧯 삭제 한도 초과로 ${deleteLimitRetrySuccessCount}개는 IP 차단만 수행`);
+    }
+
+    if (aggregate.failedNos.length > 0) {
+      this.log(`⚠️ ${aggregate.failedNos.length}개 차단 실패 - ${aggregate.failedNos.join(', ')}`);
+      if (aggregate.messages.length > 0) {
+        this.log(`⚠️ 상세: ${aggregate.messages.join(' | ')}`);
+      }
+    }
+  }
+
+  async banPostsOnce(posts, options = {}) {
+    const targetPosts = dedupePostsByNo(posts);
+    if (targetPosts.length === 0) {
+      return {
+        success: true,
+        successNos: [],
+        failedNos: [],
+        message: '차단할 게시물이 없습니다.',
+        failureType: '',
+        deleteLimitExceeded: false,
+        deleteLimitExceededNos: [],
+      };
+    }
+
+    const deleteEnabled = options.deleteEnabled === undefined
+      ? this.runtimeDeleteEnabled
+      : Boolean(options.deleteEnabled);
+    const logLabel = String(options.logLabel || '1회성 IP 차단').trim() || '1회성 IP 차단';
+    const postMap = new Map(targetPosts.map((post) => [String(post.no), post]));
+
+    this.log(`🧷 ${logLabel}: ${targetPosts.length}개 차단 시도 (del_chk=${deleteEnabled ? '1' : '0'})`);
+    const result = await banPosts(
+      { ...this.config, delChk: deleteEnabled },
+      targetPosts.map((post) => post.no),
+    );
+    this.recordBanSuccesses(postMap, result.successNos, deleteEnabled);
+
+    if (result.successNos.length > 0) {
+      this.log(`✅ ${logLabel}: ${result.successNos.length}개 차단 완료 (총 ${this.totalBanned}건)`);
+    }
+
+    if (result.failedNos.length > 0) {
+      this.log(`⚠️ ${logLabel}: ${result.failedNos.length}개 차단 실패 - ${result.failedNos.join(', ')}`);
+      if (result.message) {
+        this.log(`⚠️ ${logLabel} 상세: ${result.message}`);
+      }
+    }
+
+    return {
+      ...result,
+      successNos: dedupePostNos(result.successNos),
+      failedNos: dedupePostNos(result.failedNos),
+      deleteLimitExceededNos: dedupePostNos(result.deleteLimitExceededNos),
+    };
+  }
+
+  recordBanSuccesses(postMap, successNos, deleteEnabled) {
+    for (const successNo of successNos) {
       const post = postMap.get(String(successNo));
       if (!post) {
         continue;
       }
 
-      const upsertResult = this.upsertBanEntry(post);
+      const upsertResult = this.upsertBanEntry(post, deleteEnabled);
       if (upsertResult === 'inserted') {
         this.totalBanned += 1;
       }
     }
+  }
 
-    if (result.successNos.length > 0) {
-      this.log(`⛔ ${result.successNos.length}개 차단 완료 (총 ${this.totalBanned}건)`);
-    }
+  shouldSwitchRunToBanOnly(result) {
+    return this.runtimeDeleteEnabled
+      && Boolean(result?.deleteLimitExceeded);
+  }
 
-    if (result.failedNos.length > 0) {
-      this.log(`⚠️ ${result.failedNos.length}개 차단 실패 - ${result.failedNos.join(', ')}`);
-      if (result.message) {
-        this.log(`⚠️ 상세: ${result.message}`);
+  activateDeleteLimitBanOnly(message = '') {
+    const trimmedMessage = String(message || '').trim();
+    const switched = this.runtimeDeleteEnabled;
+    this.runtimeDeleteEnabled = false;
+    this.lastDeleteLimitExceededAt = new Date().toISOString();
+    this.lastDeleteLimitMessage = trimmedMessage;
+
+    if (switched) {
+      const holdMessage = this.currentSource === 'monitor'
+        ? '⚠️ 삭제 한도 초과 감지 - 이번 공격 세션 동안 IP 차단만 유지'
+        : '⚠️ 삭제 한도 초과 감지 - 토글 OFF할 때까지 IP 차단만 유지';
+      this.log(holdMessage);
+      if (trimmedMessage) {
+        this.log(`⚠️ 삭제 한도 상세: ${trimmedMessage}`);
       }
     }
+  }
+
+  syncManagedDeleteEnabled(deleteEnabled) {
+    const nextEnabled = Boolean(deleteEnabled);
+    const changed = this.runtimeDeleteEnabled !== nextEnabled;
+    this.runtimeDeleteEnabled = nextEnabled;
+
+    if (nextEnabled) {
+      this.lastDeleteLimitExceededAt = '';
+      this.lastDeleteLimitMessage = '';
+    }
+
+    return changed;
   }
 
   async findReleaseTargets(entries) {
@@ -373,9 +527,9 @@ class Scheduler {
     );
   }
 
-  upsertBanEntry(post) {
+  upsertBanEntry(post, deleteEnabled = this.runtimeDeleteEnabled) {
     this.expireStaleBans();
-    const nextEntry = createBanEntry(this.config, this.currentRunId, post);
+    const nextEntry = createBanEntry(this.config, this.currentRunId, post, deleteEnabled);
     let replacedExisting = false;
 
     this.activeBans = this.activeBans.map((entry) => {
@@ -486,6 +640,10 @@ class Scheduler {
           currentRunId: this.currentRunId,
           activeBans: this.activeBans,
           logs: this.logs.slice(0, 50),
+          currentSource: this.currentSource,
+          runtimeDeleteEnabled: this.runtimeDeleteEnabled,
+          lastDeleteLimitExceededAt: this.lastDeleteLimitExceededAt,
+          lastDeleteLimitMessage: this.lastDeleteLimitMessage,
           config: this.config,
         },
       });
@@ -510,6 +668,12 @@ class Scheduler {
       this.currentRunId = schedulerState.currentRunId || '';
       this.activeBans = Array.isArray(schedulerState.activeBans) ? schedulerState.activeBans : [];
       this.logs = Array.isArray(schedulerState.logs) ? schedulerState.logs : [];
+      this.currentSource = String(schedulerState.currentSource || 'manual').trim() || 'manual';
+      this.runtimeDeleteEnabled = schedulerState.runtimeDeleteEnabled === undefined
+        ? Boolean(schedulerState.config?.delChk)
+        : Boolean(schedulerState.runtimeDeleteEnabled);
+      this.lastDeleteLimitExceededAt = schedulerState.lastDeleteLimitExceededAt || '';
+      this.lastDeleteLimitMessage = schedulerState.lastDeleteLimitMessage || '';
       this.config = { ...this.config, ...(schedulerState.config || {}) };
       this.expireStaleBans();
     } catch (error) {
@@ -552,6 +716,10 @@ class Scheduler {
       activeBanCount,
       cycleCount: this.cycleCount,
       currentRunId: this.currentRunId,
+      currentSource: this.currentSource,
+      runtimeDeleteEnabled: this.runtimeDeleteEnabled,
+      lastDeleteLimitExceededAt: this.lastDeleteLimitExceededAt,
+      lastDeleteLimitMessage: this.lastDeleteLimitMessage,
       logs: this.logs.slice(0, 20),
       config: this.config,
     };
@@ -581,6 +749,12 @@ function getCutoffSourceLabel(source) {
   return source === 'monitor' ? '감시 자동화' : '수동 IP 차단';
 }
 
+function shouldIncludeExistingTargetsOnManualStart(config = {}, normalizedOptions = {}) {
+  return normalizedOptions.source === 'manual'
+    && !normalizedOptions.hasExplicitCutoff
+    && Boolean(config.includeExistingTargetsOnStart);
+}
+
 function getNormalizedPageRange(config = {}) {
   const minPage = Math.max(1, Number(config.minPage) || 1);
   const maxPage = Math.max(minPage, Number(config.maxPage) || minPage);
@@ -602,7 +776,7 @@ function normalizeReleaseOptions(options) {
   };
 }
 
-function createBanEntry(config, runId, post) {
+function createBanEntry(config, runId, post, deleteEnabled) {
   const now = new Date().toISOString();
   const expiresAt = computeExpiryAt(now, config.avoidHour);
 
@@ -616,7 +790,7 @@ function createBanEntry(config, runId, post) {
     writerDisplay: post.writerDisplay,
     avoidHour: String(config.avoidHour),
     avoidReason: String(config.avoidReason),
-    delChk: config.delChk ? 1 : 0,
+    delChk: deleteEnabled ? 1 : 0,
     bannedAt: now,
     expiresAt,
     status: 'active',
@@ -733,6 +907,28 @@ function pickLatestBanEntry(left, right) {
 function getComparableTimestamp(value) {
   const parsed = new Date(value || '').getTime();
   return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function dedupePostNos(postNos) {
+  return [...new Set(
+    (Array.isArray(postNos) ? postNos : [])
+      .map((postNo) => String(postNo || '').trim())
+      .filter((postNo) => /^\d+$/.test(postNo)),
+  )];
+}
+
+function dedupePostsByNo(posts) {
+  const postMap = new Map();
+
+  for (const post of Array.isArray(posts) ? posts : []) {
+    const postNo = String(post?.no || '').trim();
+    if (!/^\d+$/.test(postNo) || postMap.has(postNo)) {
+      continue;
+    }
+    postMap.set(postNo, post);
+  }
+
+  return [...postMap.values()];
 }
 
 export { Scheduler };

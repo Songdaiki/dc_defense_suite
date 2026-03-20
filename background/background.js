@@ -346,6 +346,9 @@ function resetSchedulerStats(feature, scheduler) {
   if (feature === 'ip') {
     scheduler.totalBanned = 0;
     scheduler.totalReleased = 0;
+    scheduler.lastDeleteLimitExceededAt = '';
+    scheduler.lastDeleteLimitMessage = '';
+    scheduler.runtimeDeleteEnabled = Boolean(scheduler.config?.delChk);
     return;
   }
 
@@ -370,8 +373,11 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.attackCutoffPostNo = 0;
     scheduler.initialSweepCompleted = false;
     scheduler.pendingInitialSweepPostNos = [];
+    scheduler.pendingInitialSweepPosts = [];
+    scheduler.pendingManagedIpBanOnlyPosts = [];
     scheduler.managedPostStarted = false;
     scheduler.managedIpStarted = false;
+    scheduler.managedIpDeleteEnabled = true;
     scheduler.logs = [];
   }
 }
@@ -702,8 +708,12 @@ function resetIpSchedulerState(message) {
   scheduler.totalReleased = 0;
   scheduler.cycleCount = 0;
   scheduler.currentRunId = '';
+  scheduler.currentSource = 'manual';
   scheduler.activeBans = [];
   scheduler.isReleaseRunning = false;
+  scheduler.runtimeDeleteEnabled = false;
+  scheduler.lastDeleteLimitExceededAt = '';
+  scheduler.lastDeleteLimitMessage = '';
   scheduler.config.cutoffPostNo = 0;
   scheduler.config.delChk = false;
   scheduler.logs = [];
@@ -730,8 +740,11 @@ function resetMonitorSchedulerState(message) {
   scheduler.attackCutoffPostNo = 0;
   scheduler.initialSweepCompleted = false;
   scheduler.pendingInitialSweepPostNos = [];
+  scheduler.pendingInitialSweepPosts = [];
+  scheduler.pendingManagedIpBanOnlyPosts = [];
   scheduler.managedPostStarted = false;
   scheduler.managedIpStarted = false;
+  scheduler.managedIpDeleteEnabled = true;
   scheduler.totalAttackDetected = 0;
   scheduler.totalAttackReleased = 0;
   scheduler.logs = [];

@@ -48,7 +48,7 @@ class Scheduler {
             cycleDelay: 1000,      // 사이클 간 딜레이 (ms)
             postConcurrency: 50,   // 한 페이지에서 동시에 처리할 게시물 수
             commentPageConcurrency: 4, // 한 게시물의 댓글 페이지 동시 조회 수
-            banOnDelete: false,    // 삭제 시 IP 차단 동시 수행
+            banOnDelete: true,     // 삭제 시 IP 차단 동시 수행
             avoidHour: '1',        // IP 차단 시간 (시)
             avoidReason: '0',      // 차단 사유 코드 (기타)
             avoidReasonText: '도배기로 인한 해당 유동IP차단',
