@@ -4,7 +4,7 @@ const DEFAULT_CONFIG = {
   baseUrl: 'https://gall.dcinside.com',
   headtextId: '130',
   headtextName: '',
-  avoidHour: '1',
+  avoidHour: '6',
   avoidReason: '0',
   avoidReasonText: '도배기로 인한 해당 유동IP차단',
   delChk: false,

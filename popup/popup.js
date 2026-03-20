@@ -142,6 +142,7 @@ const FEATURE_DOM = {
     requestDelayInput: document.getElementById('ipRequestDelay'),
     cycleDelayInput: document.getElementById('ipCycleDelay'),
     releaseScanMaxPagesInput: document.getElementById('ipReleaseScanMaxPages'),
+    avoidHourInput: document.getElementById('ipAvoidHour'),
     includeExistingTargetsOnStartInput: document.getElementById('ipIncludeExistingTargetsOnStart'),
     saveConfigBtn: document.getElementById('ipSaveConfigBtn'),
     releaseBtn: document.getElementById('ipReleaseBtn'),
@@ -556,6 +557,7 @@ function bindIpEvents() {
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 500),
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
       releaseScanMaxPages: parseOptionalInt(dom.releaseScanMaxPagesInput.value, 40),
+      avoidHour: String(Math.max(1, parseOptionalInt(dom.avoidHourInput.value, 6))),
       includeExistingTargetsOnStart: dom.includeExistingTargetsOnStartInput.checked,
     };
 
@@ -941,6 +943,7 @@ function updateIpUI(status) {
     [dom.requestDelayInput, status.config?.requestDelay ?? 500],
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
     [dom.releaseScanMaxPagesInput, status.config?.releaseScanMaxPages ?? 40],
+    [dom.avoidHourInput, status.config?.avoidHour ?? '6'],
     [dom.includeExistingTargetsOnStartInput, Boolean(status.config?.includeExistingTargetsOnStart)],
   ]);
   updateLogList(dom.logList, status.logs);
@@ -1169,6 +1172,7 @@ function getFeatureConfigInputs(feature) {
       dom.requestDelayInput,
       dom.cycleDelayInput,
       dom.releaseScanMaxPagesInput,
+      dom.avoidHourInput,
       dom.includeExistingTargetsOnStartInput,
     ];
   }

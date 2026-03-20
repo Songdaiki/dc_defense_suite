@@ -675,6 +675,7 @@ class Scheduler {
       this.lastDeleteLimitExceededAt = schedulerState.lastDeleteLimitExceededAt || '';
       this.lastDeleteLimitMessage = schedulerState.lastDeleteLimitMessage || '';
       this.config = { ...this.config, ...(schedulerState.config || {}) };
+      normalizeLegacyIpConfig(this.config);
       this.expireStaleBans();
     } catch (error) {
       console.error('[Scheduler] 상태 복원 실패:', error.message);
@@ -907,6 +908,13 @@ function pickLatestBanEntry(left, right) {
 function getComparableTimestamp(value) {
   const parsed = new Date(value || '').getTime();
   return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function normalizeLegacyIpConfig(config = {}) {
+  const legacyReasonText = String(config.avoidReasonText || '').trim();
+  if (legacyReasonText === '도배') {
+    config.avoidReasonText = DEFAULT_CONFIG.avoidReasonText;
+  }
 }
 
 function dedupePostNos(postNos) {
