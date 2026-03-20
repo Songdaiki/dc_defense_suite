@@ -372,7 +372,6 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.pendingInitialSweepPostNos = [];
     scheduler.managedPostStarted = false;
     scheduler.managedIpStarted = false;
-    scheduler.managedIpRunId = '';
     scheduler.logs = [];
   }
 }
@@ -733,7 +732,6 @@ function resetMonitorSchedulerState(message) {
   scheduler.pendingInitialSweepPostNos = [];
   scheduler.managedPostStarted = false;
   scheduler.managedIpStarted = false;
-  scheduler.managedIpRunId = '';
   scheduler.totalAttackDetected = 0;
   scheduler.totalAttackReleased = 0;
   scheduler.logs = [];

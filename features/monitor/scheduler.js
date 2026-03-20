@@ -35,7 +35,6 @@ class Scheduler {
     this.pendingInitialSweepPostNos = [];
     this.managedPostStarted = false;
     this.managedIpStarted = false;
-    this.managedIpRunId = '';
     this.totalAttackDetected = 0;
     this.totalAttackReleased = 0;
     this.logs = [];
@@ -90,7 +89,6 @@ class Scheduler {
     this.pendingInitialSweepPostNos = [];
     this.managedPostStarted = false;
     this.managedIpStarted = false;
-    this.managedIpRunId = '';
     this.log('🟢 자동 감시 시작!');
     await this.saveState();
     this.ensureRunLoop();
@@ -377,11 +375,6 @@ class Scheduler {
         this.log('🛡️ IP 차단 자동 대응 ON');
       }
 
-      const nextRunId = String(this.ipScheduler.currentRunId || '').trim();
-      if (nextRunId && this.managedIpRunId !== nextRunId) {
-        this.managedIpRunId = nextRunId;
-        this.log(`🧷 자동 해제 대상 runId 저장 (${nextRunId})`);
-      }
     }
   }
 
@@ -427,17 +420,9 @@ class Scheduler {
   async enterRecoveringMode() {
     this.phase = PHASE.RECOVERING;
     this.releaseHitCount = 0;
-    this.log('🧊 공격 종료 확정. 자동 대응 종료 및 IP 자동 해제 시작');
+    this.log('🧊 공격 종료 확정. 자동 대응 종료 시작');
 
     await this.stopManagedDefenses();
-    const releaseResult = await this.releaseManagedIpBans();
-
-    if (releaseResult.success) {
-      this.log(`✅ 자동 해제 완료 - ${releaseResult.message || '성공'}`);
-    } else {
-      this.log(`⚠️ 자동 해제 경고 - ${releaseResult.message || '실패'}`);
-    }
-
     this.totalAttackReleased += 1;
     this.clearAttackSession();
     this.phase = PHASE.NORMAL;
@@ -473,27 +458,6 @@ class Scheduler {
     }
   }
 
-  async releaseManagedIpBans() {
-    if (!this.managedIpRunId) {
-      return {
-        success: true,
-        releasedCount: 0,
-        failedReleaseCount: 0,
-        missingCount: 0,
-        message: '자동 해제 대상 runId가 없습니다.',
-      };
-    }
-
-    const result = await this.ipScheduler.releaseTrackedBans({ runId: this.managedIpRunId });
-    return {
-      success: Boolean(result?.success),
-      releasedCount: result?.releasedCount || 0,
-      failedReleaseCount: result?.failedReleaseCount || 0,
-      missingCount: result?.missingCount || 0,
-      message: result?.message || '자동 해제 결과 없음',
-    };
-  }
-
   clearAttackSession() {
     this.attackSessionId = '';
     this.attackCutoffPostNo = 0;
@@ -501,7 +465,6 @@ class Scheduler {
     this.pendingInitialSweepPostNos = [];
     this.managedPostStarted = false;
     this.managedIpStarted = false;
-    this.managedIpRunId = '';
     this.attackHitCount = 0;
     this.releaseHitCount = 0;
   }
@@ -536,7 +499,6 @@ class Scheduler {
           pendingInitialSweepPostNos: this.pendingInitialSweepPostNos,
           managedPostStarted: this.managedPostStarted,
           managedIpStarted: this.managedIpStarted,
-          managedIpRunId: this.managedIpRunId,
           totalAttackDetected: this.totalAttackDetected,
           totalAttackReleased: this.totalAttackReleased,
           logs: this.logs.slice(0, 50),
@@ -573,7 +535,6 @@ class Scheduler {
       this.pendingInitialSweepPostNos = dedupePostNos(schedulerState.pendingInitialSweepPostNos);
       this.managedPostStarted = Boolean(schedulerState.managedPostStarted);
       this.managedIpStarted = Boolean(schedulerState.managedIpStarted);
-      this.managedIpRunId = schedulerState.managedIpRunId || '';
       this.totalAttackDetected = schedulerState.totalAttackDetected || 0;
       this.totalAttackReleased = schedulerState.totalAttackReleased || 0;
       this.logs = Array.isArray(schedulerState.logs) ? schedulerState.logs : [];
@@ -624,7 +585,6 @@ class Scheduler {
       pendingInitialSweepPostNos: this.pendingInitialSweepPostNos,
       managedPostStarted: this.managedPostStarted,
       managedIpStarted: this.managedIpStarted,
-      managedIpRunId: this.managedIpRunId,
       totalAttackDetected: this.totalAttackDetected,
       totalAttackReleased: this.totalAttackReleased,
       logs: this.logs.slice(0, 20),
