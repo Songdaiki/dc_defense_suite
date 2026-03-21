@@ -233,6 +233,13 @@ async function handleMessage(message) {
 
     case 'updateConfig':
       if (message.config) {
+        if (message.feature === 'post' && message.config.manualAttackMode !== undefined) {
+          message.config = {
+            ...message.config,
+            manualAttackMode: normalizePostManualAttackMode(message.config.manualAttackMode),
+          };
+        }
+
         const configUpdateBlockMessage = getConfigUpdateBlockMessage(message.feature, scheduler, message.config);
         if (configUpdateBlockMessage) {
           return {
@@ -241,6 +248,13 @@ async function handleMessage(message) {
             status: scheduler.getStatus(),
             statuses: getAllStatuses(),
           };
+        }
+
+        if (message.feature === 'post' && scheduler.isRunning && scheduler.currentSource === 'manual') {
+          const runningPostModeTransitionResponse = await maybeHandleRunningPostModeTransition(scheduler, message.config);
+          if (runningPostModeTransitionResponse) {
+            return runningPostModeTransitionResponse;
+          }
         }
 
         if (message.feature === 'conceptMonitor') {
@@ -333,6 +347,10 @@ function resetSchedulerStats(feature, scheduler) {
 
   if (feature === 'post') {
     scheduler.totalClassified = 0;
+    if (typeof scheduler.cancelPendingRuntimeTransition === 'function') {
+      scheduler.cancelPendingRuntimeTransition('게시글 분류 통계 초기화로 모드 전환을 취소했습니다.');
+    }
+    scheduler.clearRuntimeAttackMode();
     return;
   }
 
@@ -371,6 +389,9 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.totalAttackDetected = 0;
     scheduler.totalAttackReleased = 0;
     scheduler.attackCutoffPostNo = 0;
+    scheduler.attackMode = 'default';
+    scheduler.attackModeReason = '';
+    scheduler.attackModeSampleTitles = [];
     scheduler.initialSweepCompleted = false;
     scheduler.pendingInitialSweepPostNos = [];
     scheduler.pendingInitialSweepPosts = [];
@@ -571,6 +592,10 @@ async function resumeStandaloneScheduler(scheduler, message) {
 async function stopDormantMonitorChildSchedulers() {
   if (schedulers.post.isRunning) {
     schedulers.post.isRunning = false;
+    if (typeof schedulers.post.cancelPendingRuntimeTransition === 'function') {
+      schedulers.post.cancelPendingRuntimeTransition('감시 자동화 child 정리로 게시글 분류 모드 전환을 취소했습니다.');
+    }
+    schedulers.post.clearRuntimeAttackMode();
     await schedulers.post.saveState();
   }
 
@@ -685,9 +710,48 @@ function resetPostSchedulerState(message) {
   scheduler.currentPage = 0;
   scheduler.totalClassified = 0;
   scheduler.cycleCount = 0;
+  if (typeof scheduler.cancelPendingRuntimeTransition === 'function') {
+    scheduler.cancelPendingRuntimeTransition('게시글 분류 상태 초기화로 모드 전환을 취소했습니다.');
+  }
+  scheduler.clearRuntimeAttackMode();
   scheduler.config.cutoffPostNo = 0;
   scheduler.logs = [];
   scheduler.log(message);
+}
+
+async function maybeHandleRunningPostModeTransition(scheduler, config) {
+  const currentManualAttackMode = normalizePostManualAttackMode(scheduler.config?.manualAttackMode);
+  const nextManualAttackMode = config.manualAttackMode === undefined
+    ? currentManualAttackMode
+    : normalizePostManualAttackMode(config.manualAttackMode);
+
+  if (currentManualAttackMode === nextManualAttackMode) {
+    return null;
+  }
+
+  try {
+    await scheduler.transitionManualAttackModeWhileRunning({
+      ...config,
+      manualAttackMode: nextManualAttackMode,
+    });
+    return {
+      success: true,
+      status: scheduler.getStatus(),
+      config: scheduler.config,
+      statuses: getAllStatuses(),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message,
+      status: scheduler.getStatus(),
+      statuses: getAllStatuses(),
+    };
+  }
+}
+
+function normalizePostManualAttackMode(value) {
+  return value === 'cjk_narrow' ? 'cjk_narrow' : 'default';
 }
 
 function resetSemiPostSchedulerState(message) {
@@ -738,6 +802,9 @@ function resetMonitorSchedulerState(message) {
   scheduler.lastSnapshot = [];
   scheduler.attackSessionId = '';
   scheduler.attackCutoffPostNo = 0;
+  scheduler.attackMode = 'default';
+  scheduler.attackModeReason = '';
+  scheduler.attackModeSampleTitles = [];
   scheduler.initialSweepCompleted = false;
   scheduler.pendingInitialSweepPostNos = [];
   scheduler.pendingInitialSweepPosts = [];

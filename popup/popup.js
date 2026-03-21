@@ -106,6 +106,7 @@ const FEATURE_DOM = {
     maxPageInput: document.getElementById('postMaxPage'),
     requestDelayInput: document.getElementById('postRequestDelay'),
     cycleDelayInput: document.getElementById('postCycleDelay'),
+    cjkModeToggleInput: document.getElementById('postCjkModeToggle'),
     saveConfigBtn: document.getElementById('postSaveConfigBtn'),
     resetBtn: document.getElementById('postResetBtn'),
   },
@@ -153,6 +154,7 @@ const FEATURE_DOM = {
     toggleLabel: document.getElementById('monitorToggleLabel'),
     statusText: document.getElementById('monitorStatusText'),
     phaseText: document.getElementById('monitorPhaseText'),
+    attackModeText: document.getElementById('monitorAttackModeText'),
     lastPollAt: document.getElementById('monitorLastPollAt'),
     newPostCount: document.getElementById('monitorNewPostCount'),
     newFluidCount: document.getElementById('monitorNewFluidCount'),
@@ -511,12 +513,23 @@ function bindPostEvents() {
       maxPage: parseOptionalInt(dom.maxPageInput.value, 1),
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 500),
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
+      manualAttackMode: dom.cjkModeToggleInput.checked ? 'cjk_narrow' : 'default',
     };
 
     const response = await sendFeatureMessage('post', { action: 'updateConfig', config });
-    if (response?.success) {
-      DIRTY_FEATURES.post = false;
-      flashSaved(dom.saveConfigBtn);
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    DIRTY_FEATURES.post = false;
+    flashSaved(dom.saveConfigBtn);
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
       updatePostUI(response.status);
     }
   });
@@ -905,6 +918,7 @@ function updatePostUI(status) {
     [dom.maxPageInput, status.config?.maxPage ?? 1],
     [dom.requestDelayInput, status.config?.requestDelay ?? 500],
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
+    [dom.cjkModeToggleInput, status.config?.manualAttackMode === 'cjk_narrow'],
   ]);
   updateLogList(dom.logList, status.logs);
 }
@@ -985,6 +999,7 @@ function updateMonitorUI(status) {
   updateToggle(dom, status.isRunning);
   updateStatusText(dom.statusText, getMonitorStatusLabel(status), getMonitorStatusClassName(status));
   dom.phaseText.textContent = status.phase || 'SEEDING';
+  dom.attackModeText.textContent = formatAttackModeLabel(status.attackMode);
   dom.lastPollAt.textContent = formatTimestamp(status.lastPollAt);
   dom.newPostCount.textContent = `${status.lastMetrics?.newPostCount ?? 0}개`;
   dom.newFluidCount.textContent = `${status.lastMetrics?.newFluidCount ?? 0}개`;
@@ -995,13 +1010,13 @@ function updateMonitorUI(status) {
   dom.totalAttackReleased.textContent = `${status.totalAttackReleased ?? 0}회`;
 
   syncFeatureConfigInputs('monitor', [
-    [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 30000],
-    [dom.pagesInput, status.config?.monitorPages ?? 1],
-    [dom.attackNewPostThresholdInput, status.config?.attackNewPostThreshold ?? 50],
-    [dom.attackFluidRatioThresholdInput, status.config?.attackFluidRatioThreshold ?? 85],
+    [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 20000],
+    [dom.pagesInput, status.config?.monitorPages ?? 2],
+    [dom.attackNewPostThresholdInput, status.config?.attackNewPostThreshold ?? 15],
+    [dom.attackFluidRatioThresholdInput, status.config?.attackFluidRatioThreshold ?? 88],
     [dom.attackConsecutiveCountInput, status.config?.attackConsecutiveCount ?? 2],
     [dom.releaseNewPostThresholdInput, status.config?.releaseNewPostThreshold ?? 10],
-    [dom.releaseFluidRatioThresholdInput, status.config?.releaseFluidRatioThreshold ?? 40],
+    [dom.releaseFluidRatioThresholdInput, status.config?.releaseFluidRatioThreshold ?? 30],
     [dom.releaseConsecutiveCountInput, status.config?.releaseConsecutiveCount ?? 3],
   ]);
   updateLogList(dom.logList, status.logs);
@@ -1151,6 +1166,7 @@ function getFeatureConfigInputs(feature) {
       dom.maxPageInput,
       dom.requestDelayInput,
       dom.cycleDelayInput,
+      dom.cjkModeToggleInput,
     ];
   }
 
@@ -1254,6 +1270,10 @@ function syncConfigInput(input, nextValue) {
 function parseOptionalInt(value, fallback) {
   const parsed = parseInt(value, 10);
   return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+function formatAttackModeLabel(value) {
+  return value === 'cjk_narrow' ? 'CJK_NARROW' : 'DEFAULT';
 }
 
 function clampPercent(value, fallback, min) {

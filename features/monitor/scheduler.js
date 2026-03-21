@@ -1,7 +1,12 @@
 import { deletePosts, fetchPostListHTML, delay } from '../post/api.js';
-import { parseBoardPosts } from '../post/parser.js';
+import { isHanCjkSpamLikePost, parseBoardPosts } from '../post/parser.js';
 
 const STORAGE_KEY = 'monitorSchedulerState';
+const ATTACK_MODE = {
+  DEFAULT: 'default',
+  CJK_NARROW: 'cjk_narrow',
+};
+const ATTACK_MODE_SAMPLE_POST_LIMIT = 3;
 
 const PHASE = {
   SEEDING: 'SEEDING',
@@ -31,6 +36,9 @@ class Scheduler {
     this.lastSnapshot = [];
     this.attackSessionId = '';
     this.attackCutoffPostNo = 0;
+    this.attackMode = ATTACK_MODE.DEFAULT;
+    this.attackModeReason = '';
+    this.attackModeSampleTitles = [];
     this.initialSweepCompleted = false;
     this.pendingInitialSweepPostNos = [];
     this.pendingInitialSweepPosts = [];
@@ -88,6 +96,9 @@ class Scheduler {
     this.lastSnapshot = [];
     this.attackSessionId = '';
     this.attackCutoffPostNo = 0;
+    this.attackMode = ATTACK_MODE.DEFAULT;
+    this.attackModeReason = '';
+    this.attackModeSampleTitles = [];
     this.initialSweepCompleted = false;
     this.pendingInitialSweepPostNos = [];
     this.pendingInitialSweepPosts = [];
@@ -118,6 +129,9 @@ class Scheduler {
     this.lastMetrics = buildEmptyMetrics();
     this.lastSnapshot = [];
     this.attackCutoffPostNo = 0;
+    this.attackMode = ATTACK_MODE.DEFAULT;
+    this.attackModeReason = '';
+    this.attackModeSampleTitles = [];
     this.initialSweepCompleted = false;
     this.pendingInitialSweepPostNos = [];
     this.pendingInitialSweepPosts = [];
@@ -166,6 +180,7 @@ class Scheduler {
         if (this.phase === PHASE.NORMAL) {
           await this.evaluateNormalState(metrics, currentSnapshot);
         } else if (this.phase === PHASE.ATTACKING) {
+          this.maybeWidenAttackMode(metrics);
           await this.ensureManagedDefensesStarted();
           await this.evaluateAttackingState(metrics);
         }
@@ -202,7 +217,10 @@ class Scheduler {
 
       this.currentPollPage = page;
       const html = await fetchPostListHTML({ galleryId: this.config.galleryId }, page);
-      const posts = parseBoardPosts(html);
+      const posts = parseBoardPosts(html).map((post) => ({
+        ...post,
+        sourcePage: page,
+      }));
 
       for (const post of posts) {
         const postKey = String(post.no);
@@ -240,7 +258,7 @@ class Scheduler {
       this.attackHitCount += 1;
       this.log(`🚨 공격 감지 streak ${this.attackHitCount}/${this.config.attackConsecutiveCount}`);
       if (this.attackHitCount >= this.config.attackConsecutiveCount) {
-        await this.enterAttackMode(currentSnapshot);
+        await this.enterAttackMode(metrics, currentSnapshot);
       }
       return;
     }
@@ -271,18 +289,25 @@ class Scheduler {
     this.releaseHitCount = 0;
   }
 
-  async enterAttackMode(currentSnapshot) {
+  async enterAttackMode(metrics, currentSnapshot) {
     const attackSnapshot = await this.resolveAttackCutoffSnapshot(currentSnapshot);
     const attackCutoffPostNo = getMaxPostNo(attackSnapshot);
     if (attackCutoffPostNo <= 0) {
       throw new Error('공격 cutoff snapshot 추출에 실패했습니다.');
     }
 
+    const attackModeDecision = this.decideAttackMode(metrics);
+    const initialSweepAllFluidPosts = buildAllFluidSnapshotPosts(attackSnapshot);
+    const initialSweepTargetPosts = buildInitialSweepPosts(attackSnapshot, attackModeDecision.attackMode);
+
     this.phase = PHASE.ATTACKING;
     this.attackSessionId = `attack_${Date.now()}`;
     this.attackCutoffPostNo = attackCutoffPostNo;
+    this.attackMode = attackModeDecision.attackMode;
+    this.attackModeReason = attackModeDecision.reason;
+    this.attackModeSampleTitles = attackModeDecision.sampleTitles;
     this.initialSweepCompleted = false;
-    this.pendingInitialSweepPosts = buildInitialSweepPosts(attackSnapshot);
+    this.pendingInitialSweepPosts = initialSweepTargetPosts;
     this.pendingInitialSweepPostNos = buildInitialSweepPostNos(this.pendingInitialSweepPosts);
     this.pendingManagedIpBanOnlyPosts = [];
     this.attackHitCount = 0;
@@ -290,6 +315,17 @@ class Scheduler {
     this.totalAttackDetected += 1;
     this.log(`🚨 공격 상태 진입 (${this.attackSessionId})`);
     this.log(`🧷 감시 자동화 cutoff 저장 (#${this.attackCutoffPostNo})`);
+    this.log(`🧠 공격 모드 판정: ${formatAttackModeLabel(this.attackMode)} (${this.attackModeReason})`);
+    if (this.attackModeSampleTitles.length > 0) {
+      this.log(`🧾 공격 샘플 제목: ${formatAttackSampleTitles(this.attackModeSampleTitles)}`);
+    }
+    if (this.attackMode === ATTACK_MODE.CJK_NARROW) {
+      this.log(
+        `🧹 initial sweep 대상 ${formatInitialSweepSnapshotScope(this.config.monitorPages)} 유동 ${initialSweepAllFluidPosts.length}개 -> 한자/CJK 필터 후 ${initialSweepTargetPosts.length}개`,
+      );
+    } else {
+      this.log(`🧹 initial sweep 대상 1페이지 유동 ${initialSweepTargetPosts.length}개`);
+    }
     await this.ensureManagedDefensesStarted();
   }
 
@@ -301,6 +337,35 @@ class Scheduler {
     this.log('⚠️ 공격 cutoff snapshot 추출 실패, 1000ms 후 1회 재시도');
     await delay(1000);
     return await this.pollBoardSnapshot();
+  }
+
+  decideAttackMode(metrics) {
+    const samplePosts = pickAttackModeSamplePosts(metrics);
+    return analyzeHanCjkAttackSample(samplePosts);
+  }
+
+  maybeWidenAttackMode(metrics) {
+    if (this.attackMode !== ATTACK_MODE.CJK_NARROW) {
+      return false;
+    }
+
+    const attackModeDecision = this.decideAttackMode(metrics);
+    if (attackModeDecision.sampleCount < ATTACK_MODE_SAMPLE_POST_LIMIT) {
+      return false;
+    }
+
+    if (attackModeDecision.hanLikeCount > 0) {
+      return false;
+    }
+
+    this.attackMode = ATTACK_MODE.DEFAULT;
+    this.attackModeReason = '공격 중 최신 샘플 3개에 Han/CJK 제목이 없어 DEFAULT로 확장';
+    this.attackModeSampleTitles = attackModeDecision.sampleTitles;
+    this.log(`↔️ 공격 모드 확장: CJK_NARROW -> DEFAULT (${this.attackModeReason})`);
+    if (this.attackModeSampleTitles.length > 0) {
+      this.log(`🧾 공격 샘플 제목: ${formatAttackSampleTitles(this.attackModeSampleTitles)}`);
+    }
+    return true;
   }
 
   async ensureManagedDefensesStarted() {
@@ -318,6 +383,7 @@ class Scheduler {
       try {
         await this.postScheduler.start({
           cutoffPostNo: this.attackCutoffPostNo,
+          attackMode: this.attackMode,
           source: 'monitor',
         });
       } catch (error) {
@@ -328,6 +394,10 @@ class Scheduler {
 
       if (Number(this.postScheduler.config.cutoffPostNo) !== Number(this.attackCutoffPostNo)) {
         this.postScheduler.config.cutoffPostNo = this.attackCutoffPostNo;
+        postStateChanged = true;
+      }
+
+      if (this.postScheduler.setMonitorAttackMode(this.attackMode)) {
         postStateChanged = true;
       }
 
@@ -491,6 +561,9 @@ class Scheduler {
   clearAttackSession() {
     this.attackSessionId = '';
     this.attackCutoffPostNo = 0;
+    this.attackMode = ATTACK_MODE.DEFAULT;
+    this.attackModeReason = '';
+    this.attackModeSampleTitles = [];
     this.initialSweepCompleted = false;
     this.pendingInitialSweepPostNos = [];
     this.pendingInitialSweepPosts = [];
@@ -500,6 +573,7 @@ class Scheduler {
     this.managedIpDeleteEnabled = true;
     this.attackHitCount = 0;
     this.releaseHitCount = 0;
+    this.postScheduler.clearRuntimeAttackMode();
   }
 
   activateManagedIpBanOnly(message = '') {
@@ -597,6 +671,9 @@ class Scheduler {
           lastSnapshot: this.lastSnapshot,
           attackSessionId: this.attackSessionId,
           attackCutoffPostNo: this.attackCutoffPostNo,
+          attackMode: this.attackMode,
+          attackModeReason: this.attackModeReason,
+          attackModeSampleTitles: this.attackModeSampleTitles,
           initialSweepCompleted: this.initialSweepCompleted,
           pendingInitialSweepPostNos: this.pendingInitialSweepPostNos,
           pendingInitialSweepPosts: this.pendingInitialSweepPosts,
@@ -636,6 +713,9 @@ class Scheduler {
       this.lastSnapshot = Array.isArray(schedulerState.lastSnapshot) ? schedulerState.lastSnapshot : [];
       this.attackSessionId = schedulerState.attackSessionId || '';
       this.attackCutoffPostNo = Number(schedulerState.attackCutoffPostNo) || 0;
+      this.attackMode = normalizeAttackMode(schedulerState.attackMode);
+      this.attackModeReason = String(schedulerState.attackModeReason || '').trim();
+      this.attackModeSampleTitles = normalizeAttackSampleTitles(schedulerState.attackModeSampleTitles);
       this.initialSweepCompleted = Boolean(schedulerState.initialSweepCompleted);
       this.pendingInitialSweepPostNos = dedupePostNos(schedulerState.pendingInitialSweepPostNos);
       this.pendingInitialSweepPosts = dedupePostsByNo(schedulerState.pendingInitialSweepPosts);
@@ -691,6 +771,9 @@ class Scheduler {
       lastMetrics: buildStoredMetrics(this.lastMetrics),
       attackSessionId: this.attackSessionId,
       attackCutoffPostNo: this.attackCutoffPostNo,
+      attackMode: this.attackMode,
+      attackModeReason: this.attackModeReason,
+      attackModeSampleTitles: this.attackModeSampleTitles,
       initialSweepCompleted: this.initialSweepCompleted,
       pendingInitialSweepPostNos: this.pendingInitialSweepPostNos,
       pendingInitialSweepPosts: this.pendingInitialSweepPosts,
@@ -739,8 +822,31 @@ function normalizePhase(value) {
   return Object.values(PHASE).includes(value) ? value : PHASE.SEEDING;
 }
 
+function normalizeAttackMode(value) {
+  return value === ATTACK_MODE.CJK_NARROW
+    ? ATTACK_MODE.CJK_NARROW
+    : ATTACK_MODE.DEFAULT;
+}
+
 function formatRatio(value) {
   return Number(value || 0).toFixed(1);
+}
+
+function formatAttackModeLabel(value) {
+  return normalizeAttackMode(value) === ATTACK_MODE.CJK_NARROW
+    ? 'CJK_NARROW'
+    : 'DEFAULT';
+}
+
+function formatAttackSampleTitles(titles) {
+  return normalizeAttackSampleTitles(titles).join(' / ');
+}
+
+function normalizeAttackSampleTitles(titles) {
+  return (Array.isArray(titles) ? titles : [])
+    .map((title) => String(title || '').trim())
+    .filter(Boolean)
+    .slice(0, ATTACK_MODE_SAMPLE_POST_LIMIT);
 }
 
 async function waitForSchedulerRunLoop(scheduler, label) {
@@ -770,11 +876,77 @@ function buildInitialSweepPostNos(snapshot) {
   );
 }
 
-function buildInitialSweepPosts(snapshot) {
+function buildAllFluidSnapshotPosts(snapshot) {
   return dedupePostsByNo(
-    (Array.isArray(snapshot) ? snapshot : [])
-      .filter((post) => post?.isFluid),
+    (Array.isArray(snapshot) ? snapshot : []).filter((post) => post?.isFluid),
   );
+}
+
+function buildInitialSweepPosts(snapshot, attackMode = ATTACK_MODE.DEFAULT) {
+  const normalizedAttackMode = normalizeAttackMode(attackMode);
+  const allFluidPosts = buildAllFluidSnapshotPosts(snapshot);
+
+  if (normalizedAttackMode === ATTACK_MODE.CJK_NARROW) {
+    return allFluidPosts.filter((post) => isEligibleForAttackMode(post, normalizedAttackMode));
+  }
+
+  return allFluidPosts.filter((post) => Number(post?.sourcePage) === 1);
+}
+
+function isEligibleForAttackMode(post, attackMode) {
+  if (normalizeAttackMode(attackMode) !== ATTACK_MODE.CJK_NARROW) {
+    return true;
+  }
+
+  return isHanCjkSpamLikePost(post);
+}
+
+function pickAttackModeSamplePosts(metrics) {
+  return dedupePostsByNo(metrics?.newPosts)
+    .filter((post) => post?.isFluid)
+    .sort((left, right) => (Number(right?.no) || 0) - (Number(left?.no) || 0))
+    .slice(0, ATTACK_MODE_SAMPLE_POST_LIMIT);
+}
+
+function analyzeHanCjkAttackSample(samplePosts) {
+  const normalizedSamplePosts = dedupePostsByNo(samplePosts);
+  const sampleTitles = normalizedSamplePosts.map((post) => String(post?.subject || '').trim()).filter(Boolean);
+  const hanLikeCount = normalizedSamplePosts.filter((post) => isHanCjkSpamLikePost(post)).length;
+
+  if (normalizedSamplePosts.length < ATTACK_MODE_SAMPLE_POST_LIMIT) {
+    return {
+      attackMode: ATTACK_MODE.DEFAULT,
+      reason: '샘플 유동글이 3개 미만이라 DEFAULT 유지',
+      sampleCount: normalizedSamplePosts.length,
+      hanLikeCount,
+      sampleTitles,
+    };
+  }
+
+  if (hanLikeCount > 0) {
+    return {
+      attackMode: ATTACK_MODE.CJK_NARROW,
+      reason: `새 유동글 샘플 ${normalizedSamplePosts.length}개 중 ${hanLikeCount}개가 Han/CJK 제목`,
+      sampleCount: normalizedSamplePosts.length,
+      hanLikeCount,
+      sampleTitles,
+    };
+  }
+
+  return {
+    attackMode: ATTACK_MODE.DEFAULT,
+    reason: '새 유동글 샘플 3개 모두 일반 제목이라 DEFAULT 유지',
+    sampleCount: normalizedSamplePosts.length,
+    hanLikeCount,
+    sampleTitles,
+  };
+}
+
+function formatInitialSweepSnapshotScope(monitorPages) {
+  const normalizedPages = Math.max(1, Number(monitorPages) || 1);
+  return normalizedPages === 1
+    ? '1페이지'
+    : `1~${normalizedPages}페이지`;
 }
 
 function dedupePostNos(postNos) {

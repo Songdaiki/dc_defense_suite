@@ -383,6 +383,17 @@
           </div>
         </div>
 
+        <div class="compact-option-row compact-option-row-post">
+          <div class="compact-option-copy">
+            <strong>중국어/한자 공격</strong>
+            <small>수동 게시글 분류에서 한자 제목만 분류 (ON 시 현재 설정 페이지의 기존 글도 포함)</small>
+          </div>
+          <label class="toggle-switch toggle-switch-small">
+            <input type="checkbox" id="postCjkModeToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+
         <div class="status-grid">
           <div class="status-item">
             <span class="status-label">상태</span>
@@ -628,6 +639,10 @@
           <div class="status-item">
             <span class="status-label">현재 단계</span>
             <span id="monitorPhaseText" class="status-value">SEEDING</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">공격 모드</span>
+            <span id="monitorAttackModeText" class="status-value">DEFAULT</span>
           </div>
           <div class="status-item">
             <span class="status-label">최근 폴링</span>

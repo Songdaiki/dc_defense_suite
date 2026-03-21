@@ -1,3 +1,6 @@
+const HAN_SCRIPT_CHAR_REGEX = /\p{Script=Han}/u;
+const MIN_HAN_LIKE_SUBJECT_LENGTH = 3;
+
 function parseBoardPosts(html) {
     return collectBoardPosts(html);
 }
@@ -152,6 +155,29 @@ function extractHeadtextName(html, headtextId) {
     return '';
 }
 
+function getHanScriptCharCount(text) {
+    return [...normalizeText(text)].reduce((count, char) => (
+        HAN_SCRIPT_CHAR_REGEX.test(char) ? count + 1 : count
+    ), 0);
+}
+
+function hasHanScriptText(text) {
+    return getHanScriptCharCount(text) > 0;
+}
+
+function isHanCjkSpamLikeSubject(subject) {
+    const normalizedSubject = normalizeText(subject);
+    if (normalizedSubject.length < MIN_HAN_LIKE_SUBJECT_LENGTH) {
+        return false;
+    }
+
+    return hasHanScriptText(normalizedSubject);
+}
+
+function isHanCjkSpamLikePost(post) {
+    return isHanCjkSpamLikeSubject(post?.subject || '');
+}
+
 function normalizeText(text) {
     return decodeHtml(String(text || ''))
         .replace(/\s+/g, ' ')
@@ -171,6 +197,10 @@ function decodeHtml(text) {
 export {
     extractHeadtextName,
     extractPostNos,
+    getHanScriptCharCount,
+    hasHanScriptText,
+    isHanCjkSpamLikePost,
+    isHanCjkSpamLikeSubject,
     parseBoardPosts,
     parseFluidPosts,
     parseUidBearingPosts,

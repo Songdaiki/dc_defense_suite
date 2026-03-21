@@ -413,6 +413,11 @@ body {
   border: 1px solid rgba(99, 216, 230, 0.12);
 }
 
+.compact-option-row-post {
+  background: rgba(255, 184, 79, 0.08);
+  border-color: rgba(255, 184, 79, 0.12);
+}
+
 .compact-option-copy {
   min-width: 0;
 }
