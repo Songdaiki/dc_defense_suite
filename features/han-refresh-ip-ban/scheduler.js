@@ -442,6 +442,7 @@ function normalizeDetectedMaxPage(value, fallbackMaxPage) {
 }
 
 function normalizeConfig(config = {}) {
+  const normalizedAvoidReasonText = normalizeAvoidReasonText(config.avoidReasonText);
   return {
     galleryId: String(config.galleryId || DEFAULT_CONFIG.galleryId).trim() || DEFAULT_CONFIG.galleryId,
     galleryType: String(config.galleryType || DEFAULT_CONFIG.galleryType).trim() || DEFAULT_CONFIG.galleryType,
@@ -451,8 +452,16 @@ function normalizeConfig(config = {}) {
     cycleIntervalMs: getCycleIntervalMs(config),
     avoidHour: String(config.avoidHour || DEFAULT_CONFIG.avoidHour),
     avoidReason: String(config.avoidReason || DEFAULT_CONFIG.avoidReason),
-    avoidReasonText: String(config.avoidReasonText || DEFAULT_CONFIG.avoidReasonText),
+    avoidReasonText: normalizedAvoidReasonText,
   };
+}
+
+function normalizeAvoidReasonText(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized || normalized === '도배' || normalized === '도배기') {
+    return DEFAULT_CONFIG.avoidReasonText;
+  }
+  return normalized;
 }
 
 function getRequestDelayMs(config = {}) {

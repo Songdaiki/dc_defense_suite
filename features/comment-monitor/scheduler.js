@@ -376,9 +376,14 @@ class Scheduler {
 
     if (!this.commentScheduler.isRunning) {
       try {
-        await this.commentScheduler.start();
+        await this.commentScheduler.start({ source: 'monitor' });
       } catch (error) {
         this.log(`⚠️ 댓글 방어 자동 시작 실패 - ${error.message}`);
+      }
+    } else {
+      const sourceChanged = this.commentScheduler.setCurrentSource('monitor');
+      if (sourceChanged) {
+        await this.commentScheduler.saveState();
       }
     }
 

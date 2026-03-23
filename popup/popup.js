@@ -110,6 +110,7 @@ const FEATURE_DOM = {
     cycleDelayInput: document.getElementById('commentCycleDelay'),
     postConcurrencyInput: document.getElementById('commentPostConcurrency'),
     banOnDeleteInput: document.getElementById('commentBanOnDelete'),
+    excludePureHangulInput: document.getElementById('commentExcludePureHangul'),
     avoidHourInput: document.getElementById('commentAvoidHour'),
     saveConfigBtn: document.getElementById('commentSaveConfigBtn'),
     resetBtn: document.getElementById('commentResetBtn'),
@@ -543,10 +544,24 @@ function bindCommentEvents() {
 
   dom.toggleBtn.addEventListener('change', async () => {
     const action = dom.toggleBtn.checked ? 'start' : 'stop';
-    const response = await sendFeatureMessage('comment', { action });
-    if (response?.success) {
-      updateCommentUI(response.status);
+    const message = action === 'start'
+      ? { action, source: 'manual' }
+      : { action };
+    const response = await sendFeatureMessage('comment', message);
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
     }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+      return;
+    }
+
+    updateCommentUI(response.status);
   });
 
   dom.saveConfigBtn.addEventListener('click', async () => {
@@ -557,15 +572,27 @@ function bindCommentEvents() {
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
       postConcurrency: parseOptionalInt(dom.postConcurrencyInput.value, 50),
       banOnDelete: dom.banOnDeleteInput.checked,
+      excludePureHangulManualOnly: dom.excludePureHangulInput.checked,
       avoidHour: String(Math.max(1, parseOptionalInt(dom.avoidHourInput.value, 1))),
     };
 
     const response = await sendFeatureMessage('comment', { action: 'updateConfig', config });
-    if (response?.success) {
-      DIRTY_FEATURES.comment = false;
-      flashSaved(dom.saveConfigBtn);
-      updateCommentUI(response.status);
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
     }
+
+    DIRTY_FEATURES.comment = false;
+    flashSaved(dom.saveConfigBtn);
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+      return;
+    }
+
+    updateCommentUI(response.status);
   });
 
   dom.resetBtn.addEventListener('click', async () => {
@@ -574,9 +601,20 @@ function bindCommentEvents() {
     }
 
     const response = await sendFeatureMessage('comment', { action: 'resetStats' });
-    if (response?.success) {
-      updateCommentUI(response.status);
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
     }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+      return;
+    }
+
+    updateCommentUI(response.status);
   });
 }
 
@@ -1018,6 +1056,7 @@ function updateCommentUI(status) {
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
     [dom.postConcurrencyInput, status.config?.postConcurrency ?? 50],
     [dom.banOnDeleteInput, status.config?.banOnDelete ?? true],
+    [dom.excludePureHangulInput, status.config?.excludePureHangulManualOnly === true],
     [dom.avoidHourInput, status.config?.avoidHour ?? '1'],
   ]);
   updateLogList(dom.logList, status.logs);
@@ -1251,6 +1290,7 @@ function getFeatureConfigInputs(feature) {
       dom.cycleDelayInput,
       dom.postConcurrencyInput,
       dom.banOnDeleteInput,
+      dom.excludePureHangulInput,
       dom.avoidHourInput,
     ];
   }

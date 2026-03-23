@@ -16,6 +16,7 @@ import {
 
 import {
     filterFluidComments,
+    filterDeletionTargetComments,
     extractCommentNos,
 } from './parser.js';
 
@@ -53,21 +54,24 @@ class Scheduler {
             avoidReason: '0',      // 차단 사유 코드 (기타)
             avoidReasonText: '도배기로 인한 해당 유동IP차단',
             avoidTypeChk: true,    // IP 차단 여부
+            excludePureHangulManualOnly: false,
         };
+        this.currentSource = '';
     }
 
     // ============================================================
     // 제어
     // ============================================================
 
-    async start() {
+    async start(options = {}) {
         if (this.isRunning) {
             this.log('⚠️ 이미 실행 중입니다.');
             return;
         }
 
+        this.currentSource = normalizeRunSource(options.source, 'manual');
         this.isRunning = true;
-        this.log('🟢 자동 삭제 시작!');
+        this.log(`🟢 자동 삭제 시작! (${getRunSourceLabel(this.currentSource)})`);
         await this.saveState();
 
         this.ensureRunLoop();
@@ -75,6 +79,7 @@ class Scheduler {
 
     async stop() {
         this.isRunning = false;
+        this.currentSource = '';
         this.log('🔴 자동 삭제 중지.');
         await this.saveState();
     }
@@ -203,19 +208,31 @@ class Scheduler {
                 return true;
             }
 
+            const deletionTargets = filterDeletionTargetComments(fluidComments, {
+                excludePureHangul: this.shouldExcludePureHangulForCurrentRun(),
+            });
+
+            if (deletionTargets.length === 0) {
+                this.log(`ℹ️ #${postNo}: 유동닉 ${fluidComments.length}개 중 순수 한글 제외로 삭제 대상 0개`);
+                return true;
+            }
+
             if (!this.isRunning) {
                 return false;
             }
 
             // 4. 삭제 (+ 선택적 IP 차단)
-            const commentNos = extractCommentNos(fluidComments);
+            const commentNos = extractCommentNos(deletionTargets);
             let result;
+            const deletionTargetText = deletionTargets.length === fluidComments.length
+                ? `${deletionTargets.length}개`
+                : `${fluidComments.length}개 중 삭제 대상 ${deletionTargets.length}개`;
 
             if (this.config.banOnDelete) {
-                this.log(`🗑️⛔ #${postNo}: 유동닉 ${fluidComments.length}개 삭제+차단 중...`);
+                this.log(`🗑️⛔ #${postNo}: 유동닉 ${deletionTargetText} 삭제+차단 중...`);
                 result = await deleteAndBanComments(this.config, postNo, commentNos);
             } else {
-                this.log(`🗑️ #${postNo}: 유동닉 ${fluidComments.length}개 삭제 중...`);
+                this.log(`🗑️ #${postNo}: 유동닉 ${deletionTargetText} 삭제 중...`);
                 result = await deleteComments(this.config, postNo, commentNos);
             }
 
@@ -229,11 +246,11 @@ class Scheduler {
 
                 if (verification.verificationFailed) {
                     this.log(`⚠️ #${postNo}: 삭제 응답 성공, 검증 실패 - ${verification.message}`);
-                } else if (verifiedDeletedCount === fluidComments.length) {
+                } else if (verifiedDeletedCount === deletionTargets.length) {
                     this.log(`✅ #${postNo}: ${verifiedDeletedCount}개 검증 삭제 완료 (총 ${this.totalDeleted}개)`);
                 } else if (verifiedDeletedCount > 0) {
                     this.log(
-                        `⚠️ #${postNo}: ${verifiedDeletedCount}/${fluidComments.length}개만 검증 삭제됨 (총 ${this.totalDeleted}개)`,
+                        `⚠️ #${postNo}: ${verifiedDeletedCount}/${deletionTargets.length}개만 검증 삭제됨 (총 ${this.totalDeleted}개)`,
                     );
                 } else {
                     this.log(`⚠️ #${postNo}: 삭제 응답 성공, 검증 삭제 수 0개`);
@@ -404,6 +421,24 @@ class Scheduler {
         this.verificationEvents = [];
     }
 
+    shouldExcludePureHangulForCurrentRun() {
+        return this.config.excludePureHangulManualOnly === true
+            && this.currentSource === 'manual';
+    }
+
+    setCurrentSource(source, { logChange = true } = {}) {
+        const nextSource = normalizeRunSource(source, this.isRunning ? 'manual' : '');
+        if (this.currentSource === nextSource) {
+            return false;
+        }
+
+        this.currentSource = nextSource;
+        if (this.isRunning && logChange) {
+            this.log(`ℹ️ 실행 출처 전환: ${getRunSourceLabel(nextSource)}`);
+        }
+        return true;
+    }
+
     // ============================================================
     // 상태 저장/복원
     // ============================================================
@@ -421,6 +456,7 @@ class Scheduler {
                     verificationEvents: this.verificationEvents.slice(-MAX_VERIFICATION_EVENTS),
                     logs: this.logs.slice(0, 50), // 최근 50개만 저장
                     config: this.config,
+                    currentSource: this.currentSource,
                 },
             });
         } catch (error) {
@@ -443,6 +479,11 @@ class Scheduler {
                     : [];
                 this.logs = schedulerState.logs || [];
                 this.config = { ...this.config, ...schedulerState.config };
+                this.config.avoidReasonText = normalizeAvoidReasonText(this.config.avoidReasonText);
+                this.currentSource = normalizeRunSource(
+                    schedulerState.currentSource,
+                    schedulerState.isRunning ? 'manual' : '',
+                );
             }
         } catch (error) {
             console.error('[Scheduler] 상태 복원 실패:', error.message);
@@ -486,8 +527,40 @@ class Scheduler {
             recentVerifiedDeletedCount: this.getVerifiedDeletedCountWithin(DEFAULT_VERIFICATION_WINDOW_MS),
             logs: this.logs.slice(0, 20), // 팝업에는 최근 20개만
             config: this.config,
+            currentSource: this.currentSource,
+            excludePureHangulEffective: this.shouldExcludePureHangulForCurrentRun(),
         };
     }
+}
+
+function normalizeRunSource(source, fallback = '') {
+    if (source === '') {
+        return '';
+    }
+
+    if (source === 'manual' || source === 'monitor') {
+        return source;
+    }
+
+    return fallback;
+}
+
+function getRunSourceLabel(source) {
+    if (source === 'monitor') {
+        return '자동';
+    }
+    if (source === 'manual') {
+        return '수동';
+    }
+    return '미지정';
+}
+
+function normalizeAvoidReasonText(value) {
+    const normalized = String(value || '').trim();
+    if (!normalized || normalized === '도배' || normalized === '도배기') {
+        return '도배기로 인한 해당 유동IP차단';
+    }
+    return normalized;
 }
 
 // ============================================================

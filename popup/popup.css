@@ -390,6 +390,10 @@ body {
   border: 1px solid rgba(255, 159, 159, 0.12);
 }
 
+.subfeature-toggle-inline {
+  margin-bottom: 12px;
+}
+
 .subfeature-copy {
   min-width: 0;
 }

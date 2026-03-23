@@ -40,7 +40,7 @@
   - `nos[]`를 한 번에 묶어서 요청
 - 사유:
   - `avoid_reason = 0`
-  - `avoid_reason_txt = 도배기`
+  - `avoid_reason_txt = 도배기로 인한 해당 유동IP차단`
 - 동일 IP 제한:
   - **두지 않음**
   - 같은 IP가 여러 row에 있으면 row 기준으로 계속 다시 차단 시도
@@ -583,7 +583,7 @@ fallback 기본값을 사용한다.
 
 - `avoid_hour = 6`
 - `avoid_reason = 0`
-- `avoid_reason_txt = 도배기`
+- `avoid_reason_txt = 도배기로 인한 해당 유동IP차단`
 
 즉 이번 기능은:
 
@@ -615,7 +615,7 @@ gallery_id=thesingularity
 _GALLTYPE_=M
 avoid_hour=6
 avoid_reason=0
-avoid_reason_txt=도배기
+avoid_reason_txt=도배기로 인한 해당 유동IP차단
 nos[]=10159649
 nos[]=10159647
 ...
@@ -795,7 +795,7 @@ nos[]=10159647
 - `user_code_avoid`
 - `6시간`
 - `avoid_reason = 0`
-- `avoid_reason_txt = 도배기`
+- `avoid_reason_txt = 도배기로 인한 해당 유동IP차단`
 - 성공 기준은 `result === "success"`
 
 ### 5. 끝 페이지 drift 보정 (tail 보정 루프)

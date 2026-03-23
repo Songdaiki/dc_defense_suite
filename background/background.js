@@ -102,6 +102,10 @@ async function resumeAllSchedulers() {
     && schedulers.commentMonitor.phase === COMMENT_MONITOR_PHASE.ATTACKING;
 
   if (commentMonitorAttacking) {
+    if (typeof schedulers.comment.setCurrentSource === 'function') {
+      schedulers.comment.setCurrentSource('monitor', { logChange: false });
+      await schedulers.comment.saveState();
+    }
     await resumeStandaloneScheduler(schedulers.comment, '🔁 댓글 감시 자동화 관리 대상 댓글 방어 복원');
   } else if (commentMonitorOwnsChild) {
     await stopDormantCommentMonitorChildScheduler();
@@ -230,7 +234,11 @@ async function handleMessage(message) {
           };
         }
       }
-      await scheduler.start();
+      if (message.feature === 'comment') {
+        await scheduler.start({ source: message.source });
+      } else {
+        await scheduler.start();
+      }
       return { success: true, status: scheduler.getStatus(), statuses: getAllStatuses() };
 
     case 'stop':
@@ -659,6 +667,9 @@ async function stopDormantCommentMonitorChildScheduler() {
   }
 
   schedulers.comment.isRunning = false;
+  if (typeof schedulers.comment.setCurrentSource === 'function') {
+    schedulers.comment.setCurrentSource('', { logChange: false });
+  }
   await schedulers.comment.saveState();
 }
 
@@ -669,6 +680,9 @@ function resetCommentSchedulerState(message) {
   scheduler.totalDeleted = 0;
   scheduler.cycleCount = 0;
   scheduler.resetVerificationState();
+  if (typeof scheduler.setCurrentSource === 'function') {
+    scheduler.setCurrentSource('', { logChange: false });
+  }
   scheduler.logs = [];
   scheduler.log(message);
 }

@@ -912,7 +912,7 @@ function getComparableTimestamp(value) {
 
 function normalizeLegacyIpConfig(config = {}) {
   const legacyReasonText = String(config.avoidReasonText || '').trim();
-  if (legacyReasonText === '도배') {
+  if (legacyReasonText === '도배' || legacyReasonText === '도배기') {
     config.avoidReasonText = DEFAULT_CONFIG.avoidReasonText;
   }
 }

@@ -5,6 +5,16 @@
  * SPEC.md에서 확인된 판별 로직을 사용합니다.
  */
 
+const PURE_HANGUL_COMMENT_REGEX = /^[\p{Script=Hangul}\s]+$/u;
+const HTML_ENTITY_MAP = {
+    amp: '&',
+    lt: '<',
+    gt: '>',
+    quot: '"',
+    apos: '\'',
+    nbsp: ' ',
+};
+
 // ============================================================
 // 유동닉 판별 로직
 // ============================================================
@@ -72,6 +82,52 @@ function extractCommentNos(comments) {
 }
 
 /**
+ * 댓글 본문을 순수 문자열 비교용으로 정규화
+ *
+ * @param {unknown} memo
+ * @returns {string}
+ */
+function normalizeCommentMemo(memo) {
+    const decoded = decodeHtmlEntities(String(memo ?? ''));
+    return decoded
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+/**
+ * 순수 한글 댓글 여부 확인
+ *
+ * @param {unknown} memo
+ * @returns {boolean}
+ */
+function isPureHangulCommentMemo(memo) {
+    const normalized = normalizeCommentMemo(memo);
+    if (!normalized) {
+        return false;
+    }
+
+    return PURE_HANGUL_COMMENT_REGEX.test(normalized);
+}
+
+/**
+ * 실제 삭제 대상으로 사용할 댓글만 추출
+ *
+ * @param {Array} comments
+ * @param {{ excludePureHangul?: boolean }} [options]
+ * @returns {Array}
+ */
+function filterDeletionTargetComments(comments, options = {}) {
+    const excludePureHangul = options.excludePureHangul === true;
+    if (!excludePureHangul) {
+        return comments;
+    }
+
+    return comments.filter((comment) => !isPureHangulCommentMemo(comment?.memo));
+}
+
+/**
  * 댓글 목록을 요약 로그용으로 변환
  * 
  * @param {Array} comments - 댓글 배열
@@ -81,9 +137,28 @@ function summarizeComments(comments) {
     return comments.map(c => {
         const name = c.name || '?';
         const ip = c.ip || '';
-        const memo = (c.memo || '').substring(0, 20);
+        const memo = normalizeCommentMemo(c.memo).substring(0, 20);
         return `[${c.no}] ${name}(${ip}): ${memo}...`;
     }).join('\n');
+}
+
+function decodeHtmlEntities(value) {
+    return value
+        .replace(/&#x([0-9a-f]+);/gi, (_, hex) => fromCodePointSafe(parseInt(hex, 16)))
+        .replace(/&#(\d+);/g, (_, decimal) => fromCodePointSafe(parseInt(decimal, 10)))
+        .replace(/&([a-z]+);/gi, (match, name) => HTML_ENTITY_MAP[name.toLowerCase()] ?? match);
+}
+
+function fromCodePointSafe(codePoint) {
+    if (!Number.isFinite(codePoint) || codePoint <= 0 || codePoint > 0x10FFFF) {
+        return '';
+    }
+
+    try {
+        return String.fromCodePoint(codePoint);
+    } catch {
+        return '';
+    }
 }
 
 // ============================================================
@@ -93,6 +168,9 @@ export {
     isFluidUser,
     shouldSkip,
     filterFluidComments,
+    normalizeCommentMemo,
+    isPureHangulCommentMemo,
+    filterDeletionTargetComments,
     extractCommentNos,
     summarizeComments,
 };
