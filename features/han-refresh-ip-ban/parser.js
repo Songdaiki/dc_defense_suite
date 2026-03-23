@@ -1,10 +1,11 @@
 import { parseBlockListRows, normalizeWriterToken } from '../ip/parser.js';
-import { hasHanScriptText } from '../post/parser.js';
+import { getHanScriptCharCount } from '../post/parser.js';
 
 const PAGE_END_LINK_REGEX = /<a[^>]*(?:class="[^"]*\bpage_end\b[^"]*"[^>]*href="([^"]+)"|href="([^"]+)"[^>]*class="[^"]*\bpage_end\b[^"]*")/i;
 const PAGE_ANCHOR_REGEX = /<a[^>]*href="([^"]*?[?&](?:p|page)=\d+[^"]*)"[^>]*>\s*(\d+)\s*<\/a>/gi;
 const CURRENT_PAGE_REGEX = /<(?:em|strong|b|span)[^>]*>\s*1\s*<\/(?:em|strong|b|span)>/i;
 const PAGING_BOX_REGEX = /<div[^>]*class="[^"]*(?:\bbottom_paging_box\b[^"]*\biconpaging\b|\biconpaging\b[^"]*\bbottom_paging_box\b)[^"]*"[^>]*>([\s\S]*?)<\/div>/i;
+const MIN_HAN_CHAR_COUNT = 2;
 
 function parseDetectedMaxPage(html, fallbackMaxPage = 400) {
   const normalizedFallback = Math.max(1, Number(fallbackMaxPage) || 400);
@@ -65,7 +66,7 @@ function extractActionableManagementRows(html, options = {}) {
       continue;
     }
 
-    if (!hasHanScriptText(row.title || '')) {
+    if (getHanScriptCharCount(row.title || '') < MIN_HAN_CHAR_COUNT) {
       continue;
     }
 
