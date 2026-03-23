@@ -210,6 +210,7 @@ async function handleMessage(message) {
 
   const monitorManualLockMessage = getMonitorManualLockMessage(message.feature, message.action);
   if (monitorManualLockMessage) {
+    maybeLogIpIncludeExistingTargetsFailure(scheduler, message, monitorManualLockMessage);
     return {
       success: false,
       message: monitorManualLockMessage,
@@ -235,7 +236,20 @@ async function handleMessage(message) {
         }
       }
       if (message.feature === 'comment') {
-        await scheduler.start({ source: message.source });
+        await scheduler.start({
+          source: message.source,
+          excludePureHangulOnStart: message.excludePureHangulOnStart,
+        });
+      } else if (message.feature === 'post') {
+        await scheduler.start({
+          source: message.source,
+          attackMode: message.attackMode,
+        });
+      } else if (message.feature === 'ip') {
+        await scheduler.start({
+          source: message.source,
+          includeExistingTargetsOnStart: message.includeExistingTargetsOnStart,
+        });
       } else {
         await scheduler.start();
       }
@@ -266,6 +280,7 @@ async function handleMessage(message) {
 
         const configUpdateBlockMessage = getConfigUpdateBlockMessage(message.feature, scheduler, message.config);
         if (configUpdateBlockMessage) {
+          maybeLogIpIncludeExistingTargetsFailure(scheduler, message, configUpdateBlockMessage);
           return {
             success: false,
             message: configUpdateBlockMessage,
@@ -283,6 +298,10 @@ async function handleMessage(message) {
 
         if (message.feature === 'conceptMonitor') {
           applyConceptMonitorConfigUpdate(scheduler, message.config);
+        }
+
+        if (message.feature === 'ip') {
+          maybeLogIpIncludeExistingTargetsToggleChange(scheduler, message.config);
         }
         scheduler.config = { ...scheduler.config, ...message.config };
         await scheduler.saveState();
@@ -316,6 +335,12 @@ function resetSchedulerStats(feature, scheduler) {
   if (feature === 'comment') {
     scheduler.totalDeleted = 0;
     scheduler.resetVerificationState();
+    if (!scheduler.isRunning) {
+      if (typeof scheduler.setCurrentSource === 'function') {
+        scheduler.setCurrentSource('', { logChange: false });
+      }
+      scheduler.excludePureHangulMode = false;
+    }
     return;
   }
 
@@ -391,7 +416,9 @@ function resetSchedulerStats(feature, scheduler) {
     if (typeof scheduler.cancelPendingRuntimeTransition === 'function') {
       scheduler.cancelPendingRuntimeTransition('게시글 분류 통계 초기화로 모드 전환을 취소했습니다.');
     }
-    scheduler.clearRuntimeAttackMode();
+    if (!scheduler.isRunning) {
+      scheduler.clearRuntimeAttackMode();
+    }
     return;
   }
 
@@ -835,6 +862,43 @@ function resetSemiPostSchedulerState(message) {
   scheduler.log(message);
 }
 
+function maybeLogIpIncludeExistingTargetsToggleChange(scheduler, config = {}) {
+  if (config.includeExistingTargetsOnStart === undefined) {
+    return;
+  }
+
+  const currentValue = Boolean(scheduler.config?.includeExistingTargetsOnStart);
+  const nextValue = Boolean(config.includeExistingTargetsOnStart);
+  if (currentValue === nextValue) {
+    return;
+  }
+
+  scheduler.log(
+    nextValue
+      ? '🧹 도배기탭 삭제기 ON - 다음에 수동 IP차단을 시작하면, 이미 올라와 있던 도배기탭 글도 같이 처리합니다.'
+      : '📭 도배기탭 삭제기 OFF - 다음에 수동 IP차단을 시작하면, 새로 올라온 도배기탭 글만 처리합니다.',
+  );
+}
+
+function maybeLogIpIncludeExistingTargetsFailure(scheduler, message = {}, errorMessage = '') {
+  if (!scheduler || message.feature !== 'ip') {
+    return;
+  }
+
+  const includeExistingTouched = message.action === 'start'
+    || message.config?.includeExistingTargetsOnStart !== undefined;
+  if (!includeExistingTouched) {
+    return;
+  }
+
+  const normalizedMessage = String(errorMessage || '').trim();
+  if (!normalizedMessage) {
+    return;
+  }
+
+  scheduler.log(`⚠️ 도배기탭 삭제기 반영 실패 - ${normalizedMessage}`);
+}
+
 function resetIpSchedulerState(message) {
   const scheduler = schedulers.ip;
   scheduler.currentPage = 0;
@@ -843,6 +907,7 @@ function resetIpSchedulerState(message) {
   scheduler.cycleCount = 0;
   scheduler.currentRunId = '';
   scheduler.currentSource = 'manual';
+  scheduler.includeExistingTargetsMode = false;
   scheduler.activeBans = [];
   scheduler.isReleaseRunning = false;
   scheduler.runtimeDeleteEnabled = false;

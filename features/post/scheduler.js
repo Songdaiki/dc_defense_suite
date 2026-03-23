@@ -71,7 +71,7 @@ class Scheduler {
         const normalizedOptions = normalizeStartOptions(options);
         const shouldApplyCutoff = shouldApplyCutoffForSource(
             normalizedOptions.source,
-            this.config.manualAttackMode,
+            normalizedOptions.attackMode,
         );
         const cutoffPostNo = normalizedOptions.hasExplicitCutoff
             ? normalizedOptions.cutoffPostNo
@@ -208,6 +208,10 @@ class Scheduler {
             return normalizeAttackMode(this.currentAttackMode);
         }
 
+        if (this.isRunning) {
+            return normalizeAttackMode(this.currentAttackMode);
+        }
+
         return normalizeAttackMode(this.config.manualAttackMode);
     }
 
@@ -268,7 +272,8 @@ class Scheduler {
                 ...pendingRuntimeTransition.nextConfig,
             };
             this.currentPage = 0;
-            this.clearRuntimeAttackMode();
+            this.currentSource = 'manual';
+            this.currentAttackMode = pendingRuntimeTransition.nextAttackMode;
 
             if (pendingRuntimeTransition.nextAttackMode === ATTACK_MODE.CJK_NARROW) {
                 this.log('🔁 수동 중국어/한자 공격 모드 적용 - 첫 페이지부터 다시 스캔합니다. (cutoff 미사용)');
@@ -433,6 +438,8 @@ class Scheduler {
                     cycleCount: this.cycleCount,
                     logs: this.logs.slice(0, 50), // 최근 50개만 저장
                     config: this.config,
+                    currentSource: this.currentSource,
+                    currentAttackMode: this.currentAttackMode,
                 },
             });
         } catch (error) {
@@ -455,7 +462,14 @@ class Scheduler {
                     manualAttackMode: normalizeAttackMode(schedulerState?.config?.manualAttackMode),
                 };
                 this.pendingRuntimeTransition = null;
-                this.clearRuntimeAttackMode();
+                this.currentSource = normalizeRunSource(
+                    schedulerState.currentSource || '',
+                    schedulerState.isRunning ? 'manual' : 'manual',
+                );
+                this.currentAttackMode = normalizeAttackMode(schedulerState.currentAttackMode);
+                if (!schedulerState.isRunning) {
+                    this.clearRuntimeAttackMode();
+                }
             }
         } catch (error) {
             console.error('[Scheduler] 상태 복원 실패:', error.message);
@@ -513,9 +527,7 @@ function normalizeStartOptions(options = {}) {
     const rawCutoffPostNo = options?.cutoffPostNo;
     const hasExplicitCutoff = rawCutoffPostNo !== undefined && rawCutoffPostNo !== null && String(rawCutoffPostNo).trim() !== '';
     const cutoffPostNo = hasExplicitCutoff ? Number(rawCutoffPostNo) : 0;
-    const attackMode = source === 'monitor'
-        ? normalizeAttackMode(options?.attackMode)
-        : ATTACK_MODE.DEFAULT;
+    const attackMode = normalizeAttackMode(options?.attackMode);
 
     return {
         source,
@@ -539,6 +551,12 @@ function normalizeAttackMode(value) {
     return value === ATTACK_MODE.CJK_NARROW
         ? ATTACK_MODE.CJK_NARROW
         : ATTACK_MODE.DEFAULT;
+}
+
+function normalizeRunSource(value, fallback = 'manual') {
+    return value === 'monitor' || value === 'manual'
+        ? value
+        : fallback;
 }
 
 function shouldApplyCutoffForSource(source, attackMode) {

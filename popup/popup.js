@@ -545,9 +545,62 @@ function bindCommentEvents() {
   dom.toggleBtn.addEventListener('change', async () => {
     const action = dom.toggleBtn.checked ? 'start' : 'stop';
     const message = action === 'start'
-      ? { action, source: 'manual' }
+      ? { action, source: 'manual', excludePureHangulOnStart: false }
       : { action };
     const response = await sendFeatureMessage('comment', message);
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+      return;
+    }
+
+    updateCommentUI(response.status);
+  });
+
+  dom.excludePureHangulInput.addEventListener('change', async () => {
+    const targetEnabled = dom.excludePureHangulInput.checked;
+    const statusResponse = await sendFeatureMessage('comment', { action: 'getStatus' });
+    if (!statusResponse?.success || !statusResponse.status) {
+      await refreshAllStatuses();
+      return;
+    }
+
+    const currentStatus = statusResponse.status;
+    let response = null;
+
+    if (targetEnabled) {
+      if (currentStatus.isRunning) {
+        if (currentStatus.currentSource === 'manual' && currentStatus.excludePureHangulMode) {
+          updateCommentUI(currentStatus);
+          return;
+        }
+
+        alert('일반 댓글 방어가 이미 실행 중입니다. 먼저 정지한 뒤 한글제외 유동닉댓글 삭제를 켜세요.');
+        await refreshAllStatuses();
+        return;
+      }
+
+      response = await sendFeatureMessage('comment', {
+        action: 'start',
+        source: 'manual',
+        excludePureHangulOnStart: true,
+      });
+    } else {
+      if (!currentStatus.isRunning || currentStatus.currentSource !== 'manual' || !currentStatus.excludePureHangulMode) {
+        await refreshAllStatuses();
+        return;
+      }
+
+      response = await sendFeatureMessage('comment', { action: 'stop' });
+    }
+
     if (!response?.success) {
       if (response?.message) {
         alert(response.message);
@@ -572,7 +625,6 @@ function bindCommentEvents() {
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
       postConcurrency: parseOptionalInt(dom.postConcurrencyInput.value, 50),
       banOnDelete: dom.banOnDeleteInput.checked,
-      excludePureHangulManualOnly: dom.excludePureHangulInput.checked,
       avoidHour: String(Math.max(1, parseOptionalInt(dom.avoidHourInput.value, 1))),
     };
 
@@ -623,12 +675,71 @@ function bindPostEvents() {
 
   dom.toggleBtn.addEventListener('change', async () => {
     const action = dom.toggleBtn.checked ? 'start' : 'stop';
-    const response = await sendFeatureMessage('post', { action });
+    const response = await sendFeatureMessage('post', action === 'start'
+      ? {
+        action,
+        source: 'manual',
+        attackMode: 'default',
+      }
+      : { action });
     if (!response?.success) {
       if (response?.message) {
         alert(response.message);
       }
       await refreshAllStatuses();
+      return;
+    }
+
+    updatePostUI(response.status);
+  });
+
+  dom.cjkModeToggleInput.addEventListener('change', async () => {
+    const targetEnabled = dom.cjkModeToggleInput.checked;
+    const statusResponse = await sendFeatureMessage('post', { action: 'getStatus' });
+    if (!statusResponse?.success || !statusResponse.status) {
+      await refreshAllStatuses();
+      return;
+    }
+
+    const currentStatus = statusResponse.status;
+    let response = null;
+
+    if (targetEnabled) {
+      if (currentStatus.isRunning) {
+        if (currentStatus.currentSource === 'manual' && currentStatus.currentAttackMode === 'cjk_narrow') {
+          updatePostUI(currentStatus);
+          return;
+        }
+
+        alert('일반 게시글 분류가 이미 실행 중입니다. 먼저 정지한 뒤 중국어/한자 공격을 켜세요.');
+        await refreshAllStatuses();
+        return;
+      }
+
+      response = await sendFeatureMessage('post', {
+        action: 'start',
+        source: 'manual',
+        attackMode: 'cjk_narrow',
+      });
+    } else {
+      if (!currentStatus.isRunning || currentStatus.currentSource !== 'manual' || currentStatus.currentAttackMode !== 'cjk_narrow') {
+        await refreshAllStatuses();
+        return;
+      }
+
+      response = await sendFeatureMessage('post', { action: 'stop' });
+    }
+
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
       return;
     }
 
@@ -641,7 +752,6 @@ function bindPostEvents() {
       maxPage: parseOptionalInt(dom.maxPageInput.value, 1),
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 500),
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
-      manualAttackMode: dom.cjkModeToggleInput.checked ? 'cjk_narrow' : 'default',
     };
 
     const response = await sendFeatureMessage('post', { action: 'updateConfig', config });
@@ -679,12 +789,71 @@ function bindIpEvents() {
 
   dom.toggleBtn.addEventListener('change', async () => {
     const action = dom.toggleBtn.checked ? 'start' : 'stop';
-    const response = await sendFeatureMessage('ip', { action });
+    const response = await sendFeatureMessage('ip', action === 'start'
+      ? {
+        action,
+        source: 'manual',
+        includeExistingTargetsOnStart: false,
+      }
+      : { action });
     if (!response?.success) {
       if (response?.message) {
         alert(response.message);
       }
       await refreshAllStatuses();
+      return;
+    }
+
+    updateIpUI(response.status);
+  });
+
+  dom.includeExistingTargetsOnStartInput.addEventListener('change', async () => {
+    const targetEnabled = dom.includeExistingTargetsOnStartInput.checked;
+    const statusResponse = await sendFeatureMessage('ip', { action: 'getStatus' });
+    if (!statusResponse?.success || !statusResponse.status) {
+      await refreshAllStatuses();
+      return;
+    }
+
+    const currentStatus = statusResponse.status;
+    let response = null;
+
+    if (targetEnabled) {
+      if (currentStatus.isRunning) {
+        if (currentStatus.includeExistingTargetsMode) {
+          updateIpUI(currentStatus);
+          return;
+        }
+
+        alert('일반 IP 차단이 이미 실행 중입니다. 먼저 정지한 뒤 도배기탭 삭제기를 켜세요.');
+        await refreshAllStatuses();
+        return;
+      }
+
+      response = await sendFeatureMessage('ip', {
+        action: 'start',
+        source: 'manual',
+        includeExistingTargetsOnStart: true,
+      });
+    } else {
+      if (!currentStatus.isRunning || !currentStatus.includeExistingTargetsMode) {
+        await refreshAllStatuses();
+        return;
+      }
+
+      response = await sendFeatureMessage('ip', { action: 'stop' });
+    }
+
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
       return;
     }
 
@@ -699,7 +868,6 @@ function bindIpEvents() {
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
       releaseScanMaxPages: parseOptionalInt(dom.releaseScanMaxPagesInput.value, 40),
       avoidHour: String(Math.max(1, parseOptionalInt(dom.avoidHourInput.value, 6))),
-      includeExistingTargetsOnStart: dom.includeExistingTargetsOnStartInput.checked,
     };
 
     const response = await sendFeatureMessage('ip', { action: 'updateConfig', config });
@@ -1056,9 +1224,13 @@ function updateCommentUI(status) {
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
     [dom.postConcurrencyInput, status.config?.postConcurrency ?? 50],
     [dom.banOnDeleteInput, status.config?.banOnDelete ?? true],
-    [dom.excludePureHangulInput, status.config?.excludePureHangulManualOnly === true],
     [dom.avoidHourInput, status.config?.avoidHour ?? '1'],
   ]);
+  dom.excludePureHangulInput.checked = Boolean(
+    status.isRunning
+    && status.currentSource === 'manual'
+    && status.excludePureHangulMode,
+  );
   updateLogList(dom.logList, status.logs);
 }
 
@@ -1081,8 +1253,12 @@ function updatePostUI(status) {
     [dom.maxPageInput, status.config?.maxPage ?? 1],
     [dom.requestDelayInput, status.config?.requestDelay ?? 500],
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
-    [dom.cjkModeToggleInput, status.config?.manualAttackMode === 'cjk_narrow'],
   ]);
+  dom.cjkModeToggleInput.checked = Boolean(
+    status.isRunning
+    && status.currentSource === 'manual'
+    && status.currentAttackMode === 'cjk_narrow',
+  );
   updateLogList(dom.logList, status.logs);
 }
 
@@ -1113,6 +1289,7 @@ function updateIpUI(status) {
   dom.cycleCount.textContent = `${status.cycleCount}회`;
   dom.releaseBtn.disabled = status.isRunning || status.isReleaseRunning || status.activeBanCount <= 0;
   dom.releaseBtn.textContent = status.isReleaseRunning ? '해제 중...' : '내가 차단한 대상 해제';
+  dom.includeExistingTargetsOnStartInput.checked = Boolean(status.isRunning && status.includeExistingTargetsMode);
 
   syncFeatureConfigInputs('ip', [
     [dom.minPageInput, status.config?.minPage ?? 1],
@@ -1121,7 +1298,6 @@ function updateIpUI(status) {
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
     [dom.releaseScanMaxPagesInput, status.config?.releaseScanMaxPages ?? 40],
     [dom.avoidHourInput, status.config?.avoidHour ?? '6'],
-    [dom.includeExistingTargetsOnStartInput, Boolean(status.config?.includeExistingTargetsOnStart)],
   ]);
   updateLogList(dom.logList, status.logs);
 }
@@ -1196,15 +1372,18 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus) {
 
   setDisabled(commentMonitorDom.resetBtn, commentLocked);
   setDisabled(commentDom.toggleBtn, commentLocked);
+  setDisabled(commentDom.excludePureHangulInput, commentLocked);
   setDisabled(commentDom.saveConfigBtn, commentLocked);
   setDisabled(commentDom.resetBtn, commentLocked);
   setDisabled(postDom.toggleBtn, postIpLocked);
+  setDisabled(postDom.cjkModeToggleInput, postIpLocked);
   setDisabled(postDom.saveConfigBtn, postIpLocked);
   setDisabled(postDom.resetBtn, postIpLocked);
   setDisabled(semiPostDom.toggleBtn, postIpLocked);
   setDisabled(semiPostDom.saveConfigBtn, postIpLocked);
   setDisabled(semiPostDom.resetBtn, postIpLocked);
   setDisabled(ipDom.toggleBtn, postIpLocked);
+  setDisabled(ipDom.includeExistingTargetsOnStartInput, postIpLocked);
   setDisabled(ipDom.saveConfigBtn, postIpLocked);
   setDisabled(ipDom.resetBtn, postIpLocked);
   setDisabled(ipDom.releaseBtn, postIpLocked || ipDom.releaseBtn.disabled);
@@ -1290,7 +1469,6 @@ function getFeatureConfigInputs(feature) {
       dom.cycleDelayInput,
       dom.postConcurrencyInput,
       dom.banOnDeleteInput,
-      dom.excludePureHangulInput,
       dom.avoidHourInput,
     ];
   }
@@ -1338,7 +1516,6 @@ function getFeatureConfigInputs(feature) {
       dom.maxPageInput,
       dom.requestDelayInput,
       dom.cycleDelayInput,
-      dom.cjkModeToggleInput,
     ];
   }
 
@@ -1361,7 +1538,6 @@ function getFeatureConfigInputs(feature) {
       dom.cycleDelayInput,
       dom.releaseScanMaxPagesInput,
       dom.avoidHourInput,
-      dom.includeExistingTargetsOnStartInput,
     ];
   }
 

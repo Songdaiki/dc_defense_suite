@@ -28,6 +28,7 @@ class Scheduler {
     this.currentRunId = '';
     this.activeBans = [];
     this.currentSource = 'manual';
+    this.includeExistingTargetsMode = false;
     this.runtimeDeleteEnabled = false;
     this.lastDeleteLimitExceededAt = '';
     this.lastDeleteLimitMessage = '';
@@ -78,11 +79,12 @@ class Scheduler {
     this.isRunning = true;
     this.currentRunId = createRunId();
     this.currentSource = normalizedOptions.source;
+    this.includeExistingTargetsMode = includeExistingTargets;
     this.runtimeDeleteEnabled = normalizedOptions.delChk;
     this.lastDeleteLimitExceededAt = '';
     this.lastDeleteLimitMessage = '';
     if (includeExistingTargets) {
-      this.log('🧹 수동 도배기탭 삭제기 모드 시작 - 기존 도배기 글도 같이 처리합니다.');
+      this.log('🧹 수동 도배기탭 삭제기 모드 시작 - 시작 전에 이미 올라와 있던 도배기탭 글도 같이 처리합니다.');
     } else {
       this.log(`🧷 ${getCutoffSourceLabel(normalizedOptions.source)} cutoff 저장 (#${cutoffPostNo})`);
     }
@@ -96,6 +98,7 @@ class Scheduler {
     this.isRunning = false;
     this.currentPage = 0;
     this.currentSource = 'manual';
+    this.includeExistingTargetsMode = false;
     this.runtimeDeleteEnabled = Boolean(this.config.delChk);
     this.lastDeleteLimitExceededAt = '';
     this.lastDeleteLimitMessage = '';
@@ -641,6 +644,7 @@ class Scheduler {
           activeBans: this.activeBans,
           logs: this.logs.slice(0, 50),
           currentSource: this.currentSource,
+          includeExistingTargetsMode: this.includeExistingTargetsMode,
           runtimeDeleteEnabled: this.runtimeDeleteEnabled,
           lastDeleteLimitExceededAt: this.lastDeleteLimitExceededAt,
           lastDeleteLimitMessage: this.lastDeleteLimitMessage,
@@ -669,6 +673,7 @@ class Scheduler {
       this.activeBans = Array.isArray(schedulerState.activeBans) ? schedulerState.activeBans : [];
       this.logs = Array.isArray(schedulerState.logs) ? schedulerState.logs : [];
       this.currentSource = String(schedulerState.currentSource || 'manual').trim() || 'manual';
+      this.includeExistingTargetsMode = Boolean(schedulerState.includeExistingTargetsMode);
       this.runtimeDeleteEnabled = schedulerState.runtimeDeleteEnabled === undefined
         ? Boolean(schedulerState.config?.delChk)
         : Boolean(schedulerState.runtimeDeleteEnabled);
@@ -718,6 +723,7 @@ class Scheduler {
       cycleCount: this.cycleCount,
       currentRunId: this.currentRunId,
       currentSource: this.currentSource,
+      includeExistingTargetsMode: this.includeExistingTargetsMode,
       runtimeDeleteEnabled: this.runtimeDeleteEnabled,
       lastDeleteLimitExceededAt: this.lastDeleteLimitExceededAt,
       lastDeleteLimitMessage: this.lastDeleteLimitMessage,
@@ -737,12 +743,17 @@ function normalizeStartOptions(options = {}) {
   const hasExplicitCutoff = rawCutoffPostNo !== undefined && rawCutoffPostNo !== null && String(rawCutoffPostNo).trim() !== '';
   const cutoffPostNo = hasExplicitCutoff ? Number(rawCutoffPostNo) : 0;
   const hasExplicitDelChk = options?.delChk !== undefined;
+  const hasExplicitIncludeExistingTargetsOnStart = options?.includeExistingTargetsOnStart !== undefined;
 
   return {
     source,
     cutoffPostNo,
     hasExplicitCutoff: hasExplicitCutoff && Number.isFinite(cutoffPostNo),
     delChk: hasExplicitDelChk ? Boolean(options.delChk) : true,
+    hasExplicitIncludeExistingTargetsOnStart,
+    includeExistingTargetsOnStart: hasExplicitIncludeExistingTargetsOnStart
+      ? Boolean(options.includeExistingTargetsOnStart)
+      : false,
   };
 }
 
@@ -751,9 +762,15 @@ function getCutoffSourceLabel(source) {
 }
 
 function shouldIncludeExistingTargetsOnManualStart(config = {}, normalizedOptions = {}) {
-  return normalizedOptions.source === 'manual'
-    && !normalizedOptions.hasExplicitCutoff
-    && Boolean(config.includeExistingTargetsOnStart);
+  if (normalizedOptions.source !== 'manual' || normalizedOptions.hasExplicitCutoff) {
+    return false;
+  }
+
+  if (normalizedOptions.hasExplicitIncludeExistingTargetsOnStart) {
+    return Boolean(normalizedOptions.includeExistingTargetsOnStart);
+  }
+
+  return false;
 }
 
 function getNormalizedPageRange(config = {}) {

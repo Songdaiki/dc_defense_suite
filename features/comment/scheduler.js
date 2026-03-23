@@ -57,6 +57,7 @@ class Scheduler {
             excludePureHangulManualOnly: false,
         };
         this.currentSource = '';
+        this.excludePureHangulMode = false;
     }
 
     // ============================================================
@@ -70,7 +71,15 @@ class Scheduler {
         }
 
         this.currentSource = normalizeRunSource(options.source, 'manual');
+        this.excludePureHangulMode = this.currentSource === 'manual' && Boolean(options.excludePureHangulOnStart);
         this.isRunning = true;
+        if (this.currentSource === 'manual') {
+            if (this.excludePureHangulMode) {
+                this.log('🧹 수동 한글 제외 댓글 방어 시작 - 순수 한글 댓글은 제외합니다.');
+            } else {
+                this.log('🧷 수동 댓글 방어 시작 - 일반 모드로 처리합니다.');
+            }
+        }
         this.log(`🟢 자동 삭제 시작! (${getRunSourceLabel(this.currentSource)})`);
         await this.saveState();
 
@@ -80,6 +89,7 @@ class Scheduler {
     async stop() {
         this.isRunning = false;
         this.currentSource = '';
+        this.excludePureHangulMode = false;
         this.log('🔴 자동 삭제 중지.');
         await this.saveState();
     }
@@ -422,8 +432,8 @@ class Scheduler {
     }
 
     shouldExcludePureHangulForCurrentRun() {
-        return this.config.excludePureHangulManualOnly === true
-            && this.currentSource === 'manual';
+        return this.currentSource === 'manual'
+            && this.excludePureHangulMode === true;
     }
 
     setCurrentSource(source, { logChange = true } = {}) {
@@ -433,6 +443,9 @@ class Scheduler {
         }
 
         this.currentSource = nextSource;
+        if (nextSource !== 'manual') {
+            this.excludePureHangulMode = false;
+        }
         if (this.isRunning && logChange) {
             this.log(`ℹ️ 실행 출처 전환: ${getRunSourceLabel(nextSource)}`);
         }
@@ -457,6 +470,7 @@ class Scheduler {
                     logs: this.logs.slice(0, 50), // 최근 50개만 저장
                     config: this.config,
                     currentSource: this.currentSource,
+                    excludePureHangulMode: this.excludePureHangulMode,
                 },
             });
         } catch (error) {
@@ -484,6 +498,8 @@ class Scheduler {
                     schedulerState.currentSource,
                     schedulerState.isRunning ? 'manual' : '',
                 );
+                this.excludePureHangulMode = this.currentSource === 'manual'
+                    && Boolean(schedulerState.excludePureHangulMode);
             }
         } catch (error) {
             console.error('[Scheduler] 상태 복원 실패:', error.message);
@@ -528,6 +544,7 @@ class Scheduler {
             logs: this.logs.slice(0, 20), // 팝업에는 최근 20개만
             config: this.config,
             currentSource: this.currentSource,
+            excludePureHangulMode: this.excludePureHangulMode,
             excludePureHangulEffective: this.shouldExcludePureHangulForCurrentRun(),
         };
     }
