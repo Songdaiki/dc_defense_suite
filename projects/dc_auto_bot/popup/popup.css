@@ -72,6 +72,27 @@ body {
   min-width: 0;
 }
 
+.broker-managed-badge-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.broker-managed-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(113, 146, 180, 0.34);
+  background: rgba(20, 34, 52, 0.86);
+  color: #cfe0ef;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .sub-toggle-title {
   font-size: 12px;
   font-weight: 700;

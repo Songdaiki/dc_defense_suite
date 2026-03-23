@@ -1,6 +1,5 @@
 const toggleBtn = document.getElementById('toggleBtn');
 const toggleLabel = document.getElementById('toggleLabel');
-const loginAutomationToggle = document.getElementById('loginAutomationToggle');
 const loginAutomationLabel = document.getElementById('loginAutomationLabel');
 const statusText = document.getElementById('statusText');
 const phaseText = document.getElementById('phaseText');
@@ -67,22 +66,6 @@ function bindEvents() {
     applyStatus(response.status);
   });
 
-  loginAutomationToggle.addEventListener('change', async () => {
-    const response = await sendMessage({
-      action: 'updateLoginAutomation',
-      config: buildLoginAutomationConfig(loginAutomationToggle.checked),
-    });
-    if (!response?.success) {
-      if (response?.message) {
-        alert(response.message);
-      }
-      await refreshStatus();
-      return;
-    }
-
-    applyStatus(response.status);
-  });
-
   saveConfigBtn.addEventListener('click', async () => {
     const config = {
       galleryId: galleryIdInput.value.trim(),
@@ -121,7 +104,7 @@ function bindEvents() {
   saveLoginAutomationBtn.addEventListener('click', async () => {
     const response = await sendMessage({
       action: 'updateLoginAutomation',
-      config: buildLoginAutomationConfig(loginAutomationToggle.checked),
+      config: buildLoginAutomationConfig(false),
     });
     if (!response?.success) {
       alert(response?.message || '로그인 자동화 저장에 실패했습니다.');
@@ -225,8 +208,7 @@ function applyStatus(status) {
 
   toggleBtn.checked = Boolean(status.isRunning);
   toggleLabel.textContent = status.isRunning ? 'ON' : 'OFF';
-  loginAutomationToggle.checked = false;
-  loginAutomationLabel.textContent = login.managedByBroker ? '특궁' : (login.enabled === true ? 'ON' : 'OFF');
+  loginAutomationLabel.textContent = login.managedByBroker ? '특궁에서 관리' : (login.enabled === true ? '사용 중' : '비활성화');
   statusText.textContent = status.isRunning ? '🟢 실행 중' : '🔴 정지';
   statusText.classList.toggle('status-off', !status.isRunning);
   phaseText.textContent = status.phase || 'IDLE';
@@ -335,7 +317,6 @@ function applyRunningLocks(isRunning, isTesting) {
 }
 
 function applyLoginOwnershipLocks(isManagedByBroker) {
-  loginAutomationToggle.disabled = isManagedByBroker;
   dcLoginUserIdInput.disabled = isManagedByBroker;
   dcLoginPasswordInput.disabled = isManagedByBroker;
   saveLoginAutomationBtn.disabled = isManagedByBroker;
