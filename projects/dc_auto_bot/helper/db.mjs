@@ -118,6 +118,56 @@ class ModerationRecordStore {
     };
   }
 
+  async getReporterRanking(limit = 3) {
+    await this.init();
+    const maxEntries = Math.max(1, Math.min(20, Number(limit) || 3));
+    const rankingMap = new Map();
+
+    for (const record of this.records) {
+      if (String(record?.source || '').trim() !== 'auto_report') {
+        continue;
+      }
+
+      const reporterUserId = normalizeOptionalString(record?.reporterUserId);
+      if (!reporterUserId) {
+        continue;
+      }
+
+      const existing = rankingMap.get(reporterUserId) || {
+        reporterUserId,
+        reporterLabel: '',
+        totalReports: 0,
+        allowCount: 0,
+        lastReportedAt: '',
+      };
+
+      existing.totalReports += 1;
+
+      if (String(record?.status || '').trim().toLowerCase() === 'completed'
+        && String(record?.decision || '').trim().toLowerCase() === 'allow') {
+        existing.allowCount += 1;
+      }
+
+      const candidateLabel = normalizeOptionalString(record?.reporterLabel);
+      const candidateTime = normalizeIsoDate(record?.updatedAt) || normalizeIsoDate(record?.createdAt);
+      const currentTime = normalizeIsoDate(existing.lastReportedAt);
+
+      if (!existing.reporterLabel || (candidateLabel && candidateTime && candidateTime > (currentTime || ''))) {
+        existing.reporterLabel = candidateLabel || existing.reporterLabel || reporterUserId;
+      }
+
+      if (!existing.lastReportedAt || (candidateTime && candidateTime > existing.lastReportedAt)) {
+        existing.lastReportedAt = candidateTime || existing.lastReportedAt;
+      }
+
+      rankingMap.set(reporterUserId, existing);
+    }
+
+    return Array.from(rankingMap.values())
+      .sort(compareReporterRanking)
+      .slice(0, maxEntries);
+  }
+
   async persist() {
     this.records = this.records.filter((record) => isPersistablePublicRecord(record));
     const serialized = this.records.map((record) => JSON.stringify(record)).join('\n');
@@ -145,6 +195,8 @@ function normalizePublicModerationRecord(input) {
     status: normalizeStatus(input.status) || 'completed',
     targetUrl: normalizeOptionalString(input.targetUrl),
     targetPostNo: normalizeOptionalString(input.targetPostNo),
+    reporterUserId: normalizeOptionalString(input.reporterUserId),
+    reporterLabel: normalizeOptionalString(input.reporterLabel),
     publicTitle: rawTitle || '(제목 없음)',
     publicBody: normalizeOptionalString(input.publicBody) || '',
     reportReason: normalizeOptionalString(input.reportReason),
@@ -255,6 +307,36 @@ function isPersistablePublicRecord(record) {
   }
 
   return Boolean(record.decision);
+}
+
+function compareReporterRanking(left, right) {
+  const leftTotalReports = Math.max(0, Number(left?.totalReports) || 0);
+  const rightTotalReports = Math.max(0, Number(right?.totalReports) || 0);
+  if (rightTotalReports !== leftTotalReports) {
+    return rightTotalReports - leftTotalReports;
+  }
+
+  const leftAllowCount = Math.max(0, Number(left?.allowCount) || 0);
+  const rightAllowCount = Math.max(0, Number(right?.allowCount) || 0);
+  if (rightAllowCount !== leftAllowCount) {
+    return rightAllowCount - leftAllowCount;
+  }
+
+  const leftLastReportedAt = Date.parse(String(left?.lastReportedAt || ''));
+  const rightLastReportedAt = Date.parse(String(right?.lastReportedAt || ''));
+  if (Number.isFinite(rightLastReportedAt) && Number.isFinite(leftLastReportedAt) && rightLastReportedAt !== leftLastReportedAt) {
+    return rightLastReportedAt - leftLastReportedAt;
+  }
+
+  if (Number.isFinite(rightLastReportedAt) && !Number.isFinite(leftLastReportedAt)) {
+    return 1;
+  }
+
+  if (!Number.isFinite(rightLastReportedAt) && Number.isFinite(leftLastReportedAt)) {
+    return -1;
+  }
+
+  return String(left?.reporterUserId || '').localeCompare(String(right?.reporterUserId || ''));
 }
 
 export {

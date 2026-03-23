@@ -1,6 +1,13 @@
 const TRANSPARENCY_AUTO_REFRESH_MS = 10000;
 
-function renderTransparencyListPage({ records, nextCursor, total, healthStatus, currentFilter = '' }) {
+function renderTransparencyListPage({
+  records,
+  nextCursor,
+  total,
+  healthStatus,
+  currentFilter = '',
+  reporterRanking = [],
+}) {
   const stats = countDecisions(records);
 
   const tableRows = records.length > 0
@@ -64,7 +71,7 @@ function renderTransparencyListPage({ records, nextCursor, total, healthStatus, 
         </div>
       </div>
 
-      ${renderSidebar(total, stats)}
+      ${renderSidebar(total, stats, reporterRanking)}
       <script>
         setTimeout(() => {
           window.location.reload();
@@ -210,7 +217,7 @@ function buildListHref(cursor, currentFilter) {
   return query ? `/transparency?${query}` : '/transparency';
 }
 
-function renderSidebar(total, stats) {
+function renderSidebar(total, stats, reporterRanking = []) {
   return `
     <div class="sidebar">
       <div class="sidebar-box">
@@ -318,6 +325,40 @@ function renderSidebar(total, stats) {
           </div>
         </div>
       </div>
+
+      <div class="sidebar-box">
+        <div class="sidebar-box-title">특갤봇 랭킹</div>
+        <div class="sidebar-box-body">
+          ${renderReporterRanking(reporterRanking)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderReporterRanking(reporterRanking = []) {
+  if (!Array.isArray(reporterRanking) || reporterRanking.length === 0) {
+    return '<div class="ranking-empty">아직 집계된 신고자가 없습니다.</div>';
+  }
+
+  return reporterRanking
+    .slice(0, 3)
+    .map((entry, index) => renderReporterRankingRow(entry, index + 1))
+    .join('');
+}
+
+function renderReporterRankingRow(entry, rank) {
+  const reporterLabel = String(entry?.reporterLabel || entry?.reporterUserId || '알 수 없음').trim() || '알 수 없음';
+  const totalReports = Math.max(0, Number(entry?.totalReports) || 0);
+  const allowCount = Math.max(0, Number(entry?.allowCount) || 0);
+
+  return `
+    <div class="ranking-row">
+      <div class="ranking-head">
+        <span class="ranking-badge ranking-badge-${escapeAttribute(String(rank))}">${escapeHtml(`${rank}등`)}</span>
+        <span class="ranking-label">${escapeHtml(reporterLabel)}</span>
+      </div>
+      <div class="ranking-meta">기여횟수: ${escapeHtml(String(totalReports))} 승인 수: ${escapeHtml(String(allowCount))}</div>
     </div>
   `;
 }

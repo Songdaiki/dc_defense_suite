@@ -628,6 +628,8 @@ function buildTransparencyRecord(input) {
     decisionSource: String(input.decisionSource || 'gemini'),
     targetUrl: String(input.targetUrl || ''),
     targetPostNo: String(input.targetPostNo || ''),
+    reporterUserId: String(input.reporterUserId || ''),
+    reporterLabel: String(input.reporterLabel || ''),
     reportReason: String(input.reportReason || ''),
     title: String(input.title || ''),
     bodyText: String(input.bodyText || ''),

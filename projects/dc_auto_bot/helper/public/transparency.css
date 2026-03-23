@@ -518,6 +518,75 @@ a:hover {
   color: #999;
 }
 
+.ranking-row {
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f1f1;
+}
+
+.ranking-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.ranking-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ranking-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.ranking-badge-1 {
+  background: #fff4d8;
+  border-color: #e4cb84;
+  color: #9a6a00;
+}
+
+.ranking-badge-2 {
+  background: #eef2f6;
+  border-color: #c8d2dc;
+  color: #54606c;
+}
+
+.ranking-badge-3 {
+  background: #f8ece4;
+  border-color: #dcbca8;
+  color: #8c5a3c;
+}
+
+.ranking-label {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #333;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.ranking-meta {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #777;
+  line-height: 1.5;
+}
+
+.ranking-empty {
+  font-size: 12px;
+  color: #999;
+  line-height: 1.5;
+}
+
 .sidebar-info-value {
   font-weight: 600;
   color: #333;
