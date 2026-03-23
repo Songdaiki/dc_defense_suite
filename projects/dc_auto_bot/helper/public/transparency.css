@@ -501,6 +501,10 @@ a:hover {
   padding: 10px 12px;
 }
 
+.sidebar-box-body-ranking {
+  padding-top: 4px;
+}
+
 .sidebar-info-row {
   display: flex;
   justify-content: space-between;
@@ -521,6 +525,10 @@ a:hover {
 .ranking-row {
   padding: 8px 0;
   border-bottom: 1px solid #f1f1f1;
+}
+
+.ranking-row:first-child {
+  padding-top: 4px;
 }
 
 .ranking-row:last-child {

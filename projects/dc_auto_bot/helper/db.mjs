@@ -85,34 +85,17 @@ class ModerationRecordStore {
 
   async listRecords(filters = {}) {
     await this.init();
-    const decision = normalizeOptionalString(filters.decision).toLowerCase();
-    const policyId = normalizeOptionalString(filters.policyId).toUpperCase();
     const limit = Math.max(1, Math.min(200, Number(filters.limit) || 50));
     const offset = Math.max(0, Number(filters.cursor) || 0);
 
-    let records = this.records;
-    if (decision) {
-      records = records.filter((record) => {
-        if (record.decision === decision) {
-          return true;
-        }
-
-        if (decision === 'review' && record.status === 'pending') {
-          return true;
-        }
-
-        return false;
-      });
-    }
-    if (policyId) {
-      records = records.filter((record) => Array.isArray(record.policyIds) && record.policyIds.includes(policyId));
-    }
+    const records = filterRecords(this.records, filters);
 
     const sliced = records.slice(offset, offset + limit);
     const nextCursor = offset + limit < records.length ? String(offset + limit) : '';
 
     return {
       total: records.length,
+      stats: summarizeDecisionCounts(records),
       records: sliced,
       nextCursor,
     };
@@ -258,6 +241,133 @@ function normalizePolicyIds(values) {
       .map((value) => String(value || '').trim().toUpperCase())
       .filter(Boolean),
   )];
+}
+
+function filterRecords(records, filters = {}) {
+  const decision = normalizeOptionalString(filters.decision).toLowerCase();
+  const policyId = normalizeOptionalString(filters.policyId).toUpperCase();
+
+  let filtered = Array.isArray(records) ? records : [];
+  if (decision) {
+    filtered = filtered.filter((record) => {
+      if (record.decision === decision) {
+        return true;
+      }
+
+      if (decision === 'review' && record.status === 'pending') {
+        return true;
+      }
+
+      return false;
+    });
+  }
+  if (policyId) {
+    filtered = filtered.filter((record) => Array.isArray(record.policyIds) && record.policyIds.includes(policyId));
+  }
+  return filtered;
+}
+
+function summarizeDecisionCounts(records) {
+  let allow = 0;
+  let deny = 0;
+  let review = 0;
+  let filtered = 0;
+  let forced = 0;
+
+  for (const record of records) {
+    const status = String(record?.status || '').trim().toLowerCase();
+    if (status === 'pending') {
+      review += 1;
+      continue;
+    }
+    if (status === 'failed') {
+      if (isLikelyAlreadyProcessedPost(record)) {
+        continue;
+      }
+      if (isProcessingExcluded(record)) {
+        filtered += 1;
+        continue;
+      }
+      if (isInternalErrorFailed(record)) {
+        forced += 1;
+        continue;
+      }
+      continue;
+    }
+
+    const decision = String(record?.decision || '').trim().toLowerCase();
+    if (decision === 'allow') allow += 1;
+    else if (decision === 'deny') deny += 1;
+    else if (decision === 'review') review += 1;
+  }
+
+  return { allow, deny, review, filtered, forced };
+}
+
+function isLikelyAlreadyProcessedPost(record) {
+  const status = String(record?.status || '').trim().toLowerCase();
+  if (status !== 'failed') {
+    return false;
+  }
+
+  const rawBody = String(record?.publicBody || '').trim();
+  if (rawBody) {
+    return false;
+  }
+
+  const rawReason = String(record?.reason || '').trim();
+  return rawReason.startsWith('작성자 판정 실패:')
+    && (
+      rawReason.includes('본문 작성자 메타를 찾지 못했습니다.')
+      || rawReason.includes('작성자 uid/ip를 모두 확인하지 못했습니다.')
+    );
+}
+
+function isAuthorFilterFailed(record) {
+  const rawReason = String(record?.reason || '').trim();
+  return rawReason.startsWith('v2 core 작성자 필터 미통과:');
+}
+
+function isRecentWindowExcluded(record) {
+  const rawReason = String(record?.reason || '').trim();
+  return rawReason === '최근 100개 regular row 밖 게시물입니다.';
+}
+
+function isProcessingExcluded(record) {
+  return isAuthorFilterFailed(record) || isRecentWindowExcluded(record);
+}
+
+function isInternalErrorFailed(record) {
+  const rawReason = String(record?.reason || '').trim();
+  return !isKnownFailedReason(rawReason);
+}
+
+function isKnownFailedReason(rawReason) {
+  if (!rawReason) return false;
+  if (rawReason.startsWith('작성자 판정 실패:')) return true;
+  if (rawReason.startsWith('v2 core 작성자 필터 미통과:')) return true;
+  if (rawReason.startsWith('개념글 판정 실패:')) return true;
+  if (rawReason === '개념글은 자동 삭제/차단하지 않습니다.') return true;
+  if (rawReason.startsWith('최근 100개 판정 실패:')) return true;
+  if (rawReason === '최근 100개 regular row 밖 게시물입니다.') return true;
+  if (rawReason === 'CLI helper endpoint 형식이 올바르지 않습니다.') return true;
+  if (rawReason === 'CLI helper endpoint는 http://localhost 또는 http://127.0.0.1 주소만 허용됩니다.') return true;
+  if (rawReason === 'CLI helper endpoint는 localhost 계열 주소만 허용됩니다.') return true;
+  if (rawReason.startsWith('CLI helper 연결 실패:')) return true;
+  if (rawReason === 'CLI helper 응답 대기 시간이 초과되었습니다.') return true;
+  if (rawReason === 'CLI helper 응답 JSON 파싱 실패') return true;
+  if (rawReason === 'decision 값이 올바르지 않습니다.') return true;
+  if (rawReason === 'confidence 값이 올바르지 않습니다.') return true;
+  if (rawReason === 'policy_ids가 비어 있습니다.') return true;
+  if (rawReason === 'policy_ids에 허용되지 않은 값이 포함되어 있습니다.') return true;
+  if (rawReason === 'reason 값이 비어 있습니다.') return true;
+  if (rawReason === 'policy_ids에 NONE과 다른 정책이 동시에 포함될 수 없습니다.') return true;
+  if (rawReason === 'policy_ids가 ["NONE"]이면 decision은 deny여야 합니다.') return true;
+  if (rawReason === 'P15 단독 allow는 자동 삭제/차단 대상으로 처리할 수 없습니다.') return true;
+  if (rawReason === 'allow 결정에는 최소 1개 이상의 정책 ID가 필요합니다.') return true;
+  if (rawReason === 'CLI helper 판정 실패') return true;
+  if (rawReason.includes('후 처리 실패:')) return true;
+  return false;
 }
 
 function normalizeNullableNumber(value) {

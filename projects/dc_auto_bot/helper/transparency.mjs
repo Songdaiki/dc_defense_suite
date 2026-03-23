@@ -4,11 +4,12 @@ function renderTransparencyListPage({
   records,
   nextCursor,
   total,
+  stats = null,
   healthStatus,
   currentFilter = '',
   reporterRanking = [],
 }) {
-  const stats = countDecisions(records);
+  const resolvedStats = normalizeStatsSummary(stats) || countDecisions(records);
 
   const tableRows = records.length > 0
     ? records.map((record) => renderTableRow(record)).join('')
@@ -53,11 +54,11 @@ function renderTransparencyListPage({
         <div class="stats-bar">
           <span class="stats-total">총 <strong>${escapeHtml(String(total))}</strong>건</span>
           <div class="stats-counts">
-            <span class="stat-item"><span class="stat-dot stat-dot-allow"></span> 삭제 승인 ${stats.allow}</span>
-            <span class="stat-item"><span class="stat-dot stat-dot-deny"></span> 삭제 반려 ${stats.deny}</span>
-            <span class="stat-item"><span class="stat-dot stat-dot-review"></span> 검토 필요 ${stats.review}</span>
-            <span class="stat-item"><span class="stat-dot stat-dot-filtered"></span> 처리 불가 ${stats.filtered}</span>
-            <span class="stat-item"><span class="stat-dot stat-dot-forced"></span> 강제 승인 ${stats.forced}</span>
+            <span class="stat-item"><span class="stat-dot stat-dot-allow"></span> 삭제 승인 ${resolvedStats.allow}</span>
+            <span class="stat-item"><span class="stat-dot stat-dot-deny"></span> 삭제 반려 ${resolvedStats.deny}</span>
+            <span class="stat-item"><span class="stat-dot stat-dot-review"></span> 검토 필요 ${resolvedStats.review}</span>
+            <span class="stat-item"><span class="stat-dot stat-dot-filtered"></span> 처리 불가 ${resolvedStats.filtered}</span>
+            <span class="stat-item"><span class="stat-dot stat-dot-forced"></span> 강제 승인 ${resolvedStats.forced}</span>
           </div>
         </div>
 
@@ -71,7 +72,7 @@ function renderTransparencyListPage({
         </div>
       </div>
 
-      ${renderSidebar(total, stats, reporterRanking)}
+      ${renderSidebar(total, resolvedStats, reporterRanking)}
       <script>
         setTimeout(() => {
           window.location.reload();
@@ -328,7 +329,7 @@ function renderSidebar(total, stats, reporterRanking = []) {
 
       <div class="sidebar-box">
         <div class="sidebar-box-title">특갤봇 랭킹</div>
-        <div class="sidebar-box-body">
+        <div class="sidebar-box-body sidebar-box-body-ranking">
           ${renderReporterRanking(reporterRanking)}
         </div>
       </div>
@@ -465,6 +466,20 @@ function countDecisions(records) {
   }
 
   return { allow, deny, review, filtered, forced };
+}
+
+function normalizeStatsSummary(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return null;
+  }
+
+  return {
+    allow: Math.max(0, Number(input.allow) || 0),
+    deny: Math.max(0, Number(input.deny) || 0),
+    review: Math.max(0, Number(input.review) || 0),
+    filtered: Math.max(0, Number(input.filtered) || 0),
+    forced: Math.max(0, Number(input.forced) || 0),
+  };
 }
 
 function getDecisionLabel(decision, status = 'completed', record = null) {

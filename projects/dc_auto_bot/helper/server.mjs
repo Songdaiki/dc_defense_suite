@@ -986,6 +986,7 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
             records: listResult.records,
             nextCursor: listResult.nextCursor,
             total: listResult.total,
+            stats: listResult.stats,
             cursor,
             healthStatus: pageHealthStatus,
             currentFilter,
@@ -1027,6 +1028,7 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
         writeJson(response, 200, {
           success: true,
           total: listResult.total,
+          stats: listResult.stats,
           records: listResult.records,
           nextCursor: listResult.nextCursor,
         });
