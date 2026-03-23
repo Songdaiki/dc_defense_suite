@@ -17,6 +17,7 @@ let sharedConfigDirty = false;
 let sessionFallbackDirty = false;
 let latestMonitorStatus = null;
 let latestConceptMonitorStatus = null;
+let latestSessionFallbackStatus = null;
 
 const SESSION_FALLBACK_DOM = {
   keepaliveToggle: document.getElementById('sessionFallbackKeepaliveToggle'),
@@ -313,35 +314,22 @@ function bindSharedConfigEvents() {
     });
   });
 
-  SESSION_FALLBACK_DOM.saveConfigBtn.addEventListener('click', async () => {
-    const config = {
-      keepaliveEnabled: SESSION_FALLBACK_DOM.keepaliveToggle.checked,
-      primaryUserId: SESSION_FALLBACK_DOM.primaryUserIdInput.value.trim(),
-      primaryPassword: SESSION_FALLBACK_DOM.primaryPasswordInput.value,
-      backupUserId: SESSION_FALLBACK_DOM.backupUserIdInput.value.trim(),
-      backupPassword: SESSION_FALLBACK_DOM.backupPasswordInput.value,
-    };
-
-    const response = await sendMessage({ action: 'updateSessionFallbackConfig', config });
-    if (!response?.success) {
-      alert(response?.message || '계정 전환 설정 저장에 실패했습니다.');
-      if (response?.sessionFallbackStatus) {
-        updateSessionFallbackUI(response.sessionFallbackStatus);
-      }
-      if (response?.statuses) {
-        applyStatuses(response.statuses);
-      }
+  SESSION_FALLBACK_DOM.keepaliveToggle.addEventListener('change', async () => {
+    if (hasPendingSessionFallbackCredentialEdits()) {
+      alert('계정 아이디/비밀번호 변경분이 있으면 먼저 계정 저장을 눌러주세요.');
+      revertSessionFallbackKeepaliveToggle();
       return;
     }
 
-    sessionFallbackDirty = false;
-    flashSaved(SESSION_FALLBACK_DOM.saveConfigBtn);
-    if (response?.sessionFallbackStatus) {
-      updateSessionFallbackUI(response.sessionFallbackStatus);
-    }
-    if (response?.statuses) {
-      applyStatuses(response.statuses);
-    }
+    await persistSessionFallbackConfig({
+      failureMessage: '로그인 세션 자동화 설정 저장에 실패했습니다.',
+      suppressFlash: true,
+      revertOnFailure: true,
+    });
+  });
+
+  SESSION_FALLBACK_DOM.saveConfigBtn.addEventListener('click', async () => {
+    await persistSessionFallbackConfig();
   });
 
   SESSION_FALLBACK_DOM.testSwitchBtn.addEventListener('click', async () => {
@@ -1200,8 +1188,14 @@ function updateSessionFallbackUI(status) {
     return;
   }
 
+  latestSessionFallbackStatus = status;
+
+  const currentKeepaliveEnabled = sessionFallbackDirty
+    ? SESSION_FALLBACK_DOM.keepaliveToggle.checked
+    : status.config?.keepaliveEnabled === true;
+
   if (!sessionFallbackDirty) {
-    syncConfigInput(SESSION_FALLBACK_DOM.keepaliveToggle, status.config?.keepaliveEnabled === true);
+    syncConfigInput(SESSION_FALLBACK_DOM.keepaliveToggle, currentKeepaliveEnabled);
     syncConfigInput(SESSION_FALLBACK_DOM.primaryUserIdInput, status.config?.primaryUserId ?? '');
     syncConfigInput(SESSION_FALLBACK_DOM.primaryPasswordInput, status.config?.primaryPassword ?? '');
     syncConfigInput(SESSION_FALLBACK_DOM.backupUserIdInput, status.config?.backupUserId ?? '');
@@ -1210,7 +1204,7 @@ function updateSessionFallbackUI(status) {
 
   updateToggle(
     { toggleBtn: SESSION_FALLBACK_DOM.keepaliveToggle, toggleLabel: SESSION_FALLBACK_DOM.keepaliveLabel },
-    status.config?.keepaliveEnabled === true,
+    currentKeepaliveEnabled,
   );
   SESSION_FALLBACK_DOM.activeAccountText.textContent = status.activeAccountLabel || '계정1';
   updateStatusText(
@@ -1245,6 +1239,67 @@ function updateSessionFallbackUI(status) {
   setDisabled(SESSION_FALLBACK_DOM.keepaliveToggle, isAutomationBusy);
   setDisabled(SESSION_FALLBACK_DOM.saveConfigBtn, isAutomationBusy);
   setDisabled(SESSION_FALLBACK_DOM.testSwitchBtn, isAutomationBusy);
+}
+
+function hasPendingSessionFallbackCredentialEdits() {
+  const statusConfig = latestSessionFallbackStatus?.config || {};
+  return String(SESSION_FALLBACK_DOM.primaryUserIdInput.value.trim()) !== String(statusConfig.primaryUserId ?? '').trim()
+    || String(SESSION_FALLBACK_DOM.primaryPasswordInput.value) !== String(statusConfig.primaryPassword ?? '')
+    || String(SESSION_FALLBACK_DOM.backupUserIdInput.value.trim()) !== String(statusConfig.backupUserId ?? '').trim()
+    || String(SESSION_FALLBACK_DOM.backupPasswordInput.value) !== String(statusConfig.backupPassword ?? '');
+}
+
+function revertSessionFallbackKeepaliveToggle() {
+  const storedKeepaliveEnabled = latestSessionFallbackStatus?.config?.keepaliveEnabled === true;
+  SESSION_FALLBACK_DOM.keepaliveToggle.checked = storedKeepaliveEnabled;
+  updateToggle(
+    { toggleBtn: SESSION_FALLBACK_DOM.keepaliveToggle, toggleLabel: SESSION_FALLBACK_DOM.keepaliveLabel },
+    storedKeepaliveEnabled,
+  );
+  sessionFallbackDirty = hasPendingSessionFallbackCredentialEdits();
+}
+
+async function persistSessionFallbackConfig(options = {}) {
+  const {
+    failureMessage = '계정 전환 설정 저장에 실패했습니다.',
+    suppressFlash = false,
+    revertOnFailure = false,
+  } = options;
+
+  const config = {
+    keepaliveEnabled: SESSION_FALLBACK_DOM.keepaliveToggle.checked,
+    primaryUserId: SESSION_FALLBACK_DOM.primaryUserIdInput.value.trim(),
+    primaryPassword: SESSION_FALLBACK_DOM.primaryPasswordInput.value,
+    backupUserId: SESSION_FALLBACK_DOM.backupUserIdInput.value.trim(),
+    backupPassword: SESSION_FALLBACK_DOM.backupPasswordInput.value,
+  };
+
+  const response = await sendMessage({ action: 'updateSessionFallbackConfig', config });
+  if (!response?.success) {
+    alert(response?.message || failureMessage);
+    if (revertOnFailure && response?.sessionFallbackStatus) {
+      sessionFallbackDirty = false;
+      updateSessionFallbackUI(response.sessionFallbackStatus);
+    } else if (revertOnFailure) {
+      revertSessionFallbackKeepaliveToggle();
+    }
+    if (response?.statuses) {
+      applyStatuses(response.statuses);
+    }
+    return false;
+  }
+
+  sessionFallbackDirty = false;
+  if (!suppressFlash) {
+    flashSaved(SESSION_FALLBACK_DOM.saveConfigBtn);
+  }
+  if (response?.sessionFallbackStatus) {
+    updateSessionFallbackUI(response.sessionFallbackStatus);
+  }
+  if (response?.statuses) {
+    applyStatuses(response.statuses);
+  }
+  return true;
 }
 
 function updateConceptMonitorUI(status) {
