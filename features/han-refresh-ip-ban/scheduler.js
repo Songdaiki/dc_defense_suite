@@ -6,11 +6,13 @@ import {
 } from './api.js';
 import {
   extractActionableManagementRows,
+  extractMaxBlockDataNum,
   isLikelyManagementBlockHtml,
   parseDetectedMaxPage,
 } from './parser.js';
 
 const STORAGE_KEY = 'hanRefreshIpBanSchedulerState';
+const MAX_TAIL_EXPANSION_ROUNDS = 10;
 const PHASE = {
   IDLE: 'IDLE',
   RUNNING: 'RUNNING',
@@ -22,6 +24,7 @@ class Scheduler {
     this.fetchManagementBlockHTML = dependencies.fetchManagementBlockHTML || fetchManagementBlockHTML;
     this.rebanManagementRows = dependencies.rebanManagementRows || rebanManagementRows;
     this.extractActionableManagementRows = dependencies.extractActionableManagementRows || extractActionableManagementRows;
+    this.extractMaxBlockDataNum = dependencies.extractMaxBlockDataNum || extractMaxBlockDataNum;
     this.isLikelyManagementBlockHtml = dependencies.isLikelyManagementBlockHtml || isLikelyManagementBlockHtml;
     this.parseDetectedMaxPage = dependencies.parseDetectedMaxPage || parseDetectedMaxPage;
     this.delayFn = dependencies.delayFn || delay;
@@ -35,6 +38,7 @@ class Scheduler {
     this.currentCycleMatchedRows = 0;
     this.currentCycleBanSuccessCount = 0;
     this.currentCycleBanFailureCount = 0;
+    this.currentCycleBaselineMaxBlockDataNum = 0;
     this.cycleCount = 0;
     this.lastRunAt = '';
     this.nextRunAt = '';
@@ -140,60 +144,69 @@ class Scheduler {
     const seenAvoidNos = new Set();
     resetCycleMetrics(this);
 
-    let firstPageHtml = '';
-    try {
-      firstPageHtml = await this.fetchManagementBlockHTML(this.config, 1, 2);
-    } catch (error) {
-      throw new Error(`관리내역 1페이지 로딩 실패 - ${error.message}`);
-    }
-
-    if (!this.isLikelyManagementBlockHtml(firstPageHtml)) {
-      throw new Error('관리내역 페이지 구조를 찾지 못했습니다.');
-    }
-
+    const initialPageResult = await this.fetchDetectedMaxPageWithHtml('관리내역 1페이지 로딩 실패');
     if (!this.isRunning) {
       return;
     }
 
-    const maxPageResult = this.parseDetectedMaxPage(firstPageHtml, this.config.fallbackMaxPage);
-    this.detectedMaxPage = normalizeDetectedMaxPage(maxPageResult?.detectedMaxPage, this.config.fallbackMaxPage);
-    this.log(`📚 관리내역 끝 페이지 감지: ${this.detectedMaxPage}P (${maxPageResult?.source || 'fallback'})`);
+    this.detectedMaxPage = initialPageResult.detectedMaxPage;
+    this.currentCycleBaselineMaxBlockDataNum = this.extractMaxBlockDataNum(initialPageResult.html);
+    this.log(`📚 초기 끝 페이지 감지: ${this.detectedMaxPage}P (${initialPageResult.source})`);
+    if (this.currentCycleBaselineMaxBlockDataNum > 0) {
+      this.log(`🧷 사이클 기준 row 상한 data-num: ${this.currentCycleBaselineMaxBlockDataNum}`);
+    }
+    await this.saveState();
 
-    for (let page = 1; page <= this.detectedMaxPage; page += 1) {
+    let scanStartPage = 1;
+    let scanEndPage = this.detectedMaxPage;
+    let cachedFirstPageHtml = initialPageResult.html;
+    let tailExpansionRounds = 0;
+
+    while (this.isRunning && scanStartPage <= scanEndPage) {
+      await this.scanPageRange(scanStartPage, scanEndPage, seenAvoidNos, cachedFirstPageHtml);
       if (!this.isRunning) {
         break;
       }
 
-      this.currentPage = page;
+      const completedEndPage = scanEndPage;
+      cachedFirstPageHtml = '';
+
+      const refreshedPageResult = await this.tryRefreshDetectedMaxPage();
+      if (!refreshedPageResult) {
+        break;
+      }
+
+      this.detectedMaxPage = refreshedPageResult.detectedMaxPage;
       await this.saveState();
 
-      let pageHtml = '';
-      if (page === 1) {
-        pageHtml = firstPageHtml;
-      } else {
-        try {
-          pageHtml = await this.fetchManagementBlockHTML(this.config, page, 2);
-        } catch (error) {
-          this.log(`⚠️ ${page}페이지 로딩 실패 - ${error.message}`);
-          continue;
-        }
+      if (refreshedPageResult.detectedMaxPage <= completedEndPage) {
+        this.log(`✅ 끝 페이지 안정화 확인: 마지막 스캔 ${completedEndPage}P / 재감지 ${refreshedPageResult.detectedMaxPage}P`);
+        await this.saveState();
+        break;
       }
 
-      await this.processPage(page, pageHtml, seenAvoidNos);
-
-      if (!this.isRunning || page >= this.detectedMaxPage) {
-        continue;
+      tailExpansionRounds += 1;
+      if (tailExpansionRounds > MAX_TAIL_EXPANSION_ROUNDS) {
+        this.log(`⚠️ tail 보정 한도 초과 - 마지막 스캔 ${completedEndPage}P / 재감지 ${refreshedPageResult.detectedMaxPage}P`);
+        await this.saveState();
+        break;
       }
 
-      const requestDelay = getRequestDelayMs(this.config);
-      if (requestDelay > 0) {
-        await delayWhileRunning(this, requestDelay);
-      }
+      const expandedEndPage = refreshedPageResult.detectedMaxPage;
+      this.log(`↗ 끝 페이지 증가 감지: ${completedEndPage}P -> ${expandedEndPage}P`);
+      this.log(`🔁 tail 보정 스캔: ${completedEndPage + 1}P ~ ${expandedEndPage}P`);
+      await this.saveState();
+
+      scanStartPage = completedEndPage + 1;
+      scanEndPage = expandedEndPage;
     }
   }
 
   async processPage(page, html, seenAvoidNos) {
-    const { rows, actionableRows } = this.extractActionableManagementRows(html, { seenAvoidNos });
+    const { rows, actionableRows } = this.extractActionableManagementRows(html, {
+      seenAvoidNos,
+      maxAllowedBlockDataNum: this.currentCycleBaselineMaxBlockDataNum,
+    });
     const avoidNos = actionableRows.map((row) => row.avoidNo);
 
     this.currentCycleScannedRows += rows.length;
@@ -237,6 +250,70 @@ class Scheduler {
     await this.saveState();
   }
 
+  async scanPageRange(startPage, endPage, seenAvoidNos, firstPageHtml = '') {
+    for (let page = startPage; page <= endPage; page += 1) {
+      if (!this.isRunning) {
+        break;
+      }
+
+      this.currentPage = page;
+      await this.saveState();
+
+      let pageHtml = '';
+      if (page === 1 && firstPageHtml) {
+        pageHtml = firstPageHtml;
+      } else {
+        try {
+          pageHtml = await this.fetchManagementBlockHTML(this.config, page, 2);
+        } catch (error) {
+          this.log(`⚠️ ${page}페이지 로딩 실패 - ${error.message}`);
+          continue;
+        }
+      }
+
+      await this.processPage(page, pageHtml, seenAvoidNos);
+
+      if (!this.isRunning || page >= endPage) {
+        continue;
+      }
+
+      const requestDelay = getRequestDelayMs(this.config);
+      if (requestDelay > 0) {
+        await delayWhileRunning(this, requestDelay);
+      }
+    }
+  }
+
+  async fetchDetectedMaxPageWithHtml(errorPrefix) {
+    let firstPageHtml = '';
+    try {
+      firstPageHtml = await this.fetchManagementBlockHTML(this.config, 1, 2);
+    } catch (error) {
+      throw new Error(`${errorPrefix} - ${error.message}`);
+    }
+
+    if (!this.isLikelyManagementBlockHtml(firstPageHtml)) {
+      throw new Error('관리내역 페이지 구조를 찾지 못했습니다.');
+    }
+
+    const maxPageResult = this.parseDetectedMaxPage(firstPageHtml, this.config.fallbackMaxPage);
+    return {
+      html: firstPageHtml,
+      detectedMaxPage: normalizeDetectedMaxPage(maxPageResult?.detectedMaxPage, this.config.fallbackMaxPage),
+      source: maxPageResult?.source || 'fallback',
+    };
+  }
+
+  async tryRefreshDetectedMaxPage() {
+    try {
+      return await this.fetchDetectedMaxPageWithHtml('끝 페이지 재감지 실패');
+    } catch (error) {
+      this.log(`⚠️ ${error.message}`);
+      await this.saveState();
+      return null;
+    }
+  }
+
   log(message) {
     const now = new Date().toLocaleTimeString('ko-KR', { hour12: false });
     const entry = `[${now}] ${message}`;
@@ -261,6 +338,7 @@ class Scheduler {
           currentCycleMatchedRows: this.currentCycleMatchedRows,
           currentCycleBanSuccessCount: this.currentCycleBanSuccessCount,
           currentCycleBanFailureCount: this.currentCycleBanFailureCount,
+          currentCycleBaselineMaxBlockDataNum: this.currentCycleBaselineMaxBlockDataNum,
           cycleCount: this.cycleCount,
           lastRunAt: this.lastRunAt,
           nextRunAt: this.nextRunAt,
@@ -288,6 +366,7 @@ class Scheduler {
       this.currentCycleMatchedRows = Number(schedulerState.currentCycleMatchedRows) || 0;
       this.currentCycleBanSuccessCount = Number(schedulerState.currentCycleBanSuccessCount) || 0;
       this.currentCycleBanFailureCount = Number(schedulerState.currentCycleBanFailureCount) || 0;
+      this.currentCycleBaselineMaxBlockDataNum = Number(schedulerState.currentCycleBaselineMaxBlockDataNum) || 0;
       this.cycleCount = Number(schedulerState.cycleCount) || 0;
       this.lastRunAt = schedulerState.lastRunAt || '';
       this.nextRunAt = schedulerState.nextRunAt || '';
@@ -333,6 +412,7 @@ class Scheduler {
       currentCycleMatchedRows: this.currentCycleMatchedRows,
       currentCycleBanSuccessCount: this.currentCycleBanSuccessCount,
       currentCycleBanFailureCount: this.currentCycleBanFailureCount,
+      currentCycleBaselineMaxBlockDataNum: this.currentCycleBaselineMaxBlockDataNum,
       cycleCount: this.cycleCount,
       lastRunAt: this.lastRunAt,
       nextRunAt: this.nextRunAt,
@@ -349,6 +429,7 @@ function resetCycleMetrics(scheduler) {
   scheduler.currentCycleMatchedRows = 0;
   scheduler.currentCycleBanSuccessCount = 0;
   scheduler.currentCycleBanFailureCount = 0;
+  scheduler.currentCycleBaselineMaxBlockDataNum = 0;
 }
 
 function normalizeDetectedMaxPage(value, fallbackMaxPage) {

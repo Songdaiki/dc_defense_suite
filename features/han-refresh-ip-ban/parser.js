@@ -57,6 +57,7 @@ function extractActionableManagementRows(html, options = {}) {
   const seenAvoidNos = options.seenAvoidNos instanceof Set
     ? options.seenAvoidNos
     : new Set();
+  const maxAllowedBlockDataNum = Number(options.maxAllowedBlockDataNum) || 0;
   const actionableRows = [];
 
   for (const row of rows) {
@@ -72,7 +73,12 @@ function extractActionableManagementRows(html, options = {}) {
       continue;
     }
 
-    const avoidNo = toAvoidNo(row.blockDataNum);
+    const blockDataNum = toBlockDataNum(row.blockDataNum);
+    if (maxAllowedBlockDataNum > 0 && blockDataNum > maxAllowedBlockDataNum) {
+      continue;
+    }
+
+    const avoidNo = toAvoidNo(blockDataNum);
     if (avoidNo <= 0) {
       continue;
     }
@@ -93,6 +99,20 @@ function extractActionableManagementRows(html, options = {}) {
     rows,
     actionableRows,
   };
+}
+
+function extractMaxBlockDataNum(html) {
+  const rows = parseBlockListRows(html);
+  let maxBlockDataNum = 0;
+
+  for (const row of rows) {
+    const blockDataNum = toBlockDataNum(row.blockDataNum);
+    if (blockDataNum > maxBlockDataNum) {
+      maxBlockDataNum = blockDataNum;
+    }
+  }
+
+  return maxBlockDataNum;
 }
 
 function extractPageNumberFromHref(rawHref) {
@@ -120,12 +140,17 @@ function isIpLikeWriterToken(value) {
 }
 
 function toAvoidNo(blockDataNum) {
-  const blockNumber = Number.parseInt(String(blockDataNum || '').trim(), 10);
+  const blockNumber = toBlockDataNum(blockDataNum);
   if (!Number.isFinite(blockNumber) || blockNumber <= 1) {
     return 0;
   }
 
   return blockNumber - 1;
+}
+
+function toBlockDataNum(blockDataNum) {
+  const parsed = Number.parseInt(String(blockDataNum || '').trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
 function isLikelyManagementBlockHtml(html) {
@@ -151,6 +176,7 @@ function extractPagingHtml(decodedHtml) {
 
 export {
   extractActionableManagementRows,
+  extractMaxBlockDataNum,
   extractPageNumberFromHref,
   isIpLikeWriterToken,
   isLikelyManagementBlockHtml,
