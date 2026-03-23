@@ -4,17 +4,21 @@ import { getHanScriptCharCount } from '../post/parser.js';
 const PAGE_END_LINK_REGEX = /<a[^>]*(?:class="[^"]*\bpage_end\b[^"]*"[^>]*href="([^"]+)"|href="([^"]+)"[^>]*class="[^"]*\bpage_end\b[^"]*")/i;
 const PAGE_ANCHOR_REGEX = /<a[^>]*href="([^"]*?[?&](?:p|page)=\d+[^"]*)"[^>]*>\s*(\d+)\s*<\/a>/gi;
 const CURRENT_PAGE_REGEX = /<(?:em|strong|b|span)[^>]*>\s*1\s*<\/(?:em|strong|b|span)>/i;
-const PAGING_BOX_REGEX = /<div[^>]*class="[^"]*(?:\bbottom_paging_box\b[^"]*\biconpaging\b|\biconpaging\b[^"]*\bbottom_paging_box\b)[^"]*"[^>]*>([\s\S]*?)<\/div>/i;
+const PAGING_BOX_REGEX = /<div[^>]*class="[^"]*(?:\bbottom_paging_box\b[^"]*\biconpaging\b|\biconpaging\b[^"]*\bbottom_paging_box\b)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
 const MIN_HAN_CHAR_COUNT = 2;
 
 function parseDetectedMaxPage(html, fallbackMaxPage = 400) {
   const normalizedFallback = Math.max(1, Number(fallbackMaxPage) || 400);
   const rawHtml = String(html || '');
   const decodedHtml = decodeHtmlAttribute(rawHtml);
-  const pagingHtml = extractPagingHtml(decodedHtml);
-  const pageEndMatch = pagingHtml.match(PAGE_END_LINK_REGEX);
+  const pagingHtmlCandidates = extractPagingHtmlCandidates(decodedHtml);
 
-  if (pageEndMatch) {
+  for (const pagingHtml of pagingHtmlCandidates) {
+    const pageEndMatch = pagingHtml.match(PAGE_END_LINK_REGEX);
+    if (!pageEndMatch) {
+      continue;
+    }
+
     const pageFromEndLink = extractPageNumberFromHref(pageEndMatch[1] || pageEndMatch[2]);
     if (pageFromEndLink > 0) {
       return {
@@ -24,27 +28,32 @@ function parseDetectedMaxPage(html, fallbackMaxPage = 400) {
     }
   }
 
-  const numericPages = [];
-  let pageMatch = null;
-  while ((pageMatch = PAGE_ANCHOR_REGEX.exec(pagingHtml)) !== null) {
-    const pageNumber = extractPageNumberFromHref(pageMatch[1]) || Number(pageMatch[2]) || 0;
-    if (pageNumber > 0) {
-      numericPages.push(pageNumber);
+  let maxNumericPage = 0;
+  for (const pagingHtml of pagingHtmlCandidates) {
+    PAGE_ANCHOR_REGEX.lastIndex = 0;
+    let pageMatch = null;
+    while ((pageMatch = PAGE_ANCHOR_REGEX.exec(pagingHtml)) !== null) {
+      const pageNumber = extractPageNumberFromHref(pageMatch[1]) || Number(pageMatch[2]) || 0;
+      if (pageNumber > maxNumericPage) {
+        maxNumericPage = pageNumber;
+      }
     }
   }
 
-  if (numericPages.length > 0) {
+  if (maxNumericPage > 0) {
     return {
-      detectedMaxPage: Math.max(...numericPages),
+      detectedMaxPage: maxNumericPage,
       source: 'numeric_anchor',
     };
   }
 
-  if (pagingHtml && CURRENT_PAGE_REGEX.test(pagingHtml)) {
-    return {
-      detectedMaxPage: 1,
-      source: 'single_page',
-    };
+  for (const pagingHtml of pagingHtmlCandidates) {
+    if (pagingHtml && CURRENT_PAGE_REGEX.test(pagingHtml)) {
+      return {
+        detectedMaxPage: 1,
+        source: 'single_page',
+      };
+    }
   }
 
   return {
@@ -170,9 +179,17 @@ function decodeHtmlAttribute(value) {
     .trim();
 }
 
-function extractPagingHtml(decodedHtml) {
-  const match = String(decodedHtml || '').match(PAGING_BOX_REGEX);
-  return match ? match[1] : '';
+function extractPagingHtmlCandidates(decodedHtml) {
+  const candidates = [];
+  const html = String(decodedHtml || '');
+  let match = null;
+
+  PAGING_BOX_REGEX.lastIndex = 0;
+  while ((match = PAGING_BOX_REGEX.exec(html)) !== null) {
+    candidates.push(match[1] || '');
+  }
+
+  return candidates;
 }
 
 export {
