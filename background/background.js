@@ -1,6 +1,10 @@
 import { Scheduler as CommentScheduler } from '../features/comment/scheduler.js';
 import { PHASE as COMMENT_MONITOR_PHASE, Scheduler as CommentMonitorScheduler } from '../features/comment-monitor/scheduler.js';
 import { Scheduler as ConceptMonitorScheduler } from '../features/concept-monitor/scheduler.js';
+import {
+  Scheduler as HanRefreshIpBanScheduler,
+  normalizeConfig as normalizeHanRefreshIpBanConfig,
+} from '../features/han-refresh-ip-ban/scheduler.js';
 import { Scheduler as PostScheduler } from '../features/post/scheduler.js';
 import { Scheduler as SemiPostScheduler } from '../features/semi-post/scheduler.js';
 import { Scheduler as IpScheduler } from '../features/ip/scheduler.js';
@@ -11,6 +15,7 @@ const commentMonitorScheduler = new CommentMonitorScheduler({
   commentScheduler,
 });
 const conceptMonitorScheduler = new ConceptMonitorScheduler();
+const hanRefreshIpBanScheduler = new HanRefreshIpBanScheduler();
 const postScheduler = new PostScheduler();
 const semiPostScheduler = new SemiPostScheduler();
 const ipScheduler = new IpScheduler();
@@ -23,6 +28,7 @@ const schedulers = {
   comment: commentScheduler,
   commentMonitor: commentMonitorScheduler,
   conceptMonitor: conceptMonitorScheduler,
+  hanRefreshIpBan: hanRefreshIpBanScheduler,
   post: postScheduler,
   semiPost: semiPostScheduler,
   ip: ipScheduler,
@@ -85,6 +91,7 @@ async function resumeAllSchedulers() {
   await loadSchedulerStateIfIdle(schedulers.comment);
   await loadSchedulerStateIfIdle(schedulers.commentMonitor);
   await loadSchedulerStateIfIdle(schedulers.conceptMonitor);
+  await loadSchedulerStateIfIdle(schedulers.hanRefreshIpBan);
   await loadSchedulerStateIfIdle(schedulers.post);
   await loadSchedulerStateIfIdle(schedulers.semiPost);
   await loadSchedulerStateIfIdle(schedulers.ip);
@@ -122,6 +129,7 @@ async function resumeAllSchedulers() {
 
   await resumeStandaloneScheduler(schedulers.commentMonitor, '🔁 저장된 댓글 감시 자동화 상태 복원');
   await resumeStandaloneScheduler(schedulers.conceptMonitor, '🔁 저장된 개념글 방어 상태 복원');
+  await resumeStandaloneScheduler(schedulers.hanRefreshIpBan, '🔁 저장된 도배기 갱신 차단 자동 상태 복원');
 
   if (commentMonitorAttacking) {
     await schedulers.commentMonitor.ensureManagedDefenseStarted();
@@ -145,6 +153,7 @@ function getAllStatuses() {
     comment: schedulers.comment.getStatus(),
     commentMonitor: schedulers.commentMonitor.getStatus(),
     conceptMonitor: schedulers.conceptMonitor.getStatus(),
+    hanRefreshIpBan: schedulers.hanRefreshIpBan.getStatus(),
     post: schedulers.post.getStatus(),
     semiPost: schedulers.semiPost.getStatus(),
     ip: schedulers.ip.getStatus(),
@@ -238,6 +247,13 @@ async function handleMessage(message) {
             ...message.config,
             manualAttackMode: normalizePostManualAttackMode(message.config.manualAttackMode),
           };
+        }
+
+        if (message.feature === 'hanRefreshIpBan') {
+          message.config = normalizeHanRefreshIpBanConfig({
+            ...scheduler.config,
+            ...message.config,
+          });
         }
 
         const configUpdateBlockMessage = getConfigUpdateBlockMessage(message.feature, scheduler, message.config);
@@ -345,6 +361,23 @@ function resetSchedulerStats(feature, scheduler) {
     return;
   }
 
+  if (feature === 'hanRefreshIpBan') {
+    scheduler.currentCycleScannedRows = 0;
+    scheduler.currentCycleMatchedRows = 0;
+    scheduler.currentCycleBanSuccessCount = 0;
+    scheduler.currentCycleBanFailureCount = 0;
+    scheduler.cycleCount = 0;
+    scheduler.logs = [];
+    if (!scheduler.isRunning) {
+      scheduler.phase = 'IDLE';
+      scheduler.currentPage = 0;
+      scheduler.detectedMaxPage = 0;
+      scheduler.lastRunAt = '';
+      scheduler.nextRunAt = '';
+    }
+    return;
+  }
+
   if (feature === 'post') {
     scheduler.totalClassified = 0;
     if (typeof scheduler.cancelPendingRuntimeTransition === 'function') {
@@ -410,6 +443,7 @@ function applySharedConfig(config) {
     schedulers.comment.config.galleryId !== galleryId
     || schedulers.commentMonitor.config.galleryId !== galleryId
     || schedulers.conceptMonitor.config.galleryId !== galleryId
+    || schedulers.hanRefreshIpBan.config.galleryId !== galleryId
     || schedulers.post.config.galleryId !== galleryId
     || schedulers.semiPost.config.galleryId !== galleryId
     || schedulers.ip.config.galleryId !== galleryId
@@ -425,6 +459,7 @@ function applySharedConfig(config) {
     schedulers.comment.config.galleryId = galleryId;
     schedulers.commentMonitor.config.galleryId = galleryId;
     schedulers.conceptMonitor.config.galleryId = galleryId;
+    schedulers.hanRefreshIpBan.config.galleryId = galleryId;
     schedulers.post.config.galleryId = galleryId;
     schedulers.semiPost.config.galleryId = galleryId;
     schedulers.ip.config.galleryId = galleryId;
@@ -442,6 +477,7 @@ function applySharedConfig(config) {
     resetCommentSchedulerState(`ℹ️ 공통 설정 변경으로 댓글 방어 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetCommentMonitorSchedulerState(`ℹ️ 공통 설정 변경으로 댓글 감시 자동화 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetConceptMonitorSchedulerState(`ℹ️ 공통 설정 변경으로 개념글 방어 상태를 초기화했습니다. (갤러리: ${galleryId})`);
+    resetHanRefreshIpBanSchedulerState(`ℹ️ 공통 설정 변경으로 도배기 갱신 차단 자동 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetPostSchedulerState(`ℹ️ 공통 설정 변경으로 게시글 분류 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetSemiPostSchedulerState(`ℹ️ 공통 설정 변경으로 반고닉 분류 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetIpSchedulerState(`ℹ️ 공통 설정 변경으로 IP 차단 상태를 초기화했습니다. (갤러리: ${galleryId})`);
@@ -491,6 +527,10 @@ function getBusyFeatures() {
 
   if (isSchedulerBusy(schedulers.conceptMonitor)) {
     busyFeatures.push('개념글 방어');
+  }
+
+  if (isSchedulerBusy(schedulers.hanRefreshIpBan)) {
+    busyFeatures.push('도배기 갱신 차단 자동');
   }
 
   if (isSchedulerBusy(schedulers.post)) {
@@ -681,6 +721,22 @@ function resetConceptMonitorSchedulerState(message) {
   scheduler.lastAppliedRecommendCut = 14;
   scheduler.lastRecommendCutApplySucceeded = true;
   scheduler.blockedUntilTs = 0;
+  scheduler.logs = [];
+  scheduler.log(message);
+}
+
+function resetHanRefreshIpBanSchedulerState(message) {
+  const scheduler = schedulers.hanRefreshIpBan;
+  scheduler.phase = 'IDLE';
+  scheduler.currentPage = 0;
+  scheduler.detectedMaxPage = 0;
+  scheduler.currentCycleScannedRows = 0;
+  scheduler.currentCycleMatchedRows = 0;
+  scheduler.currentCycleBanSuccessCount = 0;
+  scheduler.currentCycleBanFailureCount = 0;
+  scheduler.cycleCount = 0;
+  scheduler.lastRunAt = '';
+  scheduler.nextRunAt = '';
   scheduler.logs = [];
   scheduler.log(message);
 }

@@ -8,6 +8,7 @@
   --comment: #4fd18b;
   --comment-monitor: #7ac5ff;
   --concept-monitor: #ff9f9f;
+  --han-refresh-ip-ban: #ff9d72;
   --post: #ffb84f;
   --ip: #63d8e6;
   --monitor: #9cc2ff;
@@ -119,7 +120,7 @@ body {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 6px;
   margin-bottom: 12px;
 }
@@ -221,6 +222,10 @@ body {
 
 .feature-concept-monitor {
   background: linear-gradient(180deg, rgba(255, 159, 159, 0.16), rgba(49, 24, 24, 0.95));
+}
+
+.feature-han-refresh-ip-ban {
+  background: linear-gradient(180deg, rgba(255, 157, 114, 0.16), rgba(54, 30, 18, 0.95));
 }
 
 .feature-semi-post {

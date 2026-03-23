@@ -5,6 +5,7 @@ const sharedHeadtextIdInput = document.getElementById('sharedHeadtextId');
 const sharedSaveConfigBtn = document.getElementById('sharedSaveConfigBtn');
 const DIRTY_FEATURES = {
   conceptMonitor: false,
+  hanRefreshIpBan: false,
   commentMonitor: false,
   comment: false,
   post: false,
@@ -48,6 +49,25 @@ const FEATURE_DOM = {
     autoCutReleaseConsecutiveCountInput: document.getElementById('conceptMonitorAutoCutReleaseConsecutiveCount'),
     saveConfigBtn: document.getElementById('conceptMonitorSaveConfigBtn'),
     resetBtn: document.getElementById('conceptMonitorResetBtn'),
+  },
+  hanRefreshIpBan: {
+    toggleBtn: document.getElementById('hanRefreshIpBanToggleBtn'),
+    toggleLabel: document.getElementById('hanRefreshIpBanToggleLabel'),
+    statusText: document.getElementById('hanRefreshIpBanStatusText'),
+    phaseText: document.getElementById('hanRefreshIpBanPhaseText'),
+    currentPage: document.getElementById('hanRefreshIpBanCurrentPage'),
+    detectedMaxPage: document.getElementById('hanRefreshIpBanDetectedMaxPage'),
+    currentCycleScannedRows: document.getElementById('hanRefreshIpBanCurrentCycleScannedRows'),
+    currentCycleMatchedRows: document.getElementById('hanRefreshIpBanCurrentCycleMatchedRows'),
+    currentCycleBanSuccessCount: document.getElementById('hanRefreshIpBanCurrentCycleBanSuccessCount'),
+    currentCycleBanFailureCount: document.getElementById('hanRefreshIpBanCurrentCycleBanFailureCount'),
+    lastRunAt: document.getElementById('hanRefreshIpBanLastRunAt'),
+    nextRunAt: document.getElementById('hanRefreshIpBanNextRunAt'),
+    logList: document.getElementById('hanRefreshIpBanLogList'),
+    requestDelayInput: document.getElementById('hanRefreshIpBanRequestDelay'),
+    fallbackMaxPageInput: document.getElementById('hanRefreshIpBanFallbackMaxPage'),
+    saveConfigBtn: document.getElementById('hanRefreshIpBanSaveConfigBtn'),
+    resetBtn: document.getElementById('hanRefreshIpBanResetBtn'),
   },
   commentMonitor: {
     toggleBtn: document.getElementById('commentMonitorToggleBtn'),
@@ -196,6 +216,7 @@ function bindTabEvents() {
 
 function bindFeatureEvents() {
   bindConfigDirtyTracking('conceptMonitor');
+  bindConfigDirtyTracking('hanRefreshIpBan');
   bindConfigDirtyTracking('commentMonitor');
   bindConfigDirtyTracking('comment');
   bindConfigDirtyTracking('post');
@@ -203,6 +224,7 @@ function bindFeatureEvents() {
   bindConfigDirtyTracking('ip');
   bindConfigDirtyTracking('monitor');
   bindConceptMonitorEvents();
+  bindHanRefreshIpBanEvents();
   bindCommentMonitorEvents();
   bindCommentEvents();
   bindPostEvents();
@@ -356,6 +378,74 @@ function bindConceptMonitorEvents() {
     }
 
     const response = await sendFeatureMessage('conceptMonitor', { action: 'resetStats' });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+}
+
+function bindHanRefreshIpBanEvents() {
+  const dom = FEATURE_DOM.hanRefreshIpBan;
+
+  dom.toggleBtn.addEventListener('change', async () => {
+    const action = dom.toggleBtn.checked ? 'start' : 'stop';
+    const response = await sendFeatureMessage('hanRefreshIpBan', { action });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    DIRTY_FEATURES.hanRefreshIpBan = false;
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.saveConfigBtn.addEventListener('click', async () => {
+    const config = {
+      requestDelay: Math.max(0, parseOptionalInt(dom.requestDelayInput.value, 500)),
+      fallbackMaxPage: Math.max(1, parseOptionalInt(dom.fallbackMaxPageInput.value, 400)),
+    };
+
+    const response = await sendFeatureMessage('hanRefreshIpBan', { action: 'updateConfig', config });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    DIRTY_FEATURES.hanRefreshIpBan = false;
+    flashSaved(dom.saveConfigBtn);
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.resetBtn.addEventListener('click', async () => {
+    if (!confirm('도배기 갱신 차단 자동 통계와 로그를 초기화하시겠습니까?')) {
+      return;
+    }
+
+    const response = await sendFeatureMessage('hanRefreshIpBan', { action: 'resetStats' });
     if (!response?.success) {
       if (response?.message) {
         alert(response.message);
@@ -790,6 +880,7 @@ function applyStatuses(statuses) {
   latestMonitorStatus = statuses.monitor || latestMonitorStatus;
   syncSharedConfigInputs(statuses);
   updateConceptMonitorUI(statuses.conceptMonitor);
+  updateHanRefreshIpBanUI(statuses.hanRefreshIpBan);
   updateCommentMonitorUI(statuses.commentMonitor);
   updateMonitorUI(statuses.monitor);
   updateCommentUI(statuses.comment);
@@ -837,6 +928,39 @@ function updateConceptMonitorUI(status) {
     [dom.autoCutReleaseConsecutiveCountInput, status.config?.autoCutReleaseConsecutiveCount ?? 2],
   ]);
   updateToggle({ toggleBtn: dom.autoCutEnabledInput, toggleLabel: dom.autoCutEnabledLabel }, dom.autoCutEnabledInput.checked);
+  updateLogList(dom.logList, status.logs);
+}
+
+function updateHanRefreshIpBanUI(status) {
+  if (!status) {
+    return;
+  }
+
+  const dom = FEATURE_DOM.hanRefreshIpBan;
+  updateToggle(dom, status.isRunning);
+  updateStatusText(
+    dom.statusText,
+    getHanRefreshIpBanStatusLabel(status),
+    getHanRefreshIpBanStatusClassName(status),
+  );
+  dom.phaseText.textContent = status.phase || 'IDLE';
+  dom.currentPage.textContent = status.isRunning && status.currentPage > 0
+    ? `${status.currentPage}페이지`
+    : '-';
+  dom.detectedMaxPage.textContent = status.detectedMaxPage > 0
+    ? `${status.detectedMaxPage}페이지`
+    : '-';
+  dom.currentCycleScannedRows.textContent = `${status.currentCycleScannedRows ?? 0}줄`;
+  dom.currentCycleMatchedRows.textContent = `${status.currentCycleMatchedRows ?? 0}줄`;
+  dom.currentCycleBanSuccessCount.textContent = `${status.currentCycleBanSuccessCount ?? 0}건`;
+  dom.currentCycleBanFailureCount.textContent = `${status.currentCycleBanFailureCount ?? 0}건`;
+  dom.lastRunAt.textContent = formatTimestamp(status.lastRunAt);
+  dom.nextRunAt.textContent = formatTimestamp(status.nextRunAt);
+
+  syncFeatureConfigInputs('hanRefreshIpBan', [
+    [dom.requestDelayInput, status.config?.requestDelay ?? 500],
+    [dom.fallbackMaxPageInput, status.config?.fallbackMaxPage ?? 400],
+  ]);
   updateLogList(dom.logList, status.logs);
 }
 
@@ -1080,6 +1204,7 @@ function syncSharedConfigInputs(statuses) {
   }
 
   const galleryId = statuses.comment?.config?.galleryId
+    || statuses.hanRefreshIpBan?.config?.galleryId
     || statuses.conceptMonitor?.config?.galleryId
     || statuses.commentMonitor?.config?.galleryId
     || statuses.post?.config?.galleryId
@@ -1142,6 +1267,13 @@ function getFeatureConfigInputs(feature) {
       dom.autoCutAttackConsecutiveCountInput,
       dom.autoCutReleaseThresholdInput,
       dom.autoCutReleaseConsecutiveCountInput,
+    ];
+  }
+
+  if (feature === 'hanRefreshIpBan') {
+    return [
+      dom.requestDelayInput,
+      dom.fallbackMaxPageInput,
     ];
   }
 
@@ -1339,6 +1471,30 @@ function getConceptMonitorStatusClassName(status) {
   }
 
   return status.config?.testMode === false ? 'status-warn' : 'status-on';
+}
+
+function getHanRefreshIpBanStatusLabel(status) {
+  if (!status?.isRunning) {
+    return '🔴 정지';
+  }
+
+  if (status.phase === 'WAITING') {
+    return '🟡 대기 중';
+  }
+
+  return '🟢 실행 중';
+}
+
+function getHanRefreshIpBanStatusClassName(status) {
+  if (!status?.isRunning) {
+    return 'status-off';
+  }
+
+  if (status.phase === 'WAITING') {
+    return 'status-warn';
+  }
+
+  return 'status-on';
 }
 
 function updateConceptAutoCutStateText(node, state) {

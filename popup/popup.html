@@ -20,6 +20,7 @@
       <button class="tab-button tab-automation is-active" data-tab="monitor"><span class="tab-label">게시물<br>자동화</span></button>
       <button class="tab-button tab-automation" data-tab="commentMonitor"><span class="tab-label">댓글<br>자동화</span></button>
       <button class="tab-button tab-automation" data-tab="conceptMonitor"><span class="tab-label">개념글<br>방어</span></button>
+      <button class="tab-button tab-automation" data-tab="hanRefreshIpBan"><span class="tab-label">도배기갱신<br>차단자동</span></button>
       <button class="tab-button" data-tab="comment">댓글 방어</button>
       <button class="tab-button" data-tab="post"><span class="tab-label">게시글<br>분류</span></button>
       <button class="tab-button" data-tab="semiPost"><span class="tab-label">반고닉<br>분류</span></button>
@@ -288,6 +289,89 @@
         <section class="log-section">
           <h3>최근 로그</h3>
           <div id="commentMonitorLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+      </section>
+
+      <section class="panel" data-feature="hanRefreshIpBan">
+        <div class="feature-header feature-han-refresh-ip-ban">
+          <div>
+            <h2>도배기갱신차단자동</h2>
+            <p>관리내역 전체를 주기적으로 훑어 한자 게시글 IP를 6시간씩 다시 갱신 차단합니다</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="hanRefreshIpBanToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="hanRefreshIpBanToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="hanRefreshIpBanStatusText" class="status-value status-off">🔴 정지</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">단계</span>
+            <span id="hanRefreshIpBanPhaseText" class="status-value">IDLE</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 페이지</span>
+            <span id="hanRefreshIpBanCurrentPage" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">감지 최대 페이지</span>
+            <span id="hanRefreshIpBanDetectedMaxPage" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">이번 사이클 검사 row</span>
+            <span id="hanRefreshIpBanCurrentCycleScannedRows" class="status-value">0줄</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">이번 사이클 대상 row</span>
+            <span id="hanRefreshIpBanCurrentCycleMatchedRows" class="status-value">0줄</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">이번 사이클 차단 성공</span>
+            <span id="hanRefreshIpBanCurrentCycleBanSuccessCount" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">이번 사이클 차단 실패</span>
+            <span id="hanRefreshIpBanCurrentCycleBanFailureCount" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">마지막 실행</span>
+            <span id="hanRefreshIpBanLastRunAt" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">다음 실행 예정</span>
+            <span id="hanRefreshIpBanNextRunAt" class="status-value">-</span>
+          </div>
+        </div>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label for="hanRefreshIpBanRequestDelay">요청 딜레이 (ms)</label>
+              <input type="number" id="hanRefreshIpBanRequestDelay" min="0" max="10000" step="50" value="500">
+            </div>
+            <div class="setting-item">
+              <label for="hanRefreshIpBanFallbackMaxPage">fallback 최대 페이지</label>
+              <input type="number" id="hanRefreshIpBanFallbackMaxPage" min="1" max="5000" value="400">
+            </div>
+            <button id="hanRefreshIpBanSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          </div>
+        </details>
+
+        <div class="action-row">
+          <button id="hanRefreshIpBanResetBtn" class="btn btn-secondary">통계 초기화</button>
+        </div>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="hanRefreshIpBanLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
         </section>
       </section>
 
