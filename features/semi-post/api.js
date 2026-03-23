@@ -1,4 +1,5 @@
 import { DC_CONFIG as POST_CONFIG, getCiToken, delay } from '../post/api.js';
+import { withDcRequestLease } from '../../background/dc-session-broker.js';
 
 const SEMI_POST_CONFIG = {
     galleryId: POST_CONFIG.galleryId,
@@ -45,69 +46,71 @@ async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
 }
 
 async function fetchUserActivityStats(config = {}, uid) {
-    const resolved = resolveConfig(config);
-    const normalizedUid = String(uid || '').trim();
+    return withDcRequestLease({ feature: 'semiPost', kind: 'fetchUserActivityStats' }, async () => {
+        const resolved = resolveConfig(config);
+        const normalizedUid = String(uid || '').trim();
 
-    if (!normalizedUid) {
+        if (!normalizedUid) {
+            return {
+                success: false,
+                uid: normalizedUid,
+                message: '식별코드(uid) 없음',
+            };
+        }
+
+        const ciToken = await getCiToken(resolved.baseUrl);
+        if (!ciToken) {
+            return {
+                success: false,
+                uid: normalizedUid,
+                message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.',
+            };
+        }
+
+        const url = `${resolved.baseUrl}/api/gallog_user_layer/gallog_content_reple/`;
+        const body = [
+            `ci_t=${encodeURIComponent(ciToken)}`,
+            `user_id=${encodeURIComponent(normalizedUid)}`,
+        ].join('&');
+
+        const response = await dcFetchWithRetry(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Referer': `${resolved.baseUrl}/mgallery/board/lists/?id=${resolved.galleryId}`,
+                'Origin': resolved.baseUrl,
+            },
+            body,
+        });
+
+        const responseText = await response.text();
+        if (!response.ok) {
+            return {
+                success: false,
+                uid: normalizedUid,
+                message: summarizeResponseText(responseText) || `HTTP ${response.status}`,
+            };
+        }
+
+        const parsed = parseActivityStatsResponse(responseText);
+        if (!parsed.success) {
+            return {
+                success: false,
+                uid: normalizedUid,
+                message: parsed.message,
+            };
+        }
+
         return {
-            success: false,
+            success: true,
             uid: normalizedUid,
-            message: '식별코드(uid) 없음',
+            postCount: parsed.postCount,
+            commentCount: parsed.commentCount,
+            totalActivityCount: parsed.totalActivityCount,
+            postRatio: parsed.postRatio,
         };
-    }
-
-    const ciToken = await getCiToken(resolved.baseUrl);
-    if (!ciToken) {
-        return {
-            success: false,
-            uid: normalizedUid,
-            message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.',
-        };
-    }
-
-    const url = `${resolved.baseUrl}/api/gallog_user_layer/gallog_content_reple/`;
-    const body = [
-        `ci_t=${encodeURIComponent(ciToken)}`,
-        `user_id=${encodeURIComponent(normalizedUid)}`,
-    ].join('&');
-
-    const response = await dcFetchWithRetry(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Referer': `${resolved.baseUrl}/mgallery/board/lists/?id=${resolved.galleryId}`,
-            'Origin': resolved.baseUrl,
-        },
-        body,
     });
-
-    const responseText = await response.text();
-    if (!response.ok) {
-        return {
-            success: false,
-            uid: normalizedUid,
-            message: summarizeResponseText(responseText) || `HTTP ${response.status}`,
-        };
-    }
-
-    const parsed = parseActivityStatsResponse(responseText);
-    if (!parsed.success) {
-        return {
-            success: false,
-            uid: normalizedUid,
-            message: parsed.message,
-        };
-    }
-
-    return {
-        success: true,
-        uid: normalizedUid,
-        postCount: parsed.postCount,
-        commentCount: parsed.commentCount,
-        totalActivityCount: parsed.totalActivityCount,
-        postRatio: parsed.postRatio,
-    };
 }
 
 function parseActivityStatsResponse(responseText) {

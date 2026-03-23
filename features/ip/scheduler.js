@@ -12,6 +12,9 @@ import {
   parseTargetPosts,
 } from './parser.js';
 import { parseBoardPosts } from '../post/parser.js';
+import {
+  requestDeleteLimitAccountFallback,
+} from '../../background/dc-session-broker.js';
 
 const STORAGE_KEY = 'ipBanSchedulerState';
 
@@ -300,48 +303,80 @@ class Scheduler {
   async processBanCandidates(posts) {
     const postMap = new Map(posts.map((post) => [String(post.no), post]));
     const effectiveDeleteEnabled = this.runtimeDeleteEnabled;
-    const initialResult = await banPosts(
-      { ...this.config, delChk: effectiveDeleteEnabled },
-      posts.map((post) => post.no),
-    );
     const aggregate = {
       successNos: [],
       failedNos: [],
       messages: [],
     };
+    let banOnlyRetrySuccessCount = 0;
+    let pendingDeleteLimitNos = [];
+    let latestDeleteLimitMessage = '';
 
-    this.recordBanSuccesses(postMap, initialResult.successNos, effectiveDeleteEnabled);
-    aggregate.successNos.push(...initialResult.successNos);
-    if (initialResult.message) {
-      aggregate.messages.push(initialResult.message);
+    const collectResult = (result, deleteEnabled) => {
+      this.recordBanSuccesses(postMap, result.successNos, deleteEnabled);
+      aggregate.successNos.push(...result.successNos);
+      if (result.message) {
+        aggregate.messages.push(result.message);
+      }
+    };
+
+    const initialResult = await banPosts(
+      { ...this.config, delChk: effectiveDeleteEnabled },
+      posts.map((post) => post.no),
+    );
+    collectResult(initialResult, effectiveDeleteEnabled);
+
+    pendingDeleteLimitNos = dedupePostNos(initialResult.deleteLimitExceededNos);
+    latestDeleteLimitMessage = String(initialResult.message || '').trim();
+    aggregate.failedNos.push(
+      ...dedupePostNos(
+        initialResult.failedNos.filter((postNo) => !pendingDeleteLimitNos.includes(String(postNo))),
+      ),
+    );
+
+    while (this.shouldSwitchRunToBanOnly({ deleteLimitExceeded: pendingDeleteLimitNos.length > 0 })) {
+      const fallbackResult = await requestDeleteLimitAccountFallback({
+        feature: 'ip',
+        reason: 'delete_limit_exceeded',
+        message: latestDeleteLimitMessage,
+      });
+
+      if (!fallbackResult.success) {
+        this.activateDeleteLimitBanOnly(fallbackResult.message || latestDeleteLimitMessage);
+        break;
+      }
+
+      this.log(`🔁 삭제 한도 계정 전환 성공 - ${fallbackResult.activeAccountLabel}로 같은 run을 이어갑니다.`);
+      const retryResult = await banPosts(
+        { ...this.config, delChk: true },
+        pendingDeleteLimitNos,
+      );
+      collectResult(retryResult, true);
+      latestDeleteLimitMessage = String(retryResult.message || '').trim();
+
+      const retryDeleteLimitNos = dedupePostNos(retryResult.deleteLimitExceededNos);
+      aggregate.failedNos.push(
+        ...dedupePostNos(
+          retryResult.failedNos.filter((postNo) => !retryDeleteLimitNos.includes(String(postNo))),
+        ),
+      );
+
+      pendingDeleteLimitNos = retryDeleteLimitNos;
+      if (pendingDeleteLimitNos.length === 0) {
+        break;
+      }
     }
 
-    let deleteLimitRetrySuccessCount = 0;
-    const deleteLimitRetryNos = dedupePostNos(initialResult.deleteLimitExceededNos);
-    const otherFailedNos = dedupePostNos(
-      initialResult.failedNos.filter((postNo) => !deleteLimitRetryNos.includes(String(postNo))),
-    );
-    aggregate.failedNos.push(...otherFailedNos);
-
-    if (this.shouldSwitchRunToBanOnly(initialResult)) {
-      this.activateDeleteLimitBanOnly(initialResult.message);
-
-      if (deleteLimitRetryNos.length > 0) {
-        const retryResult = await banPosts(
-          { ...this.config, delChk: false },
-          deleteLimitRetryNos,
-        );
-        this.recordBanSuccesses(postMap, retryResult.successNos, false);
-        aggregate.successNos.push(...retryResult.successNos);
-        aggregate.failedNos.push(...retryResult.failedNos);
-        deleteLimitRetrySuccessCount = retryResult.successNos.length;
-
-        if (retryResult.message) {
-          aggregate.messages.push(retryResult.message);
-        }
-      }
-    } else {
-      aggregate.failedNos.push(...deleteLimitRetryNos);
+    if (pendingDeleteLimitNos.length > 0 && this.runtimeDeleteEnabled === false) {
+      const retryResult = await banPosts(
+        { ...this.config, delChk: false },
+        pendingDeleteLimitNos,
+      );
+      collectResult(retryResult, false);
+      aggregate.failedNos.push(...retryResult.failedNos);
+      banOnlyRetrySuccessCount = retryResult.successNos.length;
+    } else if (pendingDeleteLimitNos.length > 0) {
+      aggregate.failedNos.push(...pendingDeleteLimitNos);
     }
 
     aggregate.successNos = dedupePostNos(aggregate.successNos);
@@ -351,8 +386,8 @@ class Scheduler {
       this.log(`⛔ ${aggregate.successNos.length}개 차단 완료 (총 ${this.totalBanned}건)`);
     }
 
-    if (deleteLimitRetrySuccessCount > 0) {
-      this.log(`🧯 삭제 한도 초과로 ${deleteLimitRetrySuccessCount}개는 IP 차단만 수행`);
+    if (banOnlyRetrySuccessCount > 0) {
+      this.log(`🧯 삭제 한도 초과로 ${banOnlyRetrySuccessCount}개는 IP 차단만 수행`);
     }
 
     if (aggregate.failedNos.length > 0) {

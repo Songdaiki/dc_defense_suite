@@ -1,5 +1,19 @@
 # 로그인 세션 자동화 스펙
 
+## ownership 메모
+
+이 문서는 **신문고봇 내부에 현재 구현돼 있는 로그인 자동화의 레퍼런스 문서**다.
+
+운영 구조 변경 기준으로는:
+
+- 세션 유지와 계정1/계정2 전환의 최종 ownership은 특궁 메인 확장의 `dcSessionBroker`로 이전하는 방향이 맞다
+- 신문고봇은 장기적으로 로그인 자동화 dependency를 제거하고 공유 쿠키 세션만 사용하는 쪽으로 정리된다
+
+관련 문서:
+
+- [dc_session_broker_login_keepalive_plan.md](/home/eorb915/projects/dc_defense_suite/docs/dc_session_broker_login_keepalive_plan.md)
+- [login_automation_dependency_removal_plan.md](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/docs/login_automation_dependency_removal_plan.md)
+
 ## 목적
 
 신문고 봇은 장시간 무인 운영 중 디시인사이드 로그인 세션 또는 매니저 권한 세션이 풀리면 실제 삭제/차단 단계에서 실패할 수 있다.

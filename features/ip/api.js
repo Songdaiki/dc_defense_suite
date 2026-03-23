@@ -1,3 +1,5 @@
+import { withDcRequestLease } from '../../background/dc-session-broker.js';
+
 const DEFAULT_CONFIG = {
   galleryId: 'thesingularity',
   galleryType: 'M',
@@ -77,15 +79,19 @@ function buildBlockListUrl(config, page = 1) {
 }
 
 async function fetchTargetListHTML(config, page = 1) {
-  const resolved = { ...DEFAULT_CONFIG, ...config };
-  const response = await dcFetchWithRetry(buildBoardListUrl(resolved, page));
-  return response.text();
+  return withDcRequestLease({ feature: 'ip', kind: 'fetchTargetListHTML' }, async () => {
+    const resolved = { ...DEFAULT_CONFIG, ...config };
+    const response = await dcFetchWithRetry(buildBoardListUrl(resolved, page));
+    return response.text();
+  });
 }
 
 async function fetchBlockListHTML(config, page = 1) {
-  const resolved = { ...DEFAULT_CONFIG, ...config };
-  const response = await dcFetchWithRetry(buildBlockListUrl(resolved, page));
-  return response.text();
+  return withDcRequestLease({ feature: 'ip', kind: 'fetchBlockListHTML' }, async () => {
+    const resolved = { ...DEFAULT_CONFIG, ...config };
+    const response = await dcFetchWithRetry(buildBlockListUrl(resolved, page));
+    return response.text();
+  });
 }
 
 async function getCiToken(baseUrl = DEFAULT_CONFIG.baseUrl) {
@@ -102,73 +108,75 @@ async function getCiToken(baseUrl = DEFAULT_CONFIG.baseUrl) {
 }
 
 async function banPosts(config, postNos) {
-  const resolved = { ...DEFAULT_CONFIG, ...config };
-  const uniquePostNos = [...new Set(postNos.map((postNo) => String(postNo)))];
+  return withDcRequestLease({ feature: 'ip', kind: 'banPosts' }, async () => {
+    const resolved = { ...DEFAULT_CONFIG, ...config };
+    const uniquePostNos = [...new Set(postNos.map((postNo) => String(postNo)))];
 
-  if (uniquePostNos.length === 0) {
-    return {
-      success: true,
-      successNos: [],
-      failedNos: [],
-      message: '차단할 게시물이 없습니다.',
-    };
-  }
-
-  const ciToken = await getCiToken(resolved.baseUrl);
-  if (!ciToken) {
-    return {
-      success: false,
-      successNos: [],
-      failedNos: uniquePostNos,
-      message: 'ci_t 토큰(ci_c 쿠키)을 찾지 못했습니다.',
-    };
-  }
-
-  const chunks = chunkArray(uniquePostNos, resolved.banBatchSize);
-  const aggregate = {
-    successNos: [],
-    failedNos: [],
-    messages: [],
-  };
-
-  for (let index = 0; index < chunks.length; index += 1) {
-    const chunk = chunks[index];
-    const result = await banPostsWithFallback(resolved, ciToken, chunk);
-    aggregate.successNos.push(...result.successNos);
-    if (result.message) {
-      aggregate.messages.push(result.message);
-    }
-
-    if (result.deleteLimitExceeded) {
-      const remainingNos = dedupePostNos([
-        ...result.deleteLimitExceededNos,
-        ...chunks.slice(index + 1).flat(),
-      ]);
-      aggregate.failedNos.push(...remainingNos);
-
+    if (uniquePostNos.length === 0) {
       return {
-        success: false,
-        successNos: dedupePostNos(aggregate.successNos),
-        failedNos: dedupePostNos(aggregate.failedNos),
-        message: aggregate.messages.join(' | '),
-        failureType: 'delete_limit_exceeded',
-        deleteLimitExceeded: true,
-        deleteLimitExceededNos: remainingNos,
+        success: true,
+        successNos: [],
+        failedNos: [],
+        message: '차단할 게시물이 없습니다.',
       };
     }
 
-    aggregate.failedNos.push(...result.failedNos);
-  }
+    const ciToken = await getCiToken(resolved.baseUrl);
+    if (!ciToken) {
+      return {
+        success: false,
+        successNos: [],
+        failedNos: uniquePostNos,
+        message: 'ci_t 토큰(ci_c 쿠키)을 찾지 못했습니다.',
+      };
+    }
 
-  return {
-    success: aggregate.failedNos.length === 0,
-    successNos: dedupePostNos(aggregate.successNos),
-    failedNos: dedupePostNos(aggregate.failedNos),
-    message: aggregate.messages.join(' | '),
-    failureType: '',
-    deleteLimitExceeded: false,
-    deleteLimitExceededNos: [],
-  };
+    const chunks = chunkArray(uniquePostNos, resolved.banBatchSize);
+    const aggregate = {
+      successNos: [],
+      failedNos: [],
+      messages: [],
+    };
+
+    for (let index = 0; index < chunks.length; index += 1) {
+      const chunk = chunks[index];
+      const result = await banPostsWithFallback(resolved, ciToken, chunk);
+      aggregate.successNos.push(...result.successNos);
+      if (result.message) {
+        aggregate.messages.push(result.message);
+      }
+
+      if (result.deleteLimitExceeded) {
+        const remainingNos = dedupePostNos([
+          ...result.deleteLimitExceededNos,
+          ...chunks.slice(index + 1).flat(),
+        ]);
+        aggregate.failedNos.push(...remainingNos);
+
+        return {
+          success: false,
+          successNos: dedupePostNos(aggregate.successNos),
+          failedNos: dedupePostNos(aggregate.failedNos),
+          message: aggregate.messages.join(' | '),
+          failureType: 'delete_limit_exceeded',
+          deleteLimitExceeded: true,
+          deleteLimitExceededNos: remainingNos,
+        };
+      }
+
+      aggregate.failedNos.push(...result.failedNos);
+    }
+
+    return {
+      success: aggregate.failedNos.length === 0,
+      successNos: dedupePostNos(aggregate.successNos),
+      failedNos: dedupePostNos(aggregate.failedNos),
+      message: aggregate.messages.join(' | '),
+      failureType: '',
+      deleteLimitExceeded: false,
+      deleteLimitExceededNos: [],
+    };
+  });
 }
 
 async function banPostsWithFallback(config, ciToken, postNos) {
@@ -271,74 +279,76 @@ async function releaseBan(config, releaseId) {
 }
 
 async function releaseBans(config, releaseIds) {
-  const resolved = { ...DEFAULT_CONFIG, ...config };
-  const normalizedTargets = normalizeReleaseTargets(releaseIds);
-  const uniqueTargets = dedupeReleaseTargets(normalizedTargets);
+  return withDcRequestLease({ feature: 'ip', kind: 'releaseBans' }, async () => {
+    const resolved = { ...DEFAULT_CONFIG, ...config };
+    const normalizedTargets = normalizeReleaseTargets(releaseIds);
+    const uniqueTargets = dedupeReleaseTargets(normalizedTargets);
 
-  if (uniqueTargets.length === 0) {
-    return {
-      success: true,
-      releasedIds: [],
-      failedIds: [],
-      message: '해제할 대상이 없습니다.',
-    };
-  }
+    if (uniqueTargets.length === 0) {
+      return {
+        success: true,
+        releasedIds: [],
+        failedIds: [],
+        message: '해제할 대상이 없습니다.',
+      };
+    }
 
-  const ciToken = await getCiToken(resolved.baseUrl);
-  if (!ciToken) {
-    return {
-      success: false,
-      releasedIds: [],
-      failedIds: uniqueTargets.map((target) => target.releaseId),
-      message: 'ci_t 토큰(ci_c 쿠키)을 찾지 못했습니다.',
-    };
-  }
+    const ciToken = await getCiToken(resolved.baseUrl);
+    if (!ciToken) {
+      return {
+        success: false,
+        releasedIds: [],
+        failedIds: uniqueTargets.map((target) => target.releaseId),
+        message: 'ci_t 토큰(ci_c 쿠키)을 찾지 못했습니다.',
+      };
+    }
 
-  const anoValues = [...new Set(uniqueTargets.map((target) => String(target.ano ?? '0')))];
-  if (anoValues.length > 1) {
-    return {
-      success: false,
-      releasedIds: [],
-      failedIds: uniqueTargets.map((target) => target.releaseId),
-      message: 'ano 값이 서로 다른 해제 요청은 한 번에 처리할 수 없습니다.',
-    };
-  }
+    const anoValues = [...new Set(uniqueTargets.map((target) => String(target.ano ?? '0')))];
+    if (anoValues.length > 1) {
+      return {
+        success: false,
+        releasedIds: [],
+        failedIds: uniqueTargets.map((target) => target.releaseId),
+        message: 'ano 값이 서로 다른 해제 요청은 한 번에 처리할 수 없습니다.',
+      };
+    }
 
-  const body = new URLSearchParams();
-  body.set('ci_t', ciToken);
-  body.set('gallery_id', resolved.galleryId);
-  body.set('_GALLTYPE_', resolved.galleryType);
-  body.set('avoid_type', 'R');
-  body.set('ano', anoValues[0] || '0');
+    const body = new URLSearchParams();
+    body.set('ci_t', ciToken);
+    body.set('gallery_id', resolved.galleryId);
+    body.set('_GALLTYPE_', resolved.galleryType);
+    body.set('avoid_type', 'R');
+    body.set('ano', anoValues[0] || '0');
 
-  for (const target of uniqueTargets) {
-    body.append('nos[]', String(target.releaseId));
-  }
+    for (const target of uniqueTargets) {
+      body.append('nos[]', String(target.releaseId));
+    }
 
-  const response = await dcFetchWithRetry(
-    `${resolved.baseUrl}/ajax/managements_ajax/set_avoid`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Referer': buildBlockListUrl(resolved, 1),
-        'Origin': resolved.baseUrl,
+    const response = await dcFetchWithRetry(
+      `${resolved.baseUrl}/ajax/managements_ajax/set_avoid`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Referer': buildBlockListUrl(resolved, 1),
+          'Origin': resolved.baseUrl,
+        },
+        body: body.toString(),
       },
-      body: body.toString(),
-    },
-  );
+    );
 
-  const responseText = await response.text();
-  const parsed = safeParseJson(responseText);
-  const success = isReleaseResponseSuccessful(response, parsed, responseText);
+    const responseText = await response.text();
+    const parsed = safeParseJson(responseText);
+    const success = isReleaseResponseSuccessful(response, parsed, responseText);
 
-  return {
-    success,
-    releasedIds: success ? uniqueTargets.map((target) => target.releaseId) : [],
-    failedIds: success ? [] : uniqueTargets.map((target) => target.releaseId),
-    message: summarizeResponse(parsed, responseText),
-  };
+    return {
+      success,
+      releasedIds: success ? uniqueTargets.map((target) => target.releaseId) : [],
+      failedIds: success ? [] : uniqueTargets.map((target) => target.releaseId),
+      message: summarizeResponse(parsed, responseText),
+    };
+  });
 }
 
 function isBanResponseSuccessful(response, data, responseText) {

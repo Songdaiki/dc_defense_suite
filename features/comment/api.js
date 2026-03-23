@@ -5,6 +5,8 @@
  * SPEC.md에서 확인된 엔드포인트와 파라미터를 사용합니다.
  */
 
+import { withDcRequestLease } from '../../background/dc-session-broker.js';
+
 // ============================================================
 // 설정
 // ============================================================
@@ -84,57 +86,59 @@ async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
  * @returns {Promise<{posts: Array<{no: number, commentCount: number}>, esno: string|null}>}
  */
 async function fetchPostList(config = {}, page = 1) {
-  const resolved = resolveConfig(config);
-  const url = `${resolved.baseUrl}/mgallery/board/lists/?id=${resolved.galleryId}&page=${page}`;
+  return withDcRequestLease({ feature: 'comment', kind: 'fetchPostList' }, async () => {
+    const resolved = resolveConfig(config);
+    const url = `${resolved.baseUrl}/mgallery/board/lists/?id=${resolved.galleryId}&page=${page}`;
 
-  const response = await dcFetchWithRetry(url);
-  const html = await response.text();
-  const esno = extractEsno(html);
+    const response = await dcFetchWithRetry(url);
+    const html = await response.text();
+    const esno = extractEsno(html);
 
-  // 목록 행에서 게시물 번호와 댓글 수를 같이 추출
-  const posts = [];
-  const rowRegex = /<tr class="ub-content[^"]*"[^>]*data-no="(\d+)"[^>]*>([\s\S]*?)<\/tr>/g;
-  let match;
-
-  while ((match = rowRegex.exec(html)) !== null) {
-    const no = parseInt(match[1], 10);
-    if (no > 0) {
-      const rowHtml = match[2];
-      const replyMatch = rowHtml.match(/<span class="reply_num">\[(\d+)\]<\/span>/);
-      const commentCount = replyMatch ? parseInt(replyMatch[1], 10) : 0;
-      posts.push({ no, commentCount });
-    }
-  }
-
-  // fallback: 행 파싱에 실패하면 번호만 추출
-  if (posts.length === 0) {
-    const dataNoRegex = /data-no="(\d+)"/g;
-    while ((match = dataNoRegex.exec(html)) !== null) {
+    // 목록 행에서 게시물 번호와 댓글 수를 같이 추출
+    const posts = [];
+    const rowRegex = /<tr class="ub-content[^"]*"[^>]*data-no="(\d+)"[^>]*>([\s\S]*?)<\/tr>/g;
+    let match;
+    while ((match = rowRegex.exec(html)) !== null) {
       const no = parseInt(match[1], 10);
       if (no > 0) {
-        posts.push({ no, commentCount: 0 });
+        const rowHtml = match[2];
+        const replyMatch = rowHtml.match(/<span class="reply_num">\[(\d+)\]<\/span>/);
+        const commentCount = replyMatch ? parseInt(replyMatch[1], 10) : 0;
+        posts.push({ no, commentCount });
       }
     }
-  }
 
-  const dedupedPosts = [];
-  const seen = new Map();
-
-  for (const post of posts) {
-    if (!seen.has(post.no)) {
-      seen.set(post.no, dedupedPosts.length);
-      dedupedPosts.push(post);
-      continue;
+    // fallback: 행 파싱에 실패하면 번호만 추출
+    if (posts.length === 0) {
+      const dataNoRegex = /data-no="(\d+)"/g;
+      let match;
+      while ((match = dataNoRegex.exec(html)) !== null) {
+        const no = parseInt(match[1], 10);
+        if (no > 0) {
+          posts.push({ no, commentCount: 0 });
+        }
+      }
     }
 
-    const index = seen.get(post.no);
-    dedupedPosts[index].commentCount = Math.max(dedupedPosts[index].commentCount, post.commentCount);
-  }
+    const dedupedPosts = [];
+    const seen = new Map();
 
-  return {
-    posts: dedupedPosts,
-    esno,
-  };
+    for (const post of posts) {
+      if (!seen.has(post.no)) {
+        seen.set(post.no, dedupedPosts.length);
+        dedupedPosts.push(post);
+        continue;
+      }
+
+      const index = seen.get(post.no);
+      dedupedPosts[index].commentCount = Math.max(dedupedPosts[index].commentCount, post.commentCount);
+    }
+
+    return {
+      posts: dedupedPosts,
+      esno,
+    };
+  });
 }
 
 /**
@@ -143,17 +147,19 @@ async function fetchPostList(config = {}, page = 1) {
  * @returns {Promise<string>} 페이지 HTML
  */
 async function fetchPostPage(config = {}, postNo) {
-  const resolved = resolveConfig(config);
-  const url = `${resolved.baseUrl}/mgallery/board/view/?id=${resolved.galleryId}&no=${postNo}`;
-  
-  const response = await dcFetchWithRetry(url);
-  const html = await response.text();
+  return withDcRequestLease({ feature: 'comment', kind: 'fetchPostPage' }, async () => {
+    const resolved = resolveConfig(config);
+    const url = `${resolved.baseUrl}/mgallery/board/view/?id=${resolved.galleryId}&no=${postNo}`;
 
-  if (html.includes('정상적인 접근이 아닙니다')) {
-    throw new Error('게시물 페이지 접근 차단 응답을 받았습니다');
-  }
+    const response = await dcFetchWithRetry(url);
+    const html = await response.text();
 
-  return html;
+    if (html.includes('정상적인 접근이 아닙니다')) {
+      throw new Error('게시물 페이지 접근 차단 응답을 받았습니다');
+    }
+
+    return html;
+  });
 }
 
 /**
@@ -232,35 +238,37 @@ async function fetchComments(config = {}, postNo, esno, commentPage = 1) {
  * @returns {Promise<{comments: Array, totalCnt: number}>}
  */
 async function fetchAllComments(config = {}, postNo, esno, pageConcurrency = 4) {
-  const firstPage = await fetchComments(config, postNo, esno, 1);
-  const allComments = [...firstPage.comments];
-  const firstPageSize = firstPage.comments.length || 20;
-  const totalPages = Math.max(1, Math.ceil(firstPage.totalCnt / firstPageSize));
+  return withDcRequestLease({ feature: 'comment', kind: 'fetchAllComments' }, async () => {
+    const firstPage = await fetchComments(config, postNo, esno, 1);
+    const allComments = [...firstPage.comments];
+    const firstPageSize = firstPage.comments.length || 20;
+    const totalPages = Math.max(1, Math.ceil(firstPage.totalCnt / firstPageSize));
 
-  if (totalPages > 1) {
-    const pageNumbers = [];
-    for (let page = 2; page <= totalPages; page++) {
-      pageNumbers.push(page);
+    if (totalPages > 1) {
+      const pageNumbers = [];
+      for (let page = 2; page <= totalPages; page++) {
+        pageNumbers.push(page);
+      }
+
+      const pageResults = await mapWithConcurrency(
+        pageNumbers,
+        pageConcurrency,
+        async (page) => ({
+          page,
+          data: await fetchComments(config, postNo, esno, page),
+        }),
+      );
+
+      for (const result of pageResults) {
+        allComments.push(...result.data.comments);
+      }
     }
 
-    const pageResults = await mapWithConcurrency(
-      pageNumbers,
-      pageConcurrency,
-      async (page) => ({
-        page,
-        data: await fetchComments(config, postNo, esno, page),
-      }),
-    );
-
-    for (const result of pageResults) {
-      allComments.push(...result.data.comments);
-    }
-  }
-
-  return {
-    comments: allComments,
-    totalCnt: firstPage.totalCnt,
-  };
+    return {
+      comments: allComments,
+      totalCnt: firstPage.totalCnt,
+    };
+  });
 }
 
 /**
@@ -291,39 +299,41 @@ async function getCiToken(baseUrl = DC_CONFIG.baseUrl) {
  * @returns {Promise<{success: boolean, message: string}>}
  */
 async function deleteComments(config = {}, postNo, commentNos) {
-  const normalizedCommentNos = normalizeCommentNos(commentNos);
-  if (normalizedCommentNos.length === 0) {
-    return { success: true, message: '삭제할 댓글 없음' };
-  }
-
-  const resolved = resolveConfig(config);
-  const ciToken = await getCiToken(resolved.baseUrl);
-  if (!ciToken) {
-    return { success: false, message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.' };
-  }
-
-  const commentNoChunks = chunkArray(normalizedCommentNos, COMMENT_ACTION_BATCH_LIMIT);
-  for (let index = 0; index < commentNoChunks.length; index += 1) {
-    const chunk = commentNoChunks[index];
-    const chunkResult = await deleteCommentsChunk(resolved, postNo, ciToken, chunk);
-    if (!chunkResult.success) {
-      return {
-        success: false,
-        message: buildChunkFailureMessage('댓글 삭제', index, commentNoChunks.length, chunkResult.message),
-      };
+  return withDcRequestLease({ feature: 'comment', kind: 'deleteComments' }, async () => {
+    const normalizedCommentNos = normalizeCommentNos(commentNos);
+    if (normalizedCommentNos.length === 0) {
+      return { success: true, message: '삭제할 댓글 없음' };
     }
 
-    if (index < commentNoChunks.length - 1) {
-      await delay(getChunkJitterDelayMs());
+    const resolved = resolveConfig(config);
+    const ciToken = await getCiToken(resolved.baseUrl);
+    if (!ciToken) {
+      return { success: false, message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.' };
     }
-  }
 
-  return {
-    success: true,
-    message: commentNoChunks.length > 1
-      ? `댓글 삭제 완료 (${normalizedCommentNos.length}개 / ${commentNoChunks.length}회 분할)`
-      : '댓글 삭제 완료',
-  };
+    const commentNoChunks = chunkArray(normalizedCommentNos, COMMENT_ACTION_BATCH_LIMIT);
+    for (let index = 0; index < commentNoChunks.length; index += 1) {
+      const chunk = commentNoChunks[index];
+      const chunkResult = await deleteCommentsChunk(resolved, postNo, ciToken, chunk);
+      if (!chunkResult.success) {
+        return {
+          success: false,
+          message: buildChunkFailureMessage('댓글 삭제', index, commentNoChunks.length, chunkResult.message),
+        };
+      }
+
+      if (index < commentNoChunks.length - 1) {
+        await delay(getChunkJitterDelayMs());
+      }
+    }
+
+    return {
+      success: true,
+      message: commentNoChunks.length > 1
+        ? `댓글 삭제 완료 (${normalizedCommentNos.length}개 / ${commentNoChunks.length}회 분할)`
+        : '댓글 삭제 완료',
+    };
+  });
 }
 
 /**
@@ -340,39 +350,41 @@ async function deleteComments(config = {}, postNo, commentNos) {
  * @returns {Promise<{success: boolean, message: string}>}
  */
 async function deleteAndBanComments(config = {}, postNo, commentNos) {
-  const normalizedCommentNos = normalizeCommentNos(commentNos);
-  if (normalizedCommentNos.length === 0) {
-    return { success: true, message: '차단할 댓글 없음' };
-  }
-
-  const resolved = resolveConfig(config);
-  const ciToken = await getCiToken(resolved.baseUrl);
-  if (!ciToken) {
-    return { success: false, message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.' };
-  }
-
-  const commentNoChunks = chunkArray(normalizedCommentNos, COMMENT_ACTION_BATCH_LIMIT);
-  for (let index = 0; index < commentNoChunks.length; index += 1) {
-    const chunk = commentNoChunks[index];
-    const chunkResult = await deleteAndBanCommentsChunk(resolved, postNo, ciToken, chunk);
-    if (!chunkResult.success) {
-      return {
-        success: false,
-        message: buildChunkFailureMessage('댓글 삭제+차단', index, commentNoChunks.length, chunkResult.message),
-      };
+  return withDcRequestLease({ feature: 'comment', kind: 'deleteAndBanComments' }, async () => {
+    const normalizedCommentNos = normalizeCommentNos(commentNos);
+    if (normalizedCommentNos.length === 0) {
+      return { success: true, message: '차단할 댓글 없음' };
     }
 
-    if (index < commentNoChunks.length - 1) {
-      await delay(getChunkJitterDelayMs());
+    const resolved = resolveConfig(config);
+    const ciToken = await getCiToken(resolved.baseUrl);
+    if (!ciToken) {
+      return { success: false, message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.' };
     }
-  }
 
-  return {
-    success: true,
-    message: commentNoChunks.length > 1
-      ? `댓글 삭제+차단 완료 (${normalizedCommentNos.length}개 / ${commentNoChunks.length}회 분할)`
-      : '댓글 삭제+차단 완료',
-  };
+    const commentNoChunks = chunkArray(normalizedCommentNos, COMMENT_ACTION_BATCH_LIMIT);
+    for (let index = 0; index < commentNoChunks.length; index += 1) {
+      const chunk = commentNoChunks[index];
+      const chunkResult = await deleteAndBanCommentsChunk(resolved, postNo, ciToken, chunk);
+      if (!chunkResult.success) {
+        return {
+          success: false,
+          message: buildChunkFailureMessage('댓글 삭제+차단', index, commentNoChunks.length, chunkResult.message),
+        };
+      }
+
+      if (index < commentNoChunks.length - 1) {
+        await delay(getChunkJitterDelayMs());
+      }
+    }
+
+    return {
+      success: true,
+      message: commentNoChunks.length > 1
+        ? `댓글 삭제+차단 완료 (${normalizedCommentNos.length}개 / ${commentNoChunks.length}회 분할)`
+        : '댓글 삭제+차단 완료',
+    };
+  });
 }
 
 // ============================================================

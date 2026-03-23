@@ -1,3 +1,5 @@
+import { withDcRequestLease } from '../../background/dc-session-broker.js';
+
 const DEFAULT_CONFIG = {
   galleryId: 'thesingularity',
   galleryType: 'M',
@@ -58,143 +60,153 @@ async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
 }
 
 async function fetchConceptListHTML(config = {}) {
-  const resolved = resolveConfig(config);
-  const url = new URL('/mgallery/board/lists/', resolved.baseUrl);
-  url.searchParams.set('id', resolved.galleryId);
-  url.searchParams.set('exception_mode', 'recommend');
+  return withDcRequestLease({ feature: 'conceptMonitor', kind: 'fetchConceptListHTML' }, async () => {
+    const resolved = resolveConfig(config);
+    const url = new URL('/mgallery/board/lists/', resolved.baseUrl);
+    url.searchParams.set('id', resolved.galleryId);
+    url.searchParams.set('exception_mode', 'recommend');
 
-  const response = await dcFetchWithRetry(url.toString());
-  const html = await response.text();
-  assertValidHtmlResponse(response, html, {
-    label: '개념글 목록 페이지',
-    shapeCheck: looksLikeConceptListHtml,
+    const response = await dcFetchWithRetry(url.toString());
+    const html = await response.text();
+    assertValidHtmlResponse(response, html, {
+      label: '개념글 목록 페이지',
+      shapeCheck: looksLikeConceptListHtml,
+    });
+
+    return html;
   });
-
-  return html;
 }
 
 async function fetchBoardListHTML(config = {}) {
-  const resolved = resolveConfig(config);
-  const url = new URL('/mgallery/board/lists/', resolved.baseUrl);
-  url.searchParams.set('id', resolved.galleryId);
+  return withDcRequestLease({ feature: 'conceptMonitor', kind: 'fetchBoardListHTML' }, async () => {
+    const resolved = resolveConfig(config);
+    const url = new URL('/mgallery/board/lists/', resolved.baseUrl);
+    url.searchParams.set('id', resolved.galleryId);
 
-  const response = await dcFetchWithRetry(url.toString());
-  const html = await response.text();
-  assertValidHtmlResponse(response, html, {
-    label: '전체글 목록 페이지',
-    shapeCheck: looksLikeBoardListHtml,
+    const response = await dcFetchWithRetry(url.toString());
+    const html = await response.text();
+    assertValidHtmlResponse(response, html, {
+      label: '전체글 목록 페이지',
+      shapeCheck: looksLikeBoardListHtml,
+    });
+
+    return html;
   });
-
-  return html;
 }
 
 async function fetchConceptPostViewHTML(config = {}, postNo) {
-  const resolved = resolveConfig(config);
-  const url = buildPostViewUrl(resolved, postNo);
-  const response = await dcFetchWithRetry(url);
-  const html = await response.text();
-  assertValidHtmlResponse(response, html, {
-    label: '게시물 페이지',
-    shapeCheck: looksLikeBoardViewHtml,
-  });
+  return withDcRequestLease({ feature: 'conceptMonitor', kind: 'fetchConceptPostViewHTML' }, async () => {
+    const resolved = resolveConfig(config);
+    const url = buildPostViewUrl(resolved, postNo);
+    const response = await dcFetchWithRetry(url);
+    const html = await response.text();
+    assertValidHtmlResponse(response, html, {
+      label: '게시물 페이지',
+      shapeCheck: looksLikeBoardViewHtml,
+    });
 
-  return html;
+    return html;
+  });
 }
 
 async function releaseConceptPost(config = {}, postNo) {
-  const resolved = resolveConfig(config);
-  const ciToken = await getCiToken(resolved.baseUrl);
+  return withDcRequestLease({ feature: 'conceptMonitor', kind: 'releaseConceptPost' }, async () => {
+    const resolved = resolveConfig(config);
+    const ciToken = await getCiToken(resolved.baseUrl);
 
-  if (!ciToken) {
-    return {
-      success: false,
-      status: 0,
-      rawText: '',
-      rawSummary: 'ci_t 토큰(ci_c 쿠키)을 찾지 못했습니다.',
-    };
-  }
+    if (!ciToken) {
+      return {
+        success: false,
+        status: 0,
+        rawText: '',
+        rawSummary: 'ci_t 토큰(ci_c 쿠키)을 찾지 못했습니다.',
+      };
+    }
 
-  const body = new URLSearchParams();
-  body.set('ci_t', ciToken);
-  body.set('id', resolved.galleryId);
-  body.append('nos[]', String(postNo));
-  body.set('_GALLTYPE_', resolved.galleryType);
-  body.set('mode', 'REL');
+    const body = new URLSearchParams();
+    body.set('ci_t', ciToken);
+    body.set('id', resolved.galleryId);
+    body.append('nos[]', String(postNo));
+    body.set('_GALLTYPE_', resolved.galleryType);
+    body.set('mode', 'REL');
 
-  const response = await dcFetchWithRetry(
-    `${resolved.baseUrl}/ajax/minor_manager_board_ajax/set_recommend`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Origin': resolved.baseUrl,
-        'Referer': buildPostViewUrl(resolved, postNo),
+    const response = await dcFetchWithRetry(
+      `${resolved.baseUrl}/ajax/minor_manager_board_ajax/set_recommend`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Origin': resolved.baseUrl,
+          'Referer': buildPostViewUrl(resolved, postNo),
+        },
+        body: body.toString(),
       },
-      body: body.toString(),
-    },
-    1,
-  );
+      1,
+    );
 
-  const rawText = await response.text();
+    const rawText = await response.text();
 
-  return {
-    success: response.status === 200,
-    status: response.status,
-    rawText,
-    rawSummary: summarizeResponseText(rawText),
-  };
+    return {
+      success: response.status === 200,
+      status: response.status,
+      rawText,
+      rawSummary: summarizeResponseText(rawText),
+    };
+  });
 }
 
 async function updateRecommendCut(config = {}, recommendCount) {
-  const resolved = resolveConfig(config);
-  const ciToken = await getCiToken(resolved.baseUrl);
+  return withDcRequestLease({ feature: 'conceptMonitor', kind: 'updateRecommendCut' }, async () => {
+    const resolved = resolveConfig(config);
+    const ciToken = await getCiToken(resolved.baseUrl);
 
-  if (!ciToken) {
-    return {
-      success: false,
-      status: 0,
-      result: '',
-      rawText: '',
-      rawSummary: 'ci_t 토큰(ci_c 쿠키)을 찾지 못했습니다.',
-    };
-  }
+    if (!ciToken) {
+      return {
+        success: false,
+        status: 0,
+        result: '',
+        rawText: '',
+        rawSummary: 'ci_t 토큰(ci_c 쿠키)을 찾지 못했습니다.',
+      };
+    }
 
-  const body = new URLSearchParams();
-  body.set('ci_t', ciToken);
-  body.set('gallery_id', resolved.galleryId);
-  body.set('_GALLTYPE_', resolved.galleryType);
-  body.set('decom_use', '0');
-  body.set('recom_down_use', '0');
-  body.set('recom_count', String(recommendCount));
-  body.set('decom_count', '0');
+    const body = new URLSearchParams();
+    body.set('ci_t', ciToken);
+    body.set('gallery_id', resolved.galleryId);
+    body.set('_GALLTYPE_', resolved.galleryType);
+    body.set('decom_use', '0');
+    body.set('recom_down_use', '0');
+    body.set('recom_count', String(recommendCount));
+    body.set('decom_count', '0');
 
-  const response = await dcFetchWithRetry(
-    `${resolved.baseUrl}/ajax/managements_ajax/update_recom_decom`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Origin': resolved.baseUrl,
-        'Referer': `${resolved.baseUrl}/mgallery/management/gallery?id=${encodeURIComponent(resolved.galleryId)}`,
+    const response = await dcFetchWithRetry(
+      `${resolved.baseUrl}/ajax/managements_ajax/update_recom_decom`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Origin': resolved.baseUrl,
+          'Referer': `${resolved.baseUrl}/mgallery/management/gallery?id=${encodeURIComponent(resolved.galleryId)}`,
+        },
+        body: body.toString(),
       },
-      body: body.toString(),
-    },
-    1,
-  );
+      1,
+    );
 
-  const rawText = await response.text();
-  const parsed = parseJsonResponse(rawText);
-  const result = String(parsed?.result || '').trim();
+    const rawText = await response.text();
+    const parsed = parseJsonResponse(rawText);
+    const result = String(parsed?.result || '').trim();
 
-  return {
-    success: response.status === 200 && result === 'success',
-    status: response.status,
-    result,
-    rawText,
-    rawSummary: summarizeResponseText(rawText),
-  };
+    return {
+      success: response.status === 200 && result === 'success',
+      status: response.status,
+      result,
+      rawText,
+      rawSummary: summarizeResponseText(rawText),
+    };
+  });
 }
 
 async function getCiToken(baseUrl = DEFAULT_CONFIG.baseUrl) {

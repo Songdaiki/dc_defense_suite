@@ -1,3 +1,5 @@
+import { withDcRequestLease } from '../../background/dc-session-broker.js';
+
 const DEFAULT_CONFIG = {
   galleryId: 'thesingularity',
   galleryType: 'M',
@@ -81,13 +83,15 @@ function buildManagementBlockUrl(config, page = 1) {
 }
 
 async function fetchManagementBlockHTML(config, page = 1, maxRetries = 2) {
-  const resolved = { ...DEFAULT_CONFIG, ...config };
-  const response = await dcFetchWithRetry(
-    buildManagementBlockUrl(resolved, page),
-    {},
-    maxRetries,
-  );
-  return response.text();
+  return withDcRequestLease({ feature: 'hanRefreshIpBan', kind: 'fetchManagementBlockHTML' }, async () => {
+    const resolved = { ...DEFAULT_CONFIG, ...config };
+    const response = await dcFetchWithRetry(
+      buildManagementBlockUrl(resolved, page),
+      {},
+      maxRetries,
+    );
+    return response.text();
+  });
 }
 
 async function getCiToken(baseUrl = DEFAULT_CONFIG.baseUrl) {
@@ -104,33 +108,35 @@ async function getCiToken(baseUrl = DEFAULT_CONFIG.baseUrl) {
 }
 
 async function rebanManagementRows(config, avoidNos, refererPage = 1) {
-  const resolved = { ...DEFAULT_CONFIG, ...config };
-  const uniqueNos = [...new Set(
-    (avoidNos || [])
-      .map((value) => String(value || '').trim())
-      .filter((value) => /^\d+$/.test(value) && Number(value) > 0),
-  )];
+  return withDcRequestLease({ feature: 'hanRefreshIpBan', kind: 'rebanManagementRows' }, async () => {
+    const resolved = { ...DEFAULT_CONFIG, ...config };
+    const uniqueNos = [...new Set(
+      (avoidNos || [])
+        .map((value) => String(value || '').trim())
+        .filter((value) => /^\d+$/.test(value) && Number(value) > 0),
+    )];
 
-  if (uniqueNos.length === 0) {
-    return {
-      success: true,
-      successNos: [],
-      failedNos: [],
-      message: '차단 대상이 없습니다.',
-    };
-  }
+    if (uniqueNos.length === 0) {
+      return {
+        success: true,
+        successNos: [],
+        failedNos: [],
+        message: '차단 대상이 없습니다.',
+      };
+    }
 
-  const ciToken = await getCiToken(resolved.baseUrl);
-  if (!ciToken) {
-    return {
-      success: false,
-      successNos: [],
-      failedNos: uniqueNos,
-      message: 'ci_t 토큰(ci_c 쿠키)을 찾지 못했습니다.',
-    };
-  }
+    const ciToken = await getCiToken(resolved.baseUrl);
+    if (!ciToken) {
+      return {
+        success: false,
+        successNos: [],
+        failedNos: uniqueNos,
+        message: 'ci_t 토큰(ci_c 쿠키)을 찾지 못했습니다.',
+      };
+    }
 
-  return rebanManagementRowsWithFallback(resolved, ciToken, uniqueNos, refererPage);
+    return rebanManagementRowsWithFallback(resolved, ciToken, uniqueNos, refererPage);
+  });
 }
 
 async function rebanManagementRowsWithFallback(config, ciToken, avoidNos, refererPage) {

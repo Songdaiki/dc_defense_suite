@@ -5,6 +5,8 @@
  * SPEC.md에서 확인된 엔드포인트와 파라미터를 사용합니다.
  */
 
+import { withDcRequestLease } from '../../background/dc-session-broker.js';
+
 // ============================================================
 // 설정
 // ============================================================
@@ -96,11 +98,13 @@ async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
  * @returns {Promise<string>} 페이지 HTML
  */
 async function fetchPostListHTML(config = {}, page = 1) {
-    const resolved = resolveConfig(config);
-    const url = `${resolved.baseUrl}/mgallery/board/lists/?id=${resolved.galleryId}&page=${page}`;
+    return withDcRequestLease({ feature: 'post', kind: 'fetchPostListHTML' }, async () => {
+        const resolved = resolveConfig(config);
+        const url = `${resolved.baseUrl}/mgallery/board/lists/?id=${resolved.galleryId}&page=${page}`;
 
-    const response = await dcFetchWithRetry(url);
-    return await response.text();
+        const response = await dcFetchWithRetry(url);
+        return await response.text();
+    });
 }
 
 /**
@@ -113,115 +117,119 @@ async function fetchPostListHTML(config = {}, page = 1) {
  * @returns {Promise<{success: boolean, successCount: number, failureCount: number, failedNos: string[], message: string}>}
  */
 async function classifyPosts(config = {}, postNos, options = {}) {
-    const resolved = resolveConfig(config);
-    if (postNos.length === 0) {
-        return {
-            success: true,
-            successCount: 0,
-            failureCount: 0,
-            failedNos: [],
-            message: '분류할 게시물 없음',
-        };
-    }
-
-    const ciToken = await getCiToken(resolved.baseUrl);
-    if (!ciToken) {
-        return {
-            success: false,
-            successCount: 0,
-            failureCount: postNos.length,
-            failedNos: [...postNos],
-            message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.',
-        };
-    }
-
-    const uniquePostNos = [...new Set(postNos.map((no) => String(no)))];
-    const chunks = chunkArray(uniquePostNos, resolved.classifyBatchSize);
-    const aggregate = {
-        successCount: 0,
-        failedNos: [],
-        messages: [],
-    };
-
-    for (const chunk of chunks) {
-        const result = await classifyPostsWithFallback(resolved, ciToken, chunk, options);
-        aggregate.successCount += result.successCount;
-        aggregate.failedNos.push(...result.failedNos);
-        if (result.message) {
-            aggregate.messages.push(result.message);
+    return withDcRequestLease({ feature: 'post', kind: 'classifyPosts' }, async () => {
+        const resolved = resolveConfig(config);
+        if (postNos.length === 0) {
+            return {
+                success: true,
+                successCount: 0,
+                failureCount: 0,
+                failedNos: [],
+                message: '분류할 게시물 없음',
+            };
         }
-    }
 
-    return {
-        success: aggregate.failedNos.length === 0,
-        successCount: aggregate.successCount,
-        failureCount: aggregate.failedNos.length,
-        failedNos: aggregate.failedNos,
-        message: aggregate.messages.join(' | '),
-    };
+        const ciToken = await getCiToken(resolved.baseUrl);
+        if (!ciToken) {
+            return {
+                success: false,
+                successCount: 0,
+                failureCount: postNos.length,
+                failedNos: [...postNos],
+                message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.',
+            };
+        }
+
+        const uniquePostNos = [...new Set(postNos.map((no) => String(no)))];
+        const chunks = chunkArray(uniquePostNos, resolved.classifyBatchSize);
+        const aggregate = {
+            successCount: 0,
+            failedNos: [],
+            messages: [],
+        };
+
+        for (const chunk of chunks) {
+            const result = await classifyPostsWithFallback(resolved, ciToken, chunk, options);
+            aggregate.successCount += result.successCount;
+            aggregate.failedNos.push(...result.failedNos);
+            if (result.message) {
+                aggregate.messages.push(result.message);
+            }
+        }
+
+        return {
+            success: aggregate.failedNos.length === 0,
+            successCount: aggregate.successCount,
+            failureCount: aggregate.failedNos.length,
+            failedNos: aggregate.failedNos,
+            message: aggregate.messages.join(' | '),
+        };
+    });
 }
 
 async function deletePosts(config = {}, postNos, options = {}) {
-    const resolved = resolveConfig(config);
-    if (postNos.length === 0) {
-        return {
-            success: true,
+    return withDcRequestLease({ feature: 'post', kind: 'deletePosts' }, async () => {
+        const resolved = resolveConfig(config);
+        if (postNos.length === 0) {
+            return {
+                success: true,
+                successNos: [],
+                failedNos: [],
+                message: '삭제할 게시물 없음',
+                deleteLimitExceeded: false,
+            };
+        }
+
+        const ciToken = await getCiToken(resolved.baseUrl);
+        if (!ciToken) {
+            return {
+                success: false,
+                successNos: [],
+                failedNos: [...postNos],
+                message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.',
+                deleteLimitExceeded: false,
+            };
+        }
+
+        const uniquePostNos = [...new Set(postNos.map((no) => String(no)))];
+        const chunks = chunkArray(uniquePostNos, resolved.classifyBatchSize);
+        const aggregate = {
             successNos: [],
             failedNos: [],
-            message: '삭제할 게시물 없음',
+            messages: [],
             deleteLimitExceeded: false,
         };
-    }
 
-    const ciToken = await getCiToken(resolved.baseUrl);
-    if (!ciToken) {
+        for (let index = 0; index < chunks.length; index += 1) {
+            const chunk = chunks[index];
+            const result = await deletePostsWithFallback(resolved, ciToken, chunk, options);
+            aggregate.successNos.push(...result.successNos);
+            if (result.message) {
+                aggregate.messages.push(result.message);
+            }
+
+            if (result.deleteLimitExceeded) {
+                aggregate.deleteLimitExceeded = true;
+                aggregate.failedNos.push(
+                    ...dedupePostNos([
+                        ...result.failedNos,
+                        ...chunks.slice(index + 1).flat(),
+                    ]),
+                );
+                break;
+            }
+
+            aggregate.failedNos.push(...result.failedNos);
+        }
+
         return {
-            success: false,
-            successNos: [],
-            failedNos: [...postNos],
-            message: 'ci_t 토큰(ci_c 쿠키) 없음. 로그인 상태를 확인하세요.',
-            deleteLimitExceeded: false,
+            success: aggregate.failedNos.length === 0,
+            successNos: dedupePostNos(aggregate.successNos),
+            failedNos: dedupePostNos(aggregate.failedNos),
+            message: aggregate.messages.join(' | '),
+            deleteLimitExceeded: aggregate.deleteLimitExceeded,
         };
-    }
-
-    const uniquePostNos = [...new Set(postNos.map((no) => String(no)))];
-    const chunks = chunkArray(uniquePostNos, resolved.classifyBatchSize);
-    const aggregate = {
-        successNos: [],
-        failedNos: [],
-        messages: [],
-        deleteLimitExceeded: false,
-    };
-
-    for (let index = 0; index < chunks.length; index += 1) {
-        const chunk = chunks[index];
-        const result = await deletePostsWithFallback(resolved, ciToken, chunk, options);
-        aggregate.successNos.push(...result.successNos);
-        if (result.message) {
-            aggregate.messages.push(result.message);
-        }
-
-        if (result.deleteLimitExceeded) {
-            aggregate.deleteLimitExceeded = true;
-            aggregate.failedNos.push(
-                ...dedupePostNos([
-                    ...result.failedNos,
-                    ...chunks.slice(index + 1).flat(),
-                ]),
-            );
-            break;
-        }
-
-        aggregate.failedNos.push(...result.failedNos);
-    }
-
-    return {
-        success: aggregate.failedNos.length === 0,
-        successNos: dedupePostNos(aggregate.successNos),
-        failedNos: dedupePostNos(aggregate.failedNos),
-        message: aggregate.messages.join(' | '),
-        deleteLimitExceeded: aggregate.deleteLimitExceeded,
-    };
+    });
 }
 
 async function classifyPostsWithFallback(config, ciToken, postNos, options = {}) {

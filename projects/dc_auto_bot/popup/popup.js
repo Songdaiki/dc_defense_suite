@@ -41,6 +41,7 @@ const llmTestResult = document.getElementById('llmTestResult');
 let currentStatus = null;
 let configDirty = false;
 let loginConfigDirty = false;
+const LOGIN_BROKER_MESSAGE = '특궁 세션 브로커에서 로그인 세션을 관리합니다.';
 
 document.addEventListener('DOMContentLoaded', async () => {
   bindEvents();
@@ -224,8 +225,8 @@ function applyStatus(status) {
 
   toggleBtn.checked = Boolean(status.isRunning);
   toggleLabel.textContent = status.isRunning ? 'ON' : 'OFF';
-  loginAutomationToggle.checked = login.enabled === true;
-  loginAutomationLabel.textContent = login.enabled === true ? 'ON' : 'OFF';
+  loginAutomationToggle.checked = false;
+  loginAutomationLabel.textContent = login.managedByBroker ? '특궁' : (login.enabled === true ? 'ON' : 'OFF');
   statusText.textContent = status.isRunning ? '🟢 실행 중' : '🔴 정지';
   statusText.classList.toggle('status-off', !status.isRunning);
   phaseText.textContent = status.phase || 'IDLE';
@@ -251,14 +252,14 @@ function applyStatus(status) {
   }
 
   if (!loginConfigDirty) {
-    dcLoginUserIdInput.value = login.userId || '';
-    dcLoginPasswordInput.value = login.password || '';
+    dcLoginUserIdInput.value = '';
+    dcLoginPasswordInput.value = '';
   }
 
   llmAuthStatus.textContent = formatHelperHealthStatus(helperHealth, llm.config?.cliHelperEndpoint);
   llmAuthEmail.textContent = formatHelperHealthDetail(helperHealth, llm.config?.cliHelperEndpoint);
-  loginAuthStatus.textContent = formatLoginHealthStatus(loginHealth, login.enabled, login.credentialsConfigured);
-  loginAuthDetail.textContent = formatLoginHealthDetail(loginHealth, login.enabled, login.credentialsConfigured);
+  loginAuthStatus.textContent = formatLoginHealthStatus(loginHealth, login.enabled, login.credentialsConfigured, login.managedByBroker);
+  loginAuthDetail.textContent = formatLoginHealthDetail(loginHealth, login.enabled, login.credentialsConfigured, login.managedByBroker);
   llmLastTestAt.textContent = formatTimestamp(llm.lastTestAt);
   llmTestStatus.textContent = llm.isTesting ? '실행 중' : (llm.lastTestResult ? (llm.lastTestResult.success ? '완료' : '실패') : '대기');
   llmTestResult.textContent = llm.lastTestResult ? JSON.stringify(llm.lastTestResult, null, 2) : '결과가 없습니다.';
@@ -266,6 +267,7 @@ function applyStatus(status) {
   renderTrustedUsers(config.trustedUsers || []);
   renderLogs(status.logs || []);
   applyRunningLocks(Boolean(status.isRunning), Boolean(llm.isTesting));
+  applyLoginOwnershipLocks(Boolean(login.managedByBroker));
 }
 
 function renderTrustedUsers(users) {
@@ -330,6 +332,16 @@ function applyRunningLocks(isRunning, isTesting) {
   resetBtn.disabled = isRunning || isTesting;
   saveConfigBtn.disabled = isRunning || isTesting;
   runLlmTestBtn.disabled = isTesting;
+}
+
+function applyLoginOwnershipLocks(isManagedByBroker) {
+  loginAutomationToggle.disabled = isManagedByBroker;
+  dcLoginUserIdInput.disabled = isManagedByBroker;
+  dcLoginPasswordInput.disabled = isManagedByBroker;
+  saveLoginAutomationBtn.disabled = isManagedByBroker;
+  if (isManagedByBroker) {
+    saveLoginAutomationBtn.textContent = '특궁에서 관리';
+  }
 }
 
 function bindConfigDirtyHandlers() {
@@ -425,7 +437,11 @@ function formatHelperHealthDetail(helperHealth, endpoint) {
   return helperHealth.message || '';
 }
 
-function formatLoginHealthStatus(loginHealth, enabled, credentialsConfigured) {
+function formatLoginHealthStatus(loginHealth, enabled, credentialsConfigured, managedByBroker) {
+  if (managedByBroker) {
+    return '🟢 특궁 broker 관리 중';
+  }
+
   if (!enabled) {
     return '⚪ login 자동화 비활성화';
   }
@@ -448,7 +464,11 @@ function formatLoginHealthStatus(loginHealth, enabled, credentialsConfigured) {
   }
 }
 
-function formatLoginHealthDetail(loginHealth, enabled, credentialsConfigured) {
+function formatLoginHealthDetail(loginHealth, enabled, credentialsConfigured, managedByBroker) {
+  if (managedByBroker) {
+    return LOGIN_BROKER_MESSAGE;
+  }
+
   if (!enabled) {
     return '자동화 OFF';
   }

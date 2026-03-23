@@ -9,6 +9,15 @@ import { Scheduler as PostScheduler } from '../features/post/scheduler.js';
 import { Scheduler as SemiPostScheduler } from '../features/semi-post/scheduler.js';
 import { Scheduler as IpScheduler } from '../features/ip/scheduler.js';
 import { PHASE as MONITOR_PHASE, Scheduler as MonitorScheduler } from '../features/monitor/scheduler.js';
+import {
+  getDcSessionBrokerStatus,
+  handleDcSessionBrokerAlarm,
+  handleDcSessionBrokerTabRemoved,
+  initializeDcSessionBroker,
+  requestManualSessionSwitch,
+  syncDcSessionBrokerSharedConfig,
+  updateDcSessionBrokerConfig,
+} from './dc-session-broker.js';
 
 const commentScheduler = new CommentScheduler();
 const commentMonitorScheduler = new CommentMonitorScheduler({
@@ -35,7 +44,9 @@ const schedulers = {
   monitor: monitorScheduler,
 };
 
-void initializeSchedulers();
+let resumeAllSchedulersPromise = null;
+
+void initializeApp();
 
 chrome.runtime.onInstalled.addListener(async () => {
   console.log('[DefenseSuite] 설치됨');
@@ -55,12 +66,21 @@ chrome.runtime.onStartup.addListener(async () => {
 chrome.alarms.create('keepAlive', { periodInMinutes: 0.5 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name !== 'keepAlive') {
+  if (alarm.name === 'keepAlive') {
+    resumeAllSchedulers().catch((error) => {
+      console.error('[DefenseSuite] keepAlive 복원 실패:', error);
+    });
     return;
   }
 
-  resumeAllSchedulers().catch((error) => {
-    console.error('[DefenseSuite] keepAlive 복원 실패:', error);
+  handleDcSessionBrokerAlarm(alarm.name).catch((error) => {
+    console.error('[DefenseSuite] broker alarm 처리 실패:', error);
+  });
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  handleDcSessionBrokerTabRemoved(tabId).catch((error) => {
+    console.error('[DefenseSuite] broker session tab 제거 처리 실패:', error);
   });
 });
 
@@ -75,7 +95,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
-async function initializeSchedulers() {
+async function initializeApp() {
+  await initializeDcSessionBroker();
   await resumeAllSchedulers();
 }
 
@@ -88,6 +109,13 @@ function ensureAllRunLoops() {
 }
 
 async function resumeAllSchedulers() {
+  if (resumeAllSchedulersPromise) {
+    return resumeAllSchedulersPromise;
+  }
+
+  resumeAllSchedulersPromise = (async () => {
+    await initializeDcSessionBroker();
+
   await loadSchedulerStateIfIdle(schedulers.comment);
   await loadSchedulerStateIfIdle(schedulers.commentMonitor);
   await loadSchedulerStateIfIdle(schedulers.conceptMonitor);
@@ -146,6 +174,11 @@ async function resumeAllSchedulers() {
   }
 
   await resumeStandaloneScheduler(schedulers.monitor, '🔁 저장된 자동 감시 상태 복원');
+  })().finally(() => {
+    resumeAllSchedulersPromise = null;
+  });
+
+  return resumeAllSchedulersPromise;
 }
 
 function getScheduler(feature) {
@@ -166,9 +199,87 @@ function getAllStatuses() {
 }
 
 async function handleMessage(message) {
+  await initializeDcSessionBroker();
+
   if (message.action === 'getAllStatus') {
     return {
       success: true,
+      statuses: getAllStatuses(),
+      sessionFallbackStatus: getDcSessionBrokerStatus(),
+    };
+  }
+
+  if (message.action === 'getSessionFallbackStatus') {
+    return {
+      success: true,
+      sessionFallbackStatus: getDcSessionBrokerStatus(),
+    };
+  }
+
+  if (message.action === 'updateSessionFallbackConfig') {
+    const validationMessage = validateSessionFallbackConfig(message.config || {});
+    if (validationMessage) {
+      return {
+        success: false,
+        message: validationMessage,
+        sessionFallbackStatus: getDcSessionBrokerStatus(),
+        statuses: getAllStatuses(),
+      };
+    }
+
+    const currentSessionFallbackStatus = getDcSessionBrokerStatus();
+    if (currentSessionFallbackStatus.switchInProgress || currentSessionFallbackStatus.sessionAutomationInProgress) {
+      return {
+        success: false,
+        message: '세션 자동화가 진행 중일 때는 계정 전환 설정을 저장할 수 없습니다.',
+        sessionFallbackStatus: currentSessionFallbackStatus,
+        statuses: getAllStatuses(),
+      };
+    }
+
+    const busyFeatures = getBusyFeatures();
+    if (busyFeatures.length > 0) {
+      return {
+        success: false,
+        message: `계정 전환 설정을 바꾸기 전에 먼저 정지하세요: ${busyFeatures.join(', ')}`,
+        sessionFallbackStatus: getDcSessionBrokerStatus(),
+        statuses: getAllStatuses(),
+      };
+    }
+
+    const updatedSessionFallbackStatus = await updateDcSessionBrokerConfig(message.config || {});
+    return {
+      success: true,
+      sessionFallbackStatus: updatedSessionFallbackStatus,
+      statuses: getAllStatuses(),
+    };
+  }
+
+  if (message.action === 'testSessionFallbackSwitch') {
+    const sessionFallbackStatus = getDcSessionBrokerStatus();
+    if (sessionFallbackStatus.switchInProgress || sessionFallbackStatus.sessionAutomationInProgress) {
+      return {
+        success: false,
+        message: '세션 자동화가 진행 중일 때는 계정 전환 테스트를 시작할 수 없습니다.',
+        sessionFallbackStatus,
+        statuses: getAllStatuses(),
+      };
+    }
+
+    const busyFeatures = getBusyFeatures();
+    if (busyFeatures.length > 0) {
+      return {
+        success: false,
+        message: `계정 전환 테스트 전에 먼저 정지하세요: ${busyFeatures.join(', ')}`,
+        sessionFallbackStatus: getDcSessionBrokerStatus(),
+        statuses: getAllStatuses(),
+      };
+    }
+
+    const switchResult = await requestManualSessionSwitch();
+    return {
+      ...switchResult,
+      sessionFallbackStatus: getDcSessionBrokerStatus(),
       statuses: getAllStatuses(),
     };
   }
@@ -183,6 +294,16 @@ async function handleMessage(message) {
       };
     }
 
+    const sessionFallbackStatus = getDcSessionBrokerStatus();
+    if (sessionFallbackStatus.switchInProgress || sessionFallbackStatus.sessionAutomationInProgress) {
+      return {
+        success: false,
+        message: '세션 자동화가 진행 중일 때는 공통 설정을 저장할 수 없습니다.',
+        statuses: getAllStatuses(),
+        sessionFallbackStatus,
+      };
+    }
+
     const busyFeatures = getBusyFeatures();
     if (busyFeatures.length > 0) {
       return {
@@ -193,10 +314,12 @@ async function handleMessage(message) {
     }
 
     applySharedConfig(message.config || {});
+    await syncDcSessionBrokerSharedConfig({ galleryId: message.config?.galleryId });
     await Promise.all(Object.values(schedulers).map((scheduler) => scheduler.saveState()));
     return {
       success: true,
       statuses: getAllStatuses(),
+      sessionFallbackStatus: getDcSessionBrokerStatus(),
     };
   }
 
@@ -253,7 +376,12 @@ async function handleMessage(message) {
       } else {
         await scheduler.start();
       }
-      return { success: true, status: scheduler.getStatus(), statuses: getAllStatuses() };
+      return {
+        success: true,
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+        sessionFallbackStatus: getDcSessionBrokerStatus(),
+      };
 
     case 'stop':
       await scheduler.stop();
@@ -306,12 +434,23 @@ async function handleMessage(message) {
         scheduler.config = { ...scheduler.config, ...message.config };
         await scheduler.saveState();
       }
-      return { success: true, status: scheduler.getStatus(), config: scheduler.config, statuses: getAllStatuses() };
+      return {
+        success: true,
+        status: scheduler.getStatus(),
+        config: scheduler.config,
+        statuses: getAllStatuses(),
+        sessionFallbackStatus: getDcSessionBrokerStatus(),
+      };
 
     case 'resetStats':
       resetSchedulerStats(message.feature, scheduler);
       await scheduler.saveState();
-      return { success: true, status: scheduler.getStatus(), statuses: getAllStatuses() };
+      return {
+        success: true,
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+        sessionFallbackStatus: getDcSessionBrokerStatus(),
+      };
 
     case 'releaseTrackedBans':
       if (message.feature !== 'ip') {
@@ -321,6 +460,7 @@ async function handleMessage(message) {
         ...(await scheduler.releaseTrackedBans()),
         status: scheduler.getStatus(),
         statuses: getAllStatuses(),
+        sessionFallbackStatus: getDcSessionBrokerStatus(),
       };
 
     default:
@@ -544,6 +684,23 @@ function validateSharedConfig(config) {
   const headtextId = normalizeSharedString(config.headtextId);
   if (!/^\d+$/.test(headtextId) || Number(headtextId) <= 0) {
     return '도배기탭 번호는 1 이상의 숫자로 입력하세요.';
+  }
+
+  return '';
+}
+
+function validateSessionFallbackConfig(config) {
+  const primaryUserId = String(config.primaryUserId || '').trim();
+  const primaryPassword = String(config.primaryPassword || '');
+  const backupUserId = String(config.backupUserId || '').trim();
+  const backupPassword = String(config.backupPassword || '');
+
+  if ((primaryUserId && !primaryPassword) || (!primaryUserId && primaryPassword)) {
+    return '계정1 아이디와 비밀번호를 모두 입력하세요.';
+  }
+
+  if ((backupUserId && !backupPassword) || (!backupUserId && backupPassword)) {
+    return '계정2 아이디와 비밀번호를 모두 입력하세요.';
   }
 
   return '';

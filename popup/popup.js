@@ -14,8 +14,26 @@ const DIRTY_FEATURES = {
   monitor: false,
 };
 let sharedConfigDirty = false;
+let sessionFallbackDirty = false;
 let latestMonitorStatus = null;
 let latestConceptMonitorStatus = null;
+
+const SESSION_FALLBACK_DOM = {
+  keepaliveToggle: document.getElementById('sessionFallbackKeepaliveToggle'),
+  keepaliveLabel: document.getElementById('sessionFallbackKeepaliveLabel'),
+  primaryUserIdInput: document.getElementById('sessionFallbackPrimaryUserId'),
+  primaryPasswordInput: document.getElementById('sessionFallbackPrimaryPassword'),
+  backupUserIdInput: document.getElementById('sessionFallbackBackupUserId'),
+  backupPasswordInput: document.getElementById('sessionFallbackBackupPassword'),
+  testSwitchBtn: document.getElementById('sessionFallbackTestSwitchBtn'),
+  saveConfigBtn: document.getElementById('sessionFallbackSaveConfigBtn'),
+  activeAccountText: document.getElementById('sessionFallbackActiveAccountText'),
+  automationStateText: document.getElementById('sessionFallbackAutomationStateText'),
+  switchStateText: document.getElementById('sessionFallbackSwitchStateText'),
+  loginHealthText: document.getElementById('sessionFallbackLoginHealthText'),
+  lastDeleteLimitAccountText: document.getElementById('sessionFallbackLastDeleteLimitAccountText'),
+  metaText: document.getElementById('sessionFallbackMetaText'),
+};
 
 const FEATURE_DOM = {
   conceptMonitor: {
@@ -280,6 +298,86 @@ function bindSharedConfigEvents() {
     flashSaved(sharedSaveConfigBtn);
     if (response.statuses) {
       applyStatuses(response.statuses);
+    }
+  });
+
+  [
+    SESSION_FALLBACK_DOM.keepaliveToggle,
+    SESSION_FALLBACK_DOM.primaryUserIdInput,
+    SESSION_FALLBACK_DOM.primaryPasswordInput,
+    SESSION_FALLBACK_DOM.backupUserIdInput,
+    SESSION_FALLBACK_DOM.backupPasswordInput,
+  ].forEach((input) => {
+    input.addEventListener('input', () => {
+      sessionFallbackDirty = true;
+    });
+  });
+
+  SESSION_FALLBACK_DOM.saveConfigBtn.addEventListener('click', async () => {
+    const config = {
+      keepaliveEnabled: SESSION_FALLBACK_DOM.keepaliveToggle.checked,
+      primaryUserId: SESSION_FALLBACK_DOM.primaryUserIdInput.value.trim(),
+      primaryPassword: SESSION_FALLBACK_DOM.primaryPasswordInput.value,
+      backupUserId: SESSION_FALLBACK_DOM.backupUserIdInput.value.trim(),
+      backupPassword: SESSION_FALLBACK_DOM.backupPasswordInput.value,
+    };
+
+    const response = await sendMessage({ action: 'updateSessionFallbackConfig', config });
+    if (!response?.success) {
+      alert(response?.message || '계정 전환 설정 저장에 실패했습니다.');
+      if (response?.sessionFallbackStatus) {
+        updateSessionFallbackUI(response.sessionFallbackStatus);
+      }
+      if (response?.statuses) {
+        applyStatuses(response.statuses);
+      }
+      return;
+    }
+
+    sessionFallbackDirty = false;
+    flashSaved(SESSION_FALLBACK_DOM.saveConfigBtn);
+    if (response?.sessionFallbackStatus) {
+      updateSessionFallbackUI(response.sessionFallbackStatus);
+    }
+    if (response?.statuses) {
+      applyStatuses(response.statuses);
+    }
+  });
+
+  SESSION_FALLBACK_DOM.testSwitchBtn.addEventListener('click', async () => {
+    if (sessionFallbackDirty) {
+      alert('계정 정보를 먼저 저장하세요.');
+      return;
+    }
+
+    let response = null;
+    setDisabled(SESSION_FALLBACK_DOM.testSwitchBtn, true);
+    try {
+      response = await sendMessage({ action: 'testSessionFallbackSwitch' });
+      if (!response?.success) {
+        alert(response?.message || '계정 전환 테스트에 실패했습니다.');
+        if (response?.sessionFallbackStatus) {
+          updateSessionFallbackUI(response.sessionFallbackStatus);
+        }
+        if (response?.statuses) {
+          applyStatuses(response.statuses);
+        }
+        return;
+      }
+
+      if (response?.sessionFallbackStatus) {
+        updateSessionFallbackUI(response.sessionFallbackStatus);
+      }
+      if (response?.statuses) {
+        applyStatuses(response.statuses);
+      }
+      flashSaved(SESSION_FALLBACK_DOM.testSwitchBtn, '✅ 전환 완료');
+      alert(response?.message || '계정 전환 테스트가 완료되었습니다.');
+    } finally {
+      if (!response?.sessionFallbackStatus?.switchInProgress
+        && !response?.sessionFallbackStatus?.sessionAutomationInProgress) {
+        setDisabled(SESSION_FALLBACK_DOM.testSwitchBtn, false);
+      }
     }
   });
 }
@@ -1080,6 +1178,7 @@ async function refreshAllStatuses() {
   }
 
   applyStatuses(response.statuses);
+  updateSessionFallbackUI(response.sessionFallbackStatus);
 }
 
 function applyStatuses(statuses) {
@@ -1094,6 +1193,58 @@ function applyStatuses(statuses) {
   updateSemiPostUI(statuses.semiPost);
   updateIpUI(statuses.ip);
   applyAutomationLocks(statuses.monitor, statuses.commentMonitor);
+}
+
+function updateSessionFallbackUI(status) {
+  if (!status) {
+    return;
+  }
+
+  if (!sessionFallbackDirty) {
+    syncConfigInput(SESSION_FALLBACK_DOM.keepaliveToggle, status.config?.keepaliveEnabled === true);
+    syncConfigInput(SESSION_FALLBACK_DOM.primaryUserIdInput, status.config?.primaryUserId ?? '');
+    syncConfigInput(SESSION_FALLBACK_DOM.primaryPasswordInput, status.config?.primaryPassword ?? '');
+    syncConfigInput(SESSION_FALLBACK_DOM.backupUserIdInput, status.config?.backupUserId ?? '');
+    syncConfigInput(SESSION_FALLBACK_DOM.backupPasswordInput, status.config?.backupPassword ?? '');
+  }
+
+  updateToggle(
+    { toggleBtn: SESSION_FALLBACK_DOM.keepaliveToggle, toggleLabel: SESSION_FALLBACK_DOM.keepaliveLabel },
+    status.config?.keepaliveEnabled === true,
+  );
+  SESSION_FALLBACK_DOM.activeAccountText.textContent = status.activeAccountLabel || '계정1';
+  updateStatusText(
+    SESSION_FALLBACK_DOM.automationStateText,
+    buildSessionAutomationStateLabel(status),
+    status.sessionAutomationInProgress ? 'status-warn' : 'status-on',
+  );
+  if (status.switchInProgress) {
+    updateStatusText(
+      SESSION_FALLBACK_DOM.switchStateText,
+      status.switchTargetAccountLabel
+        ? `🟠 ${status.switchTargetAccountLabel} 전환 중`
+        : '🟠 전환 중',
+      'status-warn',
+    );
+  } else {
+    updateStatusText(SESSION_FALLBACK_DOM.switchStateText, '🟢 대기', 'status-on');
+  }
+
+  updateStatusText(
+    SESSION_FALLBACK_DOM.loginHealthText,
+    buildSessionFallbackLoginHealthLabel(status),
+    getSessionFallbackLoginHealthClassName(status),
+  );
+  SESSION_FALLBACK_DOM.lastDeleteLimitAccountText.textContent = status.lastDeleteLimitAccountLabel || '-';
+  SESSION_FALLBACK_DOM.metaText.textContent = buildSessionFallbackMetaText(status);
+  const isAutomationBusy = Boolean(status.switchInProgress || status.sessionAutomationInProgress);
+  setDisabled(SESSION_FALLBACK_DOM.primaryUserIdInput, isAutomationBusy);
+  setDisabled(SESSION_FALLBACK_DOM.primaryPasswordInput, isAutomationBusy);
+  setDisabled(SESSION_FALLBACK_DOM.backupUserIdInput, isAutomationBusy);
+  setDisabled(SESSION_FALLBACK_DOM.backupPasswordInput, isAutomationBusy);
+  setDisabled(SESSION_FALLBACK_DOM.keepaliveToggle, isAutomationBusy);
+  setDisabled(SESSION_FALLBACK_DOM.saveConfigBtn, isAutomationBusy);
+  setDisabled(SESSION_FALLBACK_DOM.testSwitchBtn, isAutomationBusy);
 }
 
 function updateConceptMonitorUI(status) {
@@ -1588,9 +1739,9 @@ function sendMessage(message) {
   });
 }
 
-function flashSaved(button) {
+function flashSaved(button, successText = '✅ 저장됨') {
   const previousText = button.textContent;
-  button.textContent = '✅ 저장됨';
+  button.textContent = successText;
   setTimeout(() => {
     button.textContent = previousText;
   }, 1500);
@@ -1627,6 +1778,89 @@ function formatAttackModeLabel(value) {
 function clampPercent(value, fallback, min) {
   const parsed = parseOptionalInt(value, fallback);
   return Math.min(100, Math.max(min, parsed));
+}
+
+function buildSessionFallbackMetaText(status) {
+  if (!status) {
+    return '계정 설정을 저장하면 다음 삭제 한도 fallback부터 반영됩니다.';
+  }
+
+  const parts = [];
+
+  if (status.lastSwitchAt) {
+    parts.push(`마지막 전환: ${formatTimestamp(status.lastSwitchAt)}`);
+  }
+
+  if (status.loginHealth?.detail) {
+    parts.push(`세션 상태: ${status.loginHealth.detail}`);
+  }
+
+  if (status.lastSwitchError) {
+    parts.push(`최근 전환 상태: ${status.lastSwitchError}`);
+  } else if (status.switchInProgress) {
+    parts.push('현재 세션 전환이 진행 중입니다.');
+  } else if (status.sessionAutomationInProgress) {
+    parts.push('현재 로그인 세션 자동화가 진행 중입니다.');
+  } else {
+    parts.push('계정 설정을 저장하면 다음 삭제 한도 fallback부터 반영됩니다.');
+  }
+
+  return parts.join(' / ');
+}
+
+function buildSessionAutomationStateLabel(status) {
+  if (status?.sessionAutomationInProgress) {
+    const kind = String(status.sessionAutomationKind || '').trim();
+    switch (kind) {
+      case 'login_health':
+        return '🟠 로그인 확인 중';
+      case 'manual_switch':
+        return '🟠 수동 전환 중';
+      case 'delete_limit_switch':
+        return '🟠 삭제 한도 전환 중';
+      default:
+        return '🟠 세션 자동화 진행 중';
+    }
+  }
+
+  return status?.config?.keepaliveEnabled === true
+    ? '🟢 대기'
+    : '⚪ 비활성화';
+}
+
+function buildSessionFallbackLoginHealthLabel(status) {
+  const loginHealth = status?.loginHealth || {};
+  switch (loginHealth.status) {
+    case 'healthy':
+      return '🟢 login 연결 정상';
+    case 'checking':
+      return '🟡 확인 중';
+    case 'retrying':
+      return '🟡 자동 재로그인 중';
+    case 'manual_attention_required':
+    case 'wrong_account_or_no_manager':
+    case 'credentials_missing':
+      return '🔴 점검 필요';
+    case 'disabled':
+      return '⚪ 비활성화';
+    default:
+      return '🟡 확인 전';
+  }
+}
+
+function getSessionFallbackLoginHealthClassName(status) {
+  const loginHealth = status?.loginHealth || {};
+  switch (loginHealth.status) {
+    case 'healthy':
+      return 'status-on';
+    case 'disabled':
+      return '';
+    case 'checking':
+    case 'retrying':
+      return 'status-warn';
+    default:
+      return 'status-off';
+  }
 }
 
 function setDisabled(node, disabled) {

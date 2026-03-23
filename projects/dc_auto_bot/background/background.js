@@ -20,6 +20,8 @@ const SESSION_CHECK_TAB_HASH = '#dc-auto-bot-session-check';
 const LOGIN_FAILURE_URL_TOKEN = '/login/member_check';
 const LOGIN_PROMPT_TEXT = '로그인해 주세요.';
 const LOGIN_ACCESS_FAILURE_MESSAGES = ['정상적인접근이아닙니다', '관리권한이없습니다'];
+const LOGIN_BROKER_MESSAGE = '특궁 세션 브로커에서 로그인 세션을 관리합니다.';
+const LOGIN_BROKER_DETAIL = '신문고봇은 더 이상 로그인 자동화를 직접 수행하지 않습니다.';
 
 const llmState = {
   lastTestResult: null,
@@ -52,25 +54,25 @@ const loginAutomationState = {
   lastAttemptAt: '',
 };
 
-scheduler.ensureLoginSession = ensureLoginSessionBeforeAction;
-scheduler.recoverLoginSession = recoverLoginSessionAfterAccessFailure;
-scheduler.handleLoginAccessFailure = handleLoginAccessFailure;
+scheduler.ensureLoginSession = ensureLoginSessionDelegated;
+scheduler.recoverLoginSession = recoverLoginSessionDelegated;
+scheduler.handleLoginAccessFailure = handleLoginAccessFailureDelegated;
 
 void initialize();
 
 chrome.runtime.onInstalled.addListener(async () => {
   await resumeScheduler();
-  await reconcileLoginAutomation();
+  await disableLegacyLoginAutomationOwnership();
 });
 
 self.addEventListener('activate', async () => {
   await resumeScheduler();
-  await reconcileLoginAutomation();
+  await disableLegacyLoginAutomationOwnership();
 });
 
 chrome.runtime.onStartup.addListener(async () => {
   await resumeScheduler();
-  await reconcileLoginAutomation();
+  await disableLegacyLoginAutomationOwnership();
 });
 
 chrome.alarms.create('keepAlive', { periodInMinutes: 0.5 });
@@ -84,9 +86,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 
   if (alarm.name === LOGIN_CHECK_ALARM_NAME) {
-    refreshLoginHealth(true, { allowAutoLogin: true, reason: 'alarm' }).catch((error) => {
-      console.error('[ReportBot] login session check 실패:', error);
-    });
+    void chrome.alarms.clear(LOGIN_CHECK_ALARM_NAME);
   }
 });
 
@@ -97,16 +97,6 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
   loginAutomationState.sessionCheckTabId = 0;
   void saveLoginAutomationRuntime();
-
-  if (!scheduler.config.loginAutomationEnabled) {
-    return;
-  }
-
-  ensureSessionCheckTab({ forceCreate: true })
-    .then(() => refreshLoginHealth(true, { allowAutoLogin: true, reason: 'tab_removed' }))
-    .catch((error) => {
-      console.error('[ReportBot] 세션 체크 탭 재생성 실패:', error);
-    });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -124,7 +114,7 @@ async function initialize() {
   await loadLlmState();
   await resumeScheduler();
   await loadLoginAutomationRuntime();
-  await reconcileLoginAutomation();
+  await disableLegacyLoginAutomationOwnership();
 }
 
 async function resumeScheduler() {
@@ -205,13 +195,11 @@ function buildCombinedStatus() {
       },
     },
     login: {
-      enabled: scheduler.config.loginAutomationEnabled === true,
-      userId: scheduler.config.dcLoginUserId || '',
-      password: scheduler.config.dcLoginPassword || '',
-      credentialsConfigured: Boolean(
-        String(scheduler.config.dcLoginUserId || '').trim()
-        && String(scheduler.config.dcLoginPassword || ''),
-      ),
+      enabled: false,
+      managedByBroker: true,
+      userId: '',
+      password: '',
+      credentialsConfigured: false,
       health: getLoginHealthSnapshot(),
     },
   };
@@ -245,10 +233,6 @@ async function updateConfig(config) {
 
   const previousGalleryId = String(scheduler.config.galleryId || '').trim();
   const previousReportTarget = String(scheduler.config.reportTarget || '').trim();
-  const previousLoginAutomationEnabled = scheduler.config.loginAutomationEnabled === true;
-  const previousDcLoginUserId = String(scheduler.config.dcLoginUserId || '').trim();
-  const previousDcLoginPassword = String(scheduler.config.dcLoginPassword || '');
-
   const nextConfig = {
     ...scheduler.config,
     ...config,
@@ -286,9 +270,9 @@ async function updateConfig(config) {
   nextConfig.lowActivityThreshold = Math.max(1, Number(nextConfig.lowActivityThreshold) || 100);
   nextConfig.cliHelperTimeoutMs = Math.max(1000, Number(nextConfig.cliHelperTimeoutMs) || 240000);
   nextConfig.llmConfidenceThreshold = clampConfidenceThreshold(nextConfig.llmConfidenceThreshold);
-  nextConfig.loginAutomationEnabled = nextConfig.loginAutomationEnabled === true;
-  nextConfig.dcLoginUserId = String(nextConfig.dcLoginUserId || '').trim();
-  nextConfig.dcLoginPassword = String(nextConfig.dcLoginPassword || '');
+  nextConfig.loginAutomationEnabled = false;
+  nextConfig.dcLoginUserId = '';
+  nextConfig.dcLoginPassword = '';
 
   const helperEndpoint = normalizeCliHelperEndpoint(nextConfig.cliHelperEndpoint);
   if (!helperEndpoint.success) {
@@ -322,33 +306,21 @@ async function updateConfig(config) {
   }
 
   await scheduler.saveState();
-  if (
-    previousLoginAutomationEnabled !== nextConfig.loginAutomationEnabled
-    || previousDcLoginUserId !== nextConfig.dcLoginUserId
-    || previousDcLoginPassword !== nextConfig.dcLoginPassword
-    || previousGalleryId !== nextConfig.galleryId
-  ) {
-    await reconcileLoginAutomation();
+  if (previousGalleryId !== nextConfig.galleryId) {
+    await disableLegacyLoginAutomationOwnership();
   }
   await refreshHelperHealth(true);
   return { success: true, status: buildCombinedStatus() };
 }
 
 async function updateLoginAutomation(config) {
-  const nextEnabled = config.loginAutomationEnabled === true;
-  const nextUserId = String(config.dcLoginUserId || '').trim();
-  const nextPassword = String(config.dcLoginPassword || '');
-
-  scheduler.config = {
-    ...scheduler.config,
-    loginAutomationEnabled: nextEnabled,
-    dcLoginUserId: nextUserId,
-    dcLoginPassword: nextPassword,
+  void config;
+  await disableLegacyLoginAutomationOwnership();
+  return {
+    success: false,
+    message: LOGIN_BROKER_MESSAGE,
+    status: buildCombinedStatus(),
   };
-
-  await scheduler.saveState();
-  await reconcileLoginAutomation();
-  return { success: true, status: buildCombinedStatus() };
 }
 
 async function startAutomation() {
@@ -359,10 +331,6 @@ async function startAutomation() {
       message: `CLI helper 상태를 확인하세요. ${helperHealth.message}`,
       status: buildCombinedStatus(),
     };
-  }
-
-  if (scheduler.config.loginAutomationEnabled) {
-    await refreshLoginHealth(true, { allowAutoLogin: true, reason: 'start' });
   }
 
   await scheduler.start();
@@ -843,6 +811,85 @@ function safeParseJson(value) {
   } catch {
     return null;
   }
+}
+
+async function disableLegacyLoginAutomationOwnership() {
+  let schedulerChanged = false;
+
+  if (scheduler.config.loginAutomationEnabled === true) {
+    scheduler.config.loginAutomationEnabled = false;
+    schedulerChanged = true;
+  }
+
+  if (String(scheduler.config.dcLoginUserId || '').trim()) {
+    scheduler.config.dcLoginUserId = '';
+    schedulerChanged = true;
+  }
+
+  if (String(scheduler.config.dcLoginPassword || '')) {
+    scheduler.config.dcLoginPassword = '';
+    schedulerChanged = true;
+  }
+
+  chrome.alarms.clear(LOGIN_CHECK_ALARM_NAME);
+  await closeLegacySessionCheckTabs();
+
+  loginAutomationState.pendingPromise = null;
+  resetLoginRetryState();
+  loginAutomationState.sessionCheckTabId = 0;
+  loginAutomationState.status = 'disabled';
+  loginAutomationState.checkedAt = new Date().toISOString();
+  loginAutomationState.message = LOGIN_BROKER_MESSAGE;
+  loginAutomationState.detail = LOGIN_BROKER_DETAIL;
+  loginAutomationState.lastCheckAtMs = Date.now();
+  await saveLoginAutomationRuntime();
+
+  if (schedulerChanged) {
+    await scheduler.saveState();
+  }
+}
+
+async function closeLegacySessionCheckTabs() {
+  const tabIds = new Set();
+  const storedTabId = Number(loginAutomationState.sessionCheckTabId || 0);
+  if (storedTabId > 0) {
+    tabIds.add(storedTabId);
+  }
+
+  try {
+    const existingTabs = await chrome.tabs.query({
+      url: [
+        'https://gall.dcinside.com/*',
+        'https://sign.dcinside.com/*',
+      ],
+    });
+    existingTabs
+      .filter((tab) => isLegacySessionAutomationTab(tab))
+      .forEach((tab) => {
+        if (tab?.id) {
+          tabIds.add(tab.id);
+        }
+      });
+  } catch (error) {
+    console.warn('[ReportBot] legacy session check 탭 조회 실패:', error.message);
+  }
+
+  for (const tabId of tabIds) {
+    try {
+      await chrome.tabs.remove(tabId);
+    } catch {
+      // 이미 닫힌 탭은 무시한다.
+    }
+  }
+}
+
+function isLegacySessionAutomationTab(tab) {
+  const currentUrl = String(tab?.url || '');
+  if (!currentUrl) {
+    return false;
+  }
+
+  return currentUrl.includes(SESSION_CHECK_TAB_HASH);
 }
 
 async function loadLoginAutomationRuntime() {
@@ -1414,61 +1461,29 @@ function mapLoginStateMessage(state, fallbackMessage) {
   }
 }
 
-async function ensureLoginSessionBeforeAction() {
-  if (!scheduler.config.loginAutomationEnabled) {
-    return { success: true };
-  }
+async function ensureLoginSessionDelegated() {
+  return { success: true };
+}
 
-  const snapshot = await refreshLoginHealth(true, { allowAutoLogin: true, reason: 'pre_action' });
-  if (snapshot.status === 'healthy') {
-    return { success: true };
-  }
-
+async function handleLoginAccessFailureDelegated(payload) {
+  void payload;
   return {
+    attempted: false,
     success: false,
-    message: snapshot.message || 'login 연결실패',
+    status: 'delegated',
+    message: LOGIN_BROKER_MESSAGE,
+    detail: LOGIN_BROKER_DETAIL,
   };
 }
 
-async function handleLoginAccessFailure(payload) {
-  return recoverLoginSessionAfterAccessFailure(payload);
-}
-
-async function recoverLoginSessionAfterAccessFailure(payload) {
-  if (!scheduler.config.loginAutomationEnabled) {
-    return {
-      attempted: false,
-      success: false,
-      status: 'disabled',
-      message: '로그인 세션 자동화가 비활성화되어 있습니다.',
-      detail: '',
-    };
-  }
-
-  const normalizedFailure = normalizeLoginAccessFailurePayload(payload);
-  if (!shouldRecoverLoginFromFailure(normalizedFailure)) {
-    return {
-      attempted: false,
-      success: false,
-      status: 'ignored',
-      message: '세션 재검증 대상 실패가 아닙니다.',
-      detail: '',
-    };
-  }
-
-  invalidateLoginHealth();
-  const snapshot = await refreshLoginHealth(true, {
-    allowAutoLogin: true,
-    passive: false,
-    reason: 'access_failure',
-  });
-
+async function recoverLoginSessionDelegated(payload) {
+  void payload;
   return {
-    attempted: true,
-    success: snapshot.status === 'healthy',
-    status: snapshot.status,
-    message: snapshot.message || 'login 연결실패',
-    detail: snapshot.detail || '',
+    attempted: false,
+    success: false,
+    status: 'delegated',
+    message: LOGIN_BROKER_MESSAGE,
+    detail: LOGIN_BROKER_DETAIL,
   };
 }
 

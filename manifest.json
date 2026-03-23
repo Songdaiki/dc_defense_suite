@@ -6,10 +6,15 @@
   "permissions": [
     "storage",
     "alarms",
-    "cookies"
+    "cookies",
+    "tabs",
+    "scripting",
+    "notifications"
   ],
   "host_permissions": [
-    "https://gall.dcinside.com/*"
+    "https://gall.dcinside.com/*",
+    "https://*.dcinside.co.kr/*",
+    "https://sign.dcinside.com/*"
   ],
   "background": {
     "service_worker": "background/background.js",
