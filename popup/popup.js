@@ -93,6 +93,7 @@ const FEATURE_DOM = {
     logList: document.getElementById('conceptPatrolLogList'),
     pollIntervalMsInput: document.getElementById('conceptPatrolPollIntervalMs'),
     patrolPagesInput: document.getElementById('conceptPatrolPages'),
+    pageRequestDelayInput: document.getElementById('conceptPatrolPageRequestDelayMs'),
     fluidRatioThresholdInput: document.getElementById('conceptPatrolFluidRatioThreshold'),
     candidateThresholdInput: document.getElementById('conceptPatrolCandidateThreshold'),
     holdMsInput: document.getElementById('conceptPatrolHoldMs'),
@@ -569,8 +570,9 @@ function bindConceptPatrolEvents() {
     }
 
     const config = {
-      pollIntervalMs: Math.max(1000, parseOptionalInt(dom.pollIntervalMsInput.value, 180000)),
+      pollIntervalMs: Math.max(1000, parseOptionalInt(dom.pollIntervalMsInput.value, 30000)),
       patrolPages: Math.max(1, parseOptionalInt(dom.patrolPagesInput.value, 5)),
+      pageRequestDelayMs: Math.max(0, parseOptionalInt(dom.pageRequestDelayInput.value, 500)),
       fluidRatioThresholdPercent: clampPercent(dom.fluidRatioThresholdInput.value, 90, 0),
       patrolDefendingCandidateThreshold: Math.max(1, parseOptionalInt(dom.candidateThresholdInput.value, 2)),
       patrolDefendingHoldMs: Math.max(1000, parseOptionalInt(dom.holdMsInput.value, 300000)),
@@ -1510,8 +1512,9 @@ function updateConceptPatrolUI(status) {
   dom.lastCutChangedAt.textContent = formatTimestamp(status.lastCutChangedAt);
 
   syncFeatureConfigInputs('conceptPatrol', [
-    [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 180000],
+    [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 30000],
     [dom.patrolPagesInput, status.config?.patrolPages ?? 5],
+    [dom.pageRequestDelayInput, status.config?.pageRequestDelayMs ?? 500],
     [dom.fluidRatioThresholdInput, status.config?.fluidRatioThresholdPercent ?? 90],
     [dom.candidateThresholdInput, status.config?.patrolDefendingCandidateThreshold ?? 2],
     [dom.holdMsInput, status.config?.patrolDefendingHoldMs ?? 300000],
@@ -1876,6 +1879,7 @@ function getFeatureConfigInputs(feature) {
     return [
       dom.pollIntervalMsInput,
       dom.patrolPagesInput,
+      dom.pageRequestDelayInput,
       dom.fluidRatioThresholdInput,
       dom.candidateThresholdInput,
       dom.holdMsInput,

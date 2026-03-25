@@ -16,6 +16,10 @@
 - **기존 `개념글 방어`와 별개 탭**
 - **개념글 1~5페이지 통합 window snapshot**
 - **이전 window에 없던 postNo만 추가 검사**
+- **검사와 해제를 같은 loop에서 동시에 하지 않고**
+  - 신규 진입 글을 **하나씩 500ms 간격으로 검사**
+  - 조작 누적이 threshold에 도달하는 순간 개념컷 100 hold를 먼저 건 뒤
+  - 같은 loop 안에서 해제할 건 해제하고 남길 건 남김
 
 를 수행하는 저속 순회형 보조 자동화를 정의한다.
 
@@ -34,6 +38,17 @@
   - **page 1 최신 snapshot 범위는 기존 `개념글 방어`가 running이고 block cooldown 중이 아닐 때만 우선 담당**한다
 - 순회 cycle 중 `page 1~5` 중 **하나라도 fetch 실패하면**
   - 그 cycle 결과로 baseline을 갱신하지 않는다
+- page fetch는 병렬이 아니라
+  - **페이지당 500ms 간격의 직렬 요청**
+  로 수행한다
+- 신규 후보는 **하나씩 500ms 간격으로 검사**한다
+- 검사 중 조작 누적이 threshold에 도달하는 순간
+  - `patrol hold`를 즉시 올려 개념컷 100 유지부터 적용한다
+- 같은 loop 안에서 해제 대상이면 실제 해제를 수행하고
+  - 다음 글로 넘어가기 전 500ms 텀을 둔다
+- 처리 중에는 다음 poll tick이 와도 새 cycle을 병렬 시작하지 않는다
+  - **현재 cycle의 검사/해제가 전부 끝난 뒤**
+  - 다시 poll interval만큼 기다렸다가 다음 snapshot으로 넘어간다
 - 수동으로 새로 ON 한 경우 첫 cycle은 항상 **fresh baseline-only**
 - service worker 재시작 복원은
   - 실행 중이던 상태라면 저장된 baseline을 그대로 재사용
@@ -180,7 +195,11 @@
 3. `currentWindowPostNos`를 만든다
 4. `newPostNos = currentWindowPostNos - previousWindowPostNos`
 5. **`newPostNos`만 view fetch / 해제 후보 판정**
-6. cycle 끝에 `previousWindowPostNos = currentWindowPostNos`
+6. 신규 진입 글을 하나씩 검사한다
+7. 조작 누적이 threshold 이상이 되는 순간 개념컷 100 hold를 즉시 적용한다
+8. 같은 loop 안에서 해제 대상이면 실제 해제를 수행한다
+9. 다음 글 전에는 500ms를 둔다
+10. cycle 끝에 `previousWindowPostNos = currentWindowPostNos`
 
 이렇게 가면
 
@@ -245,6 +264,25 @@
 - `runtime resume` = saved baseline reuse
 
 로 구분한다.
+
+## 순회/해제 처리 순서
+
+실제 cycle의 순서는 아래처럼 고정한다.
+
+1. page 1에서 `detectedMaxPage`를 읽는다
+2. `1 ~ min(patrolPages, detectedMaxPage)` 범위를 **직렬**로 fetch한다
+3. page 간에는 `pageRequestDelayMs` 기본 `500ms`를 둔다
+4. 통합 window snapshot을 만든다
+5. 이전 window에 없던 `postNo`만 신규 진입으로 본다
+6. 신규 진입 글은 하나씩 검사한다
+7. 조작 누적이 threshold에 도달하는 순간
+   - `conceptPatrol` hold를 걸고
+   - shared recommend-cut coordinator가 개념컷 100을 즉시 적용한다
+8. 같은 loop 안에서 해제 대상이면 실제 해제를 수행한다
+9. 다음 글 전에는 500ms를 둔다
+10. 모든 검사/해제까지 끝난 뒤에만 baseline을 갱신한다
+11. cycle이 30초를 넘겨도 다음 snapshot은 병렬로 시작하지 않고
+    - 현재 cycle이 끝난 뒤 poll interval만큼 기다렸다가 다음 cycle로 넘어간다
 
 ## 검사 범위
 
@@ -559,26 +597,23 @@ hold가 이미 걸려 있는 동안 또 threshold 이상 cycle이 나오면:
 
 권장 기본값:
 
-- `pollIntervalMs = 180000` (3분)
+- `pollIntervalMs = 30000` (30초)
+- `pageRequestDelayMs = 500`
 
 이유:
 
 - 개념글 `1~5페이지` list HTML fetch 5회
+- 페이지별로 `500ms` 템포를 둬서 지나치게 빠른 연속 요청을 피함
 - `newPostNos`가 있을 때만 추가 view fetch
 - page 1 빠른 lane과 충돌하지 않게 충분히 여유를 둠
 
 1차 기본 운영은:
 
-- `3분`
+- `30초`
+- page 간 `500ms`
 - 테스트 모드 ON
 
 으로 둔다.
-
-사용자 예시는 30초였지만,
-기본값은 `3분`을 권장한다.
-
-다만 UI에서는 `pollIntervalMs`를 editable로 두고,
-운영자가 `30초`까지 낮추는 것은 허용한다.
 
 반면 `patrolPages`는 UI editable로 두되,
 1차 구현에서는 실행 중 변경 시 baseline 일관성이 깨지기 쉬우므로
@@ -621,8 +656,9 @@ hold가 이미 걸려 있는 동안 또 threshold 이상 cycle이 나오면:
   },
   config: {
     galleryId: 'thesingularity',
-    pollIntervalMs: 180000,
+    pollIntervalMs: 30000,
     patrolPages: 5,
+    pageRequestDelayMs: 500,
     fluidRatioThresholdPercent: 90,
     patrolDefendingCandidateThreshold: 2,
     patrolDefendingHoldMs: 300000,

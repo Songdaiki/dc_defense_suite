@@ -163,9 +163,17 @@ body {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(20, minmax(0, 1fr));
+  gap: 5px;
   margin-bottom: 12px;
+}
+
+.tabs .tab-button:nth-child(-n + 5) {
+  grid-column: span 4;
+}
+
+.tabs .tab-button:nth-child(n + 6) {
+  grid-column: span 5;
 }
 
 .tab-button {
@@ -176,12 +184,12 @@ body {
   border-radius: 8px;
   background: #121925;
   color: #d6deee;
-  padding: 9px 6px;
-  font-size: 10px;
+  padding: 8px 4px;
+  font-size: 9px;
   font-weight: 700;
   cursor: pointer;
   text-align: center;
-  line-height: 1.2;
+  line-height: 1.15;
   word-break: keep-all;
 }
 

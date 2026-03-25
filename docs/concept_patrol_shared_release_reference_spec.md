@@ -246,9 +246,18 @@ view fetch:
 1. `features/concept-monitor`에서
    - inspect / release / recheck 관련 공용 helper를 분리하거나
    - 새 feature가 import 가능한 형태로 노출
+   - 특히 `conceptPatrol`은
+     - **후보 검사**
+     - **실제 해제**
+     두 단계를 분리 호출할 수 있어야 한다
 2. `conceptPatrol`은
    - 대상 수집만 새로 구현
    - 나머지 공용 판정/해제는 재사용
+   - 단, 기존 `conceptMonitor`와는 달리
+     - 신규 진입 글을 **하나씩 검사**
+     - 조작 누적이 threshold에 도달하는 순간 patrol hold를 즉시 올리고
+     - 같은 loop 안에서 해제를 수행하되
+     - 글 사이엔 500ms 텀을 둔다
 3. 동일 post를 `conceptMonitor`와 `conceptPatrol`이 동시에 때리지 않도록
    - page 1 최신 snapshot 범위는
      - `conceptMonitor.isRunning === true`

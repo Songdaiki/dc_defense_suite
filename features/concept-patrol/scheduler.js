@@ -11,8 +11,9 @@ import {
 } from '../concept-monitor/parser.js';
 import {
   BLOCK_COOLDOWN_MS,
-  inspectAndMaybeReleaseConceptPost,
+  inspectConceptPostCandidate,
   isConceptBlockSignalMessage,
+  releaseInspectedConceptCandidate,
 } from '../concept-monitor/release-helper.js';
 import {
   getConceptRecommendCutCoordinatorStatus,
@@ -20,8 +21,10 @@ import {
 } from '../concept-monitor/recommend-cut-coordinator.js';
 
 const STORAGE_KEY = 'conceptPatrolSchedulerState';
-const DEFAULT_POLL_INTERVAL_MS = 180000;
+const DEFAULT_POLL_INTERVAL_MS = 30000;
 const DEFAULT_PATROL_PAGES = 5;
+const DEFAULT_PAGE_REQUEST_DELAY_MS = 500;
+const DEFAULT_RELEASE_REQUEST_DELAY_MS = 500;
 const DEFAULT_FLUID_RATIO_THRESHOLD_PERCENT = 90;
 const DEFAULT_PATROL_DEFENDING_CANDIDATE_THRESHOLD = 2;
 const DEFAULT_PATROL_DEFENDING_HOLD_MS = 300000;
@@ -36,7 +39,8 @@ class Scheduler {
     this.releaseConceptPost = dependencies.releaseConceptPost || releaseConceptPost;
     this.parseConceptListDetectedMaxPage = dependencies.parseConceptListDetectedMaxPage || parseConceptListDetectedMaxPage;
     this.parseConceptListPagePosts = dependencies.parseConceptListPagePosts || parseConceptListPagePosts;
-    this.inspectAndMaybeReleaseConceptPost = dependencies.inspectAndMaybeReleaseConceptPost || inspectAndMaybeReleaseConceptPost;
+    this.inspectConceptPostCandidate = dependencies.inspectConceptPostCandidate || inspectConceptPostCandidate;
+    this.releaseInspectedConceptCandidate = dependencies.releaseInspectedConceptCandidate || releaseInspectedConceptCandidate;
     this.triggerConceptPatrolRecommendCutHold = dependencies.triggerConceptPatrolRecommendCutHold || triggerConceptPatrolRecommendCutHold;
 
     this.isRunning = false;
@@ -66,6 +70,7 @@ class Scheduler {
       baseUrl: DEFAULT_CONFIG.baseUrl,
       pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
       patrolPages: DEFAULT_PATROL_PAGES,
+      pageRequestDelayMs: DEFAULT_PAGE_REQUEST_DELAY_MS,
       fluidRatioThresholdPercent: DEFAULT_FLUID_RATIO_THRESHOLD_PERCENT,
       patrolDefendingCandidateThreshold: DEFAULT_PATROL_DEFENDING_CANDIDATE_THRESHOLD,
       patrolDefendingHoldMs: DEFAULT_PATROL_DEFENDING_HOLD_MS,
@@ -91,6 +96,9 @@ class Scheduler {
     this.log(this.config.testMode
       ? '🧭 개념글순회 시작! (테스트 모드)'
       : '🧭 개념글순회 시작! (실행 모드)');
+    this.log(
+      `⏱️ 확인 주기 ${formatDuration(this.getPollIntervalMs())} / 페이지 사이 대기 ${formatDuration(this.getPageRequestDelayMs())} / 해제 사이 대기 ${formatDuration(this.getReleaseRequestDelayMs())}`,
+    );
     await this.saveState();
     this.ensureRunLoop();
   }
@@ -127,9 +135,7 @@ class Scheduler {
         await this.saveState();
 
         if (this.isRunning) {
-          const elapsedMs = Date.now() - cycleStartedAt;
-          const waitMs = Math.max(0, this.getPollIntervalMs() - elapsedMs);
-          await delayWhileRunning(this, waitMs);
+          await delayWhileRunning(this, this.getPollIntervalMs());
         }
       } catch (error) {
         this.currentPage = 0;
@@ -221,6 +227,7 @@ class Scheduler {
     let cycleReleasedCount = 0;
     let cycleFailedCount = 0;
     let cycleUnclearCount = 0;
+    let patrolHoldTriggered = false;
 
     for (let index = 0; index < inspectEntries.length; index += 1) {
       const entry = inspectEntries[index];
@@ -234,20 +241,56 @@ class Scheduler {
       this.currentPostNo = Number(entry.no) || 0;
       this.log(`📥 개념글 신규 진입 감지 #${entry.no} (${entry.sourcePage}페이지)`);
 
-      const result = await this.inspectAndMaybeReleaseConceptPost({
+      const result = await this.inspectConceptPostCandidate({
         config: this.config,
         post: entry,
         progressLabel: formatProgressLabel(index + 1, inspectEntries.length),
         log: (message) => this.log(message),
         delayFn: this.delayFn,
         fetchConceptPostViewHTMLFn: (config, postNo) => this.fetchConceptPostViewHTML(config, postNo, 'conceptPatrol'),
-        releaseConceptPostFn: (config, postNo) => this.releaseConceptPost(config, postNo, 'conceptPatrol'),
       });
 
       cycleCandidateCount += result.candidateCount;
-      cycleReleasedCount += result.releasedCount;
       cycleFailedCount += result.failedCount;
-      cycleUnclearCount += result.unclearCount;
+      const defendingThreshold = Math.max(
+        1,
+        Number(this.config.patrolDefendingCandidateThreshold) || DEFAULT_PATROL_DEFENDING_CANDIDATE_THRESHOLD,
+      );
+
+      if (!patrolHoldTriggered && cycleCandidateCount >= defendingThreshold) {
+        const coordinatorStatus = await this.triggerConceptPatrolRecommendCutHold(this.config, {
+          holdMs: this.config.patrolDefendingHoldMs,
+        });
+        patrolHoldTriggered = true;
+        this.log(
+          `🛡️ patrol 조작 ${cycleCandidateCount}건 감지 - 개념컷 ${coordinatorStatus.effectiveRecommendCut} 유지 요청 (${formatTimestamp(coordinatorStatus.patrolHoldUntilTs)}까지)`,
+        );
+      }
+
+      if (result.isCandidate) {
+        const releaseResult = await this.releaseInspectedConceptCandidate({
+          config: this.config,
+          postNo: entry.no,
+          log: (message) => this.log(message),
+          delayFn: this.delayFn,
+          fetchConceptPostViewHTMLFn: (config, postNo) => this.fetchConceptPostViewHTML(config, postNo, 'conceptPatrol'),
+          releaseConceptPostFn: (config, postNo) => this.releaseConceptPost(config, postNo, 'conceptPatrol'),
+        });
+
+        cycleReleasedCount += releaseResult.releasedCount;
+        cycleFailedCount += releaseResult.failedCount;
+        cycleUnclearCount += releaseResult.unclearCount;
+      }
+
+      if (!this.isRunning) {
+        this.currentPage = 0;
+        this.currentPostNo = 0;
+        return;
+      }
+
+      if (index < inspectEntries.length - 1) {
+        await delayWhileRunning(this, this.getReleaseRequestDelayMs());
+      }
     }
 
     if (!this.isRunning) {
@@ -257,23 +300,11 @@ class Scheduler {
     }
 
     this.lastCandidateCount = cycleCandidateCount;
+
     this.totalDetectedCount += cycleCandidateCount;
     this.totalReleasedCount += cycleReleasedCount;
     this.totalFailedCount += cycleFailedCount;
     this.totalUnclearCount += cycleUnclearCount;
-
-    const defendingThreshold = Math.max(
-      1,
-      Number(this.config.patrolDefendingCandidateThreshold) || DEFAULT_PATROL_DEFENDING_CANDIDATE_THRESHOLD,
-    );
-    if (cycleCandidateCount >= defendingThreshold) {
-      const coordinatorStatus = await this.triggerConceptPatrolRecommendCutHold(this.config, {
-        holdMs: this.config.patrolDefendingHoldMs,
-      });
-      this.log(
-        `🛡️ patrol 조작 ${cycleCandidateCount}건 감지 - 개념컷 ${coordinatorStatus.effectiveRecommendCut} 유지 요청 (${formatTimestamp(coordinatorStatus.patrolHoldUntilTs)}까지)`,
-      );
-    }
 
     this.commitBaseline(currentEntries, baselineVersionKey);
     this.currentPage = 0;
@@ -307,6 +338,11 @@ class Scheduler {
     this.collectWindowPageEntries(entries, seenPostNos, firstPageHtml, 1);
 
     for (let page = 2; page <= targetPageCount; page += 1) {
+      const requestDelayMs = this.getPageRequestDelayMs();
+      if (requestDelayMs > 0) {
+        await delayWhileRunning(this, requestDelayMs);
+      }
+
       this.currentPage = page;
       let pageHtml = '';
       try {
@@ -399,6 +435,14 @@ class Scheduler {
 
   getPollIntervalMs() {
     return Math.max(1000, Number(this.config.pollIntervalMs) || DEFAULT_POLL_INTERVAL_MS);
+  }
+
+  getPageRequestDelayMs() {
+    return Math.max(0, Number(this.config.pageRequestDelayMs) || 0);
+  }
+
+  getReleaseRequestDelayMs() {
+    return DEFAULT_RELEASE_REQUEST_DELAY_MS;
   }
 
   log(message) {
@@ -541,6 +585,7 @@ function normalizeConfig(config = {}) {
     baseUrl: String(config.baseUrl || DEFAULT_CONFIG.baseUrl).trim() || DEFAULT_CONFIG.baseUrl,
     pollIntervalMs: Math.max(1000, Number(config.pollIntervalMs) || DEFAULT_POLL_INTERVAL_MS),
     patrolPages: normalizePatrolPages(config.patrolPages),
+    pageRequestDelayMs: Math.max(0, Number(config.pageRequestDelayMs) || DEFAULT_PAGE_REQUEST_DELAY_MS),
     fluidRatioThresholdPercent: clampPercent(config.fluidRatioThresholdPercent, DEFAULT_FLUID_RATIO_THRESHOLD_PERCENT),
     patrolDefendingCandidateThreshold: Math.max(1, Number(config.patrolDefendingCandidateThreshold) || DEFAULT_PATROL_DEFENDING_CANDIDATE_THRESHOLD),
     patrolDefendingHoldMs: Math.max(1000, Number(config.patrolDefendingHoldMs) || DEFAULT_PATROL_DEFENDING_HOLD_MS),
