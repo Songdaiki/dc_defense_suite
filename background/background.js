@@ -2,6 +2,15 @@ import { Scheduler as CommentScheduler } from '../features/comment/scheduler.js'
 import { PHASE as COMMENT_MONITOR_PHASE, Scheduler as CommentMonitorScheduler } from '../features/comment-monitor/scheduler.js';
 import { Scheduler as ConceptMonitorScheduler } from '../features/concept-monitor/scheduler.js';
 import {
+  handleConceptRecommendCutCoordinatorAlarm,
+  initializeConceptRecommendCutCoordinator,
+  resetConceptRecommendCutCoordinator,
+} from '../features/concept-monitor/recommend-cut-coordinator.js';
+import {
+  Scheduler as ConceptPatrolScheduler,
+  normalizeConfig as normalizeConceptPatrolConfig,
+} from '../features/concept-patrol/scheduler.js';
+import {
   Scheduler as HanRefreshIpBanScheduler,
   normalizeConfig as normalizeHanRefreshIpBanConfig,
 } from '../features/han-refresh-ip-ban/scheduler.js';
@@ -24,6 +33,9 @@ const commentMonitorScheduler = new CommentMonitorScheduler({
   commentScheduler,
 });
 const conceptMonitorScheduler = new ConceptMonitorScheduler();
+const conceptPatrolScheduler = new ConceptPatrolScheduler({
+  conceptMonitorScheduler,
+});
 const hanRefreshIpBanScheduler = new HanRefreshIpBanScheduler();
 const postScheduler = new PostScheduler();
 const semiPostScheduler = new SemiPostScheduler();
@@ -37,6 +49,7 @@ const schedulers = {
   comment: commentScheduler,
   commentMonitor: commentMonitorScheduler,
   conceptMonitor: conceptMonitorScheduler,
+  conceptPatrol: conceptPatrolScheduler,
   hanRefreshIpBan: hanRefreshIpBanScheduler,
   post: postScheduler,
   semiPost: semiPostScheduler,
@@ -73,9 +86,17 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     return;
   }
 
-  handleDcSessionBrokerAlarm(alarm.name).catch((error) => {
-    console.error('[DefenseSuite] broker alarm 처리 실패:', error);
-  });
+  handleConceptRecommendCutCoordinatorAlarm(alarm.name)
+    .then((handled) => {
+      if (handled) {
+        return;
+      }
+
+      return handleDcSessionBrokerAlarm(alarm.name);
+    })
+    .catch((error) => {
+      console.error('[DefenseSuite] broker/concept cut alarm 처리 실패:', error);
+    });
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -96,6 +117,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function initializeApp() {
+  await initializeConceptRecommendCutCoordinator();
   await initializeDcSessionBroker();
   await resumeAllSchedulers();
 }
@@ -114,66 +136,74 @@ async function resumeAllSchedulers() {
   }
 
   resumeAllSchedulersPromise = (async () => {
+    await initializeConceptRecommendCutCoordinator();
     await initializeDcSessionBroker();
 
-  await loadSchedulerStateIfIdle(schedulers.comment);
-  await loadSchedulerStateIfIdle(schedulers.commentMonitor);
-  await loadSchedulerStateIfIdle(schedulers.conceptMonitor);
-  await loadSchedulerStateIfIdle(schedulers.hanRefreshIpBan);
-  await loadSchedulerStateIfIdle(schedulers.post);
-  await loadSchedulerStateIfIdle(schedulers.semiPost);
-  await loadSchedulerStateIfIdle(schedulers.ip);
-  await loadSchedulerStateIfIdle(schedulers.monitor);
+    await loadSchedulerStateIfIdle(schedulers.comment);
+    await loadSchedulerStateIfIdle(schedulers.commentMonitor);
+    await loadSchedulerStateIfIdle(schedulers.conceptMonitor);
+    await loadSchedulerStateIfIdle(schedulers.conceptPatrol);
+    await loadSchedulerStateIfIdle(schedulers.hanRefreshIpBan);
+    await loadSchedulerStateIfIdle(schedulers.post);
+    await loadSchedulerStateIfIdle(schedulers.semiPost);
+    await loadSchedulerStateIfIdle(schedulers.ip);
+    await loadSchedulerStateIfIdle(schedulers.monitor);
 
-  const commentMonitorOwnsChild = schedulers.commentMonitor.isRunning;
-  const commentMonitorAttacking = commentMonitorOwnsChild
-    && schedulers.commentMonitor.phase === COMMENT_MONITOR_PHASE.ATTACKING;
+    const commentMonitorOwnsChild = schedulers.commentMonitor.isRunning;
+    const commentMonitorAttacking = commentMonitorOwnsChild
+      && schedulers.commentMonitor.phase === COMMENT_MONITOR_PHASE.ATTACKING;
 
-  if (commentMonitorAttacking) {
-    if (typeof schedulers.comment.setCurrentSource === 'function') {
-      schedulers.comment.setCurrentSource('monitor', { logChange: false });
-      await schedulers.comment.saveState();
+    if (commentMonitorAttacking) {
+      if (typeof schedulers.comment.setCurrentSource === 'function') {
+        schedulers.comment.setCurrentSource('monitor', { logChange: false });
+        await schedulers.comment.saveState();
+      }
+      await resumeStandaloneScheduler(schedulers.comment, '🔁 댓글 감시 자동화 관리 대상 댓글 방어 복원');
+    } else if (commentMonitorOwnsChild) {
+      await stopDormantCommentMonitorChildScheduler();
+    } else {
+      await resumeStandaloneScheduler(schedulers.comment, '🔁 저장된 실행 상태 복원');
     }
-    await resumeStandaloneScheduler(schedulers.comment, '🔁 댓글 감시 자동화 관리 대상 댓글 방어 복원');
-  } else if (commentMonitorOwnsChild) {
-    await stopDormantCommentMonitorChildScheduler();
-  } else {
-    await resumeStandaloneScheduler(schedulers.comment, '🔁 저장된 실행 상태 복원');
-  }
 
-  const monitorOwnsChildren = schedulers.monitor.isRunning;
-  const monitorAttacking = monitorOwnsChildren && schedulers.monitor.phase === MONITOR_PHASE.ATTACKING;
+    const monitorOwnsChildren = schedulers.monitor.isRunning;
+    const monitorAttacking = monitorOwnsChildren && schedulers.monitor.phase === MONITOR_PHASE.ATTACKING;
 
-  if (monitorAttacking) {
-    // 공격 중 복원은 monitor가 initial sweep 순서를 보장하면서 child를 다시 붙인다.
-  } else if (monitorOwnsChildren) {
-    await stopDormantMonitorChildSchedulers();
-  } else {
-    await resumeStandaloneScheduler(schedulers.post, '🔁 저장된 실행 상태 복원');
-    await resumeStandaloneScheduler(schedulers.ip, '🔁 저장된 실행 상태 복원');
-  }
+    if (monitorAttacking) {
+      // 공격 중 복원은 monitor가 initial sweep 순서를 보장하면서 child를 다시 붙인다.
+    } else if (monitorOwnsChildren) {
+      await stopDormantMonitorChildSchedulers();
+    } else {
+      await resumeStandaloneScheduler(schedulers.post, '🔁 저장된 실행 상태 복원');
+      await resumeStandaloneScheduler(schedulers.ip, '🔁 저장된 실행 상태 복원');
+    }
 
-  if (monitorOwnsChildren) {
-    await stopDormantSemiPostScheduler();
-  } else {
-    await resumeStandaloneScheduler(schedulers.semiPost, '🔁 저장된 실행 상태 복원');
-  }
+    if (monitorOwnsChildren) {
+      await stopDormantSemiPostScheduler();
+    } else {
+      await resumeStandaloneScheduler(schedulers.semiPost, '🔁 저장된 실행 상태 복원');
+    }
 
-  await resumeStandaloneScheduler(schedulers.commentMonitor, '🔁 저장된 댓글 감시 자동화 상태 복원');
-  await resumeStandaloneScheduler(schedulers.conceptMonitor, '🔁 저장된 개념글 방어 상태 복원');
-  await resumeStandaloneScheduler(schedulers.hanRefreshIpBan, '🔁 저장된 도배기 갱신 차단 자동 상태 복원');
+    await resumeStandaloneScheduler(schedulers.commentMonitor, '🔁 저장된 댓글 감시 자동화 상태 복원');
+    await resumeStandaloneScheduler(schedulers.conceptMonitor, '🔁 저장된 개념글 방어 상태 복원');
+    await resumeStandaloneScheduler(schedulers.conceptPatrol, '🔁 저장된 개념글순회 상태 복원');
+    await resumeStandaloneScheduler(schedulers.hanRefreshIpBan, '🔁 저장된 도배기 갱신 차단 자동 상태 복원');
 
-  if (commentMonitorAttacking) {
-    await schedulers.commentMonitor.ensureManagedDefenseStarted();
-    await schedulers.commentMonitor.saveState();
-  }
+    if (typeof schedulers.conceptMonitor.syncRecommendCutCoordinator === 'function') {
+      await schedulers.conceptMonitor.syncRecommendCutCoordinator();
+      await schedulers.conceptMonitor.saveState();
+    }
 
-  if (monitorAttacking) {
-    await schedulers.monitor.ensureManagedDefensesStarted();
-    await schedulers.monitor.saveState();
-  }
+    if (commentMonitorAttacking) {
+      await schedulers.commentMonitor.ensureManagedDefenseStarted();
+      await schedulers.commentMonitor.saveState();
+    }
 
-  await resumeStandaloneScheduler(schedulers.monitor, '🔁 저장된 자동 감시 상태 복원');
+    if (monitorAttacking) {
+      await schedulers.monitor.ensureManagedDefensesStarted();
+      await schedulers.monitor.saveState();
+    }
+
+    await resumeStandaloneScheduler(schedulers.monitor, '🔁 저장된 자동 감시 상태 복원');
   })().finally(() => {
     resumeAllSchedulersPromise = null;
   });
@@ -190,6 +220,7 @@ function getAllStatuses() {
     comment: schedulers.comment.getStatus(),
     commentMonitor: schedulers.commentMonitor.getStatus(),
     conceptMonitor: schedulers.conceptMonitor.getStatus(),
+    conceptPatrol: schedulers.conceptPatrol.getStatus(),
     hanRefreshIpBan: schedulers.hanRefreshIpBan.getStatus(),
     post: schedulers.post.getStatus(),
     semiPost: schedulers.semiPost.getStatus(),
@@ -313,7 +344,7 @@ async function handleMessage(message) {
       };
     }
 
-    applySharedConfig(message.config || {});
+    await applySharedConfig(message.config || {});
     await syncDcSessionBrokerSharedConfig({ galleryId: message.config?.galleryId });
     await Promise.all(Object.values(schedulers).map((scheduler) => scheduler.saveState()));
     return {
@@ -406,6 +437,13 @@ async function handleMessage(message) {
           });
         }
 
+        if (message.feature === 'conceptPatrol') {
+          message.config = normalizeConceptPatrolConfig({
+            ...scheduler.config,
+            ...message.config,
+          });
+        }
+
         const configUpdateBlockMessage = getConfigUpdateBlockMessage(message.feature, scheduler, message.config);
         if (configUpdateBlockMessage) {
           maybeLogIpIncludeExistingTargetsFailure(scheduler, message, configUpdateBlockMessage);
@@ -432,6 +470,10 @@ async function handleMessage(message) {
           maybeLogIpIncludeExistingTargetsToggleChange(scheduler, message.config);
         }
         scheduler.config = { ...scheduler.config, ...message.config };
+        if (message.feature === 'conceptMonitor'
+          && typeof scheduler.syncRecommendCutCoordinator === 'function') {
+          await scheduler.syncRecommendCutCoordinator();
+        }
         await scheduler.saveState();
       }
       return {
@@ -444,6 +486,10 @@ async function handleMessage(message) {
 
     case 'resetStats':
       resetSchedulerStats(message.feature, scheduler);
+      if (message.feature === 'conceptMonitor'
+        && typeof scheduler.syncRecommendCutCoordinator === 'function') {
+        await scheduler.syncRecommendCutCoordinator();
+      }
       await scheduler.saveState();
       return {
         success: true,
@@ -534,6 +580,28 @@ function resetSchedulerStats(feature, scheduler) {
     return;
   }
 
+  if (feature === 'conceptPatrol') {
+    scheduler.currentPage = 0;
+    scheduler.currentPostNo = 0;
+    scheduler.cycleCount = 0;
+    scheduler.lastPollAt = '';
+    scheduler.lastDetectedMaxPage = 0;
+    scheduler.lastWindowSize = 0;
+    scheduler.lastNewPostCount = 0;
+    scheduler.lastCandidateCount = 0;
+    scheduler.totalDetectedCount = 0;
+    scheduler.totalReleasedCount = 0;
+    scheduler.totalFailedCount = 0;
+    scheduler.totalUnclearCount = 0;
+    scheduler.baselineReady = false;
+    scheduler.previousWindowPostNos = [];
+    scheduler.previousWindowMeta = {};
+    scheduler.baselineVersionKey = '';
+    scheduler.blockedUntilTs = 0;
+    scheduler.logs = [];
+    return;
+  }
+
   if (feature === 'hanRefreshIpBan') {
     scheduler.currentCycleScannedRows = 0;
     scheduler.currentCycleMatchedRows = 0;
@@ -611,13 +679,14 @@ function resetSchedulerStats(feature, scheduler) {
   }
 }
 
-function applySharedConfig(config) {
+async function applySharedConfig(config) {
   const galleryId = normalizeSharedString(config.galleryId);
   const headtextId = normalizeSharedString(config.headtextId);
   const galleryChanged = Boolean(galleryId) && (
     schedulers.comment.config.galleryId !== galleryId
     || schedulers.commentMonitor.config.galleryId !== galleryId
     || schedulers.conceptMonitor.config.galleryId !== galleryId
+    || schedulers.conceptPatrol.config.galleryId !== galleryId
     || schedulers.hanRefreshIpBan.config.galleryId !== galleryId
     || schedulers.post.config.galleryId !== galleryId
     || schedulers.semiPost.config.galleryId !== galleryId
@@ -634,6 +703,7 @@ function applySharedConfig(config) {
     schedulers.comment.config.galleryId = galleryId;
     schedulers.commentMonitor.config.galleryId = galleryId;
     schedulers.conceptMonitor.config.galleryId = galleryId;
+    schedulers.conceptPatrol.config.galleryId = galleryId;
     schedulers.hanRefreshIpBan.config.galleryId = galleryId;
     schedulers.post.config.galleryId = galleryId;
     schedulers.semiPost.config.galleryId = galleryId;
@@ -652,11 +722,13 @@ function applySharedConfig(config) {
     resetCommentSchedulerState(`ℹ️ 공통 설정 변경으로 댓글 방어 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetCommentMonitorSchedulerState(`ℹ️ 공통 설정 변경으로 댓글 감시 자동화 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetConceptMonitorSchedulerState(`ℹ️ 공통 설정 변경으로 개념글 방어 상태를 초기화했습니다. (갤러리: ${galleryId})`);
+    resetConceptPatrolSchedulerState(`ℹ️ 공통 설정 변경으로 개념글순회 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetHanRefreshIpBanSchedulerState(`ℹ️ 공통 설정 변경으로 도배기 갱신 차단 자동 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetPostSchedulerState(`ℹ️ 공통 설정 변경으로 게시글 분류 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetSemiPostSchedulerState(`ℹ️ 공통 설정 변경으로 반고닉 분류 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetIpSchedulerState(`ℹ️ 공통 설정 변경으로 IP 차단 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetMonitorSchedulerState(`ℹ️ 공통 설정 변경으로 감시 자동화 상태를 초기화했습니다. (갤러리: ${galleryId})`);
+    await resetConceptRecommendCutCoordinator({ galleryId });
     return;
   }
 
@@ -721,6 +793,10 @@ function getBusyFeatures() {
     busyFeatures.push('개념글 방어');
   }
 
+  if (isSchedulerBusy(schedulers.conceptPatrol)) {
+    busyFeatures.push('개념글순회');
+  }
+
   if (isSchedulerBusy(schedulers.hanRefreshIpBan)) {
     busyFeatures.push('도배기 갱신 차단 자동');
   }
@@ -769,6 +845,12 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
     && config.testMode !== undefined
     && Boolean(config.testMode) !== Boolean(scheduler.config.testMode)) {
     return '테스트 모드는 개념글 방어를 정지한 뒤 변경하세요.';
+  }
+
+  if (feature === 'conceptPatrol'
+    && config.patrolPages !== undefined
+    && Number(config.patrolPages) !== Number(scheduler.config.patrolPages)) {
+    return '순회 페이지 수는 개념글순회를 정지한 뒤 변경하세요.';
   }
 
   return '';
@@ -918,6 +1000,29 @@ function resetConceptMonitorSchedulerState(message) {
   scheduler.lastRecommendSnapshot = [];
   scheduler.lastAppliedRecommendCut = 14;
   scheduler.lastRecommendCutApplySucceeded = true;
+  scheduler.blockedUntilTs = 0;
+  scheduler.logs = [];
+  scheduler.log(message);
+}
+
+function resetConceptPatrolSchedulerState(message) {
+  const scheduler = schedulers.conceptPatrol;
+  scheduler.currentPage = 0;
+  scheduler.currentPostNo = 0;
+  scheduler.cycleCount = 0;
+  scheduler.lastPollAt = '';
+  scheduler.lastDetectedMaxPage = 0;
+  scheduler.lastWindowSize = 0;
+  scheduler.lastNewPostCount = 0;
+  scheduler.lastCandidateCount = 0;
+  scheduler.totalDetectedCount = 0;
+  scheduler.totalReleasedCount = 0;
+  scheduler.totalFailedCount = 0;
+  scheduler.totalUnclearCount = 0;
+  scheduler.baselineReady = false;
+  scheduler.previousWindowPostNos = [];
+  scheduler.previousWindowMeta = {};
+  scheduler.baselineVersionKey = '';
   scheduler.blockedUntilTs = 0;
   scheduler.logs = [];
   scheduler.log(message);

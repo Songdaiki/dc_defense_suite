@@ -8,6 +8,7 @@
   --comment: #4fd18b;
   --comment-monitor: #7ac5ff;
   --concept-monitor: #ff9f9f;
+  --concept-patrol: #f0c26d;
   --han-refresh-ip-ban: #ff9d72;
   --post: #ffb84f;
   --ip: #63d8e6;
@@ -264,6 +265,10 @@ body {
 
 .feature-concept-monitor {
   background: linear-gradient(180deg, rgba(255, 159, 159, 0.16), rgba(49, 24, 24, 0.95));
+}
+
+.feature-concept-patrol {
+  background: linear-gradient(180deg, rgba(240, 194, 109, 0.16), rgba(52, 41, 17, 0.95));
 }
 
 .feature-han-refresh-ip-ban {

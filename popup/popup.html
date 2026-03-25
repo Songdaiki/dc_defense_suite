@@ -20,6 +20,7 @@
       <button class="tab-button tab-automation is-active" data-tab="monitor"><span class="tab-label">게시물<br>자동화</span></button>
       <button class="tab-button tab-automation" data-tab="commentMonitor"><span class="tab-label">댓글<br>자동화</span></button>
       <button class="tab-button tab-automation" data-tab="conceptMonitor"><span class="tab-label">개념글<br>방어</span></button>
+      <button class="tab-button tab-automation" data-tab="conceptPatrol"><span class="tab-label">개념글<br>순회</span></button>
       <button class="tab-button tab-automation" data-tab="hanRefreshIpBan"><span class="tab-label">도배기갱신<br>차단자동</span></button>
       <button class="tab-button" data-tab="comment">댓글 방어</button>
       <button class="tab-button" data-tab="post"><span class="tab-label">게시글<br>분류</span></button>
@@ -168,6 +169,129 @@
         <section class="log-section">
           <h3>최근 로그</h3>
           <div id="conceptMonitorLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+      </section>
+
+      <section class="panel" data-feature="conceptPatrol">
+        <div class="feature-header feature-concept-patrol">
+          <div>
+            <h2>개념글순회</h2>
+            <p>개념글 1~N페이지 통합 window snapshot에서 새로 진입한 글만 느리게 점검해 뒤페이지 공격을 보강합니다</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="conceptPatrolToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="conceptPatrolToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">실행</span>
+            <span id="conceptPatrolStatusText" class="status-value status-off">🔴 정지</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">모드</span>
+            <span id="conceptPatrolModeText" class="status-value">테스트</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">patrol hold</span>
+            <span id="conceptPatrolHoldStateText" class="status-value">NORMAL</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 컷</span>
+            <span id="conceptPatrolEffectiveRecommendCutText" class="status-value">14</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 폴링</span>
+            <span id="conceptPatrolLastPollAt" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 위치</span>
+            <span id="conceptPatrolCurrentPosition" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">감지 max page</span>
+            <span id="conceptPatrolLastDetectedMaxPage" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 window</span>
+            <span id="conceptPatrolLastWindowSize" class="status-value">0개</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 신규 진입</span>
+            <span id="conceptPatrolLastNewPostCount" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 후보</span>
+            <span id="conceptPatrolLastCandidateCount" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 후보</span>
+            <span id="conceptPatrolTotalDetectedCount" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 해제</span>
+            <span id="conceptPatrolTotalReleasedCount" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 실패</span>
+            <span id="conceptPatrolTotalFailedCount" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 불명확</span>
+            <span id="conceptPatrolTotalUnclearCount" class="status-value">0건</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">hold 만료</span>
+            <span id="conceptPatrolHoldUntilText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">마지막 컷 변경</span>
+            <span id="conceptPatrolLastCutChangedAt" class="status-value">-</span>
+          </div>
+        </div>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label for="conceptPatrolPollIntervalMs">순회 주기 (ms)</label>
+              <input type="number" id="conceptPatrolPollIntervalMs" min="1000" max="600000" step="1000" value="180000">
+            </div>
+            <div class="setting-item">
+              <label for="conceptPatrolPages">순회 페이지 수</label>
+              <input type="number" id="conceptPatrolPages" min="1" max="20" value="5">
+            </div>
+            <div class="setting-item">
+              <label for="conceptPatrolFluidRatioThreshold">유동 추천 비율 기준 (%)</label>
+              <input type="number" id="conceptPatrolFluidRatioThreshold" min="0" max="100" value="90">
+            </div>
+            <div class="setting-item">
+              <label for="conceptPatrolCandidateThreshold">조작 다발 threshold</label>
+              <input type="number" id="conceptPatrolCandidateThreshold" min="1" max="20" value="2">
+            </div>
+            <div class="setting-item">
+              <label for="conceptPatrolHoldMs">patrol hold 시간 (ms)</label>
+              <input type="number" id="conceptPatrolHoldMs" min="1000" max="3600000" step="1000" value="300000">
+            </div>
+            <div class="setting-item">
+              <label for="conceptPatrolTestMode">해제시 실제모드</label>
+              <input type="checkbox" id="conceptPatrolTestMode" checked>
+            </div>
+            <button id="conceptPatrolSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          </div>
+        </details>
+
+        <div class="action-row">
+          <button id="conceptPatrolResetBtn" class="btn btn-secondary">통계 초기화</button>
+        </div>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="conceptPatrolLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
         </section>
       </section>
 

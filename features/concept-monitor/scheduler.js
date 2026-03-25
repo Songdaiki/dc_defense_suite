@@ -3,15 +3,22 @@ import {
   delay,
   fetchBoardListHTML,
   fetchConceptListHTML,
-  fetchConceptPostViewHTML,
-  releaseConceptPost,
-  updateRecommendCut,
 } from './api.js';
 import {
-  extractConceptPostMetrics,
   parseBoardRecommendSnapshot,
   parseConceptListPosts,
 } from './parser.js';
+import {
+  AUTO_CUT_STATE,
+  NORMAL_RECOMMEND_CUT,
+  getConceptRecommendCutCoordinatorStatus,
+  syncConceptMonitorRecommendCutState,
+} from './recommend-cut-coordinator.js';
+import {
+  BLOCK_COOLDOWN_MS,
+  inspectAndMaybeReleaseConceptPost,
+  isConceptBlockSignalMessage,
+} from './release-helper.js';
 
 const STORAGE_KEY = 'conceptMonitorSchedulerState';
 const DEFAULT_SNAPSHOT_POST_LIMIT = 5;
@@ -20,16 +27,8 @@ const DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD = 200;
 const DEFAULT_AUTO_CUT_ATTACK_CONSECUTIVE_COUNT = 1;
 const DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD = 40;
 const DEFAULT_AUTO_CUT_RELEASE_CONSECUTIVE_COUNT = 2;
-const NORMAL_RECOMMEND_CUT = 14;
-const DEFENDING_RECOMMEND_CUT = 100;
-const BLOCK_COOLDOWN_MS = 30 * 60 * 1000;
 const TARGET_INSPECT_DELAY_MS = 5000;
 const INSPECT_DELAY_JITTER_MS = 500;
-const FALLBACK_RECHECK_DELAY_MS = 1000;
-const AUTO_CUT_STATE = {
-  NORMAL: 'NORMAL',
-  DEFENDING: 'DEFENDING',
-};
 
 class Scheduler {
   constructor() {
@@ -88,6 +87,7 @@ class Scheduler {
     this.log(this.config.testMode
       ? '🟢 개념글 방어 시작! (테스트 모드)'
       : '🟢 개념글 방어 시작! (실행 모드)');
+    await this.syncRecommendCutCoordinator();
     await this.saveState();
     this.ensureRunLoop();
   }
@@ -102,6 +102,7 @@ class Scheduler {
     this.isRunning = false;
     this.currentPostNo = 0;
     this.log('🔴 개념글 방어 중지.');
+    await this.syncRecommendCutCoordinator();
     await this.saveState();
   }
 
@@ -127,7 +128,7 @@ class Scheduler {
       } catch (error) {
         this.currentPostNo = 0;
 
-        if (isBlockSignalMessage(error.message)) {
+        if (isConceptBlockSignalMessage(error.message)) {
           this.blockedUntilTs = Date.now() + BLOCK_COOLDOWN_MS;
           this.log(`🧊 차단 의심 응답 감지 - ${error.message}. ${formatDuration(BLOCK_COOLDOWN_MS)} 쿨다운`);
           console.error('[ConceptMonitorScheduler] block cooldown:', error);
@@ -227,7 +228,7 @@ class Scheduler {
       this.autoCutAttackHitCount = 0;
       this.autoCutReleaseHitCount = 0;
       this.log(`ℹ️ 개념컷 자동조절 비교 가능한 게시물 없음 - snapshot ${snapshotPosts.length}개 갱신`);
-      await this.ensureRecommendCutApplied(this.autoCutState);
+      await this.syncRecommendCutCoordinator();
       return;
     }
 
@@ -236,7 +237,7 @@ class Scheduler {
     this.autoCutState = nextState;
     this.lastRecommendSnapshot = snapshotPosts;
     this.logAutoCutCycle(metrics, previousState, nextState);
-    await this.ensureRecommendCutApplied(nextState);
+    await this.syncRecommendCutCoordinator();
   }
 
   async inspectPost(post, position = 0, totalPosts = 0) {
@@ -246,131 +247,19 @@ class Scheduler {
     }
 
     const progressLabel = formatProgressLabel(position, totalPosts);
-    const currentHead = normalizeBoardHead(post?.currentHead);
-
-    if (!isGeneralBoardHead(currentHead)) {
-      this.log(`ℹ️ ${progressLabel} #${postNo} 스킵 - 머릿말 ${formatBoardHeadLabel(currentHead)}는 일반 글이 아님`);
-      return;
-    }
-
-    let viewHtml = '';
-    try {
-      viewHtml = await fetchConceptPostViewHTML(this.config, postNo);
-    } catch (error) {
-      this.totalFailedCount += 1;
-      this.log(`⚠️ #${postNo} view 조회 실패 - ${error.message}`);
-      if (isBlockSignalMessage(error.message)) {
-        throw error;
-      }
-      return;
-    }
-
-    const metrics = extractConceptPostMetrics(viewHtml, {
-      postNoHint: postNo,
-      assumeConcept: true,
+    const inspectionResult = await inspectAndMaybeReleaseConceptPost({
+      config: this.config,
+      post,
+      progressLabel,
+      log: (message) => this.log(message),
+      delayFn: delay,
     });
-    if (!metrics.success) {
-      this.totalFailedCount += 1;
-      this.log(`⚠️ #${postNo} 파싱 실패 - ${metrics.message}${metrics.debugSummary ? ` / debug: ${metrics.debugSummary}` : ''}`);
-      return;
-    }
 
-    if (!metrics.isConcept) {
-      this.log(`ℹ️ ${progressLabel} #${postNo} 정상 통과 - 현재 개념글 아님`);
-      return;
-    }
-
-    if (metrics.totalRecommendCount <= 0) {
-      this.log(`ℹ️ ${progressLabel} #${postNo} 정상 통과 - 총추천 0`);
-      return;
-    }
-
-    if (metrics.fixedNickRecommendCount > metrics.totalRecommendCount) {
-      this.totalFailedCount += 1;
-      this.log(`⚠️ #${postNo} 비정상 추천값 - 총추천 ${metrics.totalRecommendCount}, 고정닉 ${metrics.fixedNickRecommendCount}`);
-      return;
-    }
-
-    const fluidRecommendCount = metrics.totalRecommendCount - metrics.fixedNickRecommendCount;
-    const fluidRatio = fluidRecommendCount / metrics.totalRecommendCount;
-    const configuredThreshold = Number(this.config.fluidRatioThresholdPercent);
-    const thresholdPercent = Number.isFinite(configuredThreshold) ? configuredThreshold : 90;
-    const thresholdRatio = Math.max(0, Math.min(100, thresholdPercent)) / 100;
-
-    if (fluidRatio < thresholdRatio) {
-      this.log(
-        `ℹ️ ${progressLabel} #${postNo} 정상 통과 - 총추천 ${metrics.totalRecommendCount}, 고정닉 ${metrics.fixedNickRecommendCount}, 유동비율 ${fluidRatio.toFixed(2)}`,
-      );
-      return;
-    }
-
-    this.lastCandidateCount += 1;
-    this.totalDetectedCount += 1;
-    this.log(
-      `🎯 ${progressLabel} 개념글 해제 후보 #${postNo} - 총추천 ${metrics.totalRecommendCount}, 고정닉 ${metrics.fixedNickRecommendCount}, 유동비율 ${fluidRatio.toFixed(2)}`,
-    );
-
-    if (this.config.testMode) {
-      this.log(`🧪 테스트 모드 - 해제 미실행 #${postNo}`);
-      return;
-    }
-
-    await this.executeRelease(postNo);
-  }
-
-  async executeRelease(postNo) {
-    this.log(`⚙️ 개념글 해제 실행 #${postNo}`);
-
-    let releaseResult;
-    try {
-      releaseResult = await releaseConceptPost(this.config, postNo);
-    } catch (error) {
-      if (await this.skipIfAlreadyReleasedBySomeoneElse(postNo, `해제 요청 실패 (${error.message})`)) {
-        return;
-      }
-      this.totalFailedCount += 1;
-      this.log(`❌ 개념글 해제 실패 #${postNo} - ${error.message}`);
-      return;
-    }
-
-    if (releaseResult.status !== 200) {
-      if (await this.skipIfAlreadyReleasedBySomeoneElse(postNo, `해제 응답 HTTP ${releaseResult.status}`)) {
-        return;
-      }
-      this.totalFailedCount += 1;
-      this.log(`❌ 개념글 해제 실패 #${postNo} - HTTP ${releaseResult.status} / raw: ${releaseResult.rawSummary}`);
-      return;
-    }
-
-    let recheckHtml = '';
-    try {
-      recheckHtml = await fetchConceptPostViewHTML(this.config, postNo);
-    } catch (error) {
-      if (await this.skipIfAlreadyReleasedBySomeoneElse(postNo, `재확인 조회 실패 (${error.message})`)) {
-        return;
-      }
-      this.totalUnclearCount += 1;
-      this.log(`⚠️ 개념글 해제 결과 불명확 #${postNo} - 재확인 실패 (${error.message}) / raw: ${releaseResult.rawSummary}`);
-      return;
-    }
-
-    const rechecked = extractConceptPostMetrics(recheckHtml, {
-      postNoHint: postNo,
-    });
-    if (!rechecked.success) {
-      this.totalUnclearCount += 1;
-      this.log(`⚠️ 개념글 해제 결과 불명확 #${postNo} - 재확인 파싱 실패${rechecked.debugSummary ? ` / debug: ${rechecked.debugSummary}` : ''} / raw: ${releaseResult.rawSummary}`);
-      return;
-    }
-
-    if (!rechecked.isConcept) {
-      this.totalReleasedCount += 1;
-      this.log(`✅ 개념글 해제 완료 #${postNo}`);
-      return;
-    }
-
-    this.totalFailedCount += 1;
-    this.log(`❌ 개념글 해제 실패 #${postNo} - HTTP 200 / raw: ${releaseResult.rawSummary}`);
+    this.lastCandidateCount += inspectionResult.candidateCount;
+    this.totalDetectedCount += inspectionResult.candidateCount;
+    this.totalReleasedCount += inspectionResult.releasedCount;
+    this.totalFailedCount += inspectionResult.failedCount;
+    this.totalUnclearCount += inspectionResult.unclearCount;
   }
 
   evaluateAutoCutState(totalIncrease) {
@@ -419,36 +308,18 @@ class Scheduler {
     );
   }
 
-  async ensureRecommendCutApplied(state) {
-    const targetRecommendCut = state === AUTO_CUT_STATE.DEFENDING
-      ? DEFENDING_RECOMMEND_CUT
-      : NORMAL_RECOMMEND_CUT;
-
-    if (this.lastAppliedRecommendCut === targetRecommendCut && this.lastRecommendCutApplySucceeded) {
-      return;
-    }
-
-    let updateResult;
+  async syncRecommendCutCoordinator() {
     try {
-      updateResult = await updateRecommendCut(this.config, targetRecommendCut);
+      const coordinatorStatus = await syncConceptMonitorRecommendCutState(this.config, {
+        isRunning: this.isRunning,
+        autoCutEnabled: this.config.autoCutEnabled,
+        autoCutState: this.autoCutState,
+      });
+      this.applyRecommendCutCoordinatorStatus(coordinatorStatus);
     } catch (error) {
       this.lastRecommendCutApplySucceeded = false;
-      this.log(`❌ 개념컷 ${targetRecommendCut} ${state === AUTO_CUT_STATE.DEFENDING ? '적용' : '복귀'} 실패 - ${error.message}`);
-      return;
+      this.log(`❌ 공용 개념컷 상태 동기화 실패 - ${error.message}`);
     }
-
-    if (updateResult.success) {
-      this.lastAppliedRecommendCut = targetRecommendCut;
-      this.lastRecommendCutApplySucceeded = true;
-      this.lastCutChangedAt = new Date().toISOString();
-      this.log(state === AUTO_CUT_STATE.DEFENDING
-        ? `🛡️ 개념컷 ${targetRecommendCut} 적용 완료`
-        : `✅ 개념컷 ${targetRecommendCut} 복귀 완료`);
-      return;
-    }
-
-    this.lastRecommendCutApplySucceeded = false;
-    this.log(`❌ 개념컷 ${targetRecommendCut} ${state === AUTO_CUT_STATE.DEFENDING ? '적용' : '복귀'} 실패 - HTTP ${updateResult.status} / raw: ${updateResult.rawSummary}`);
   }
 
   getLoopIntervalMs() {
@@ -483,28 +354,6 @@ class Scheduler {
     if (message) {
       this.log(message);
     }
-  }
-
-  async skipIfAlreadyReleasedBySomeoneElse(postNo, contextMessage = '') {
-    try {
-      await delayWhileRunning(this, FALLBACK_RECHECK_DELAY_MS);
-      const latestHtml = await fetchConceptPostViewHTML(this.config, postNo);
-      const latestMetrics = extractConceptPostMetrics(latestHtml, {
-        postNoHint: postNo,
-      });
-
-      if (latestMetrics.success && !latestMetrics.isConcept) {
-        const suffix = contextMessage ? ` (${contextMessage})` : '';
-        this.log(`ℹ️ #${postNo} 이미 개념글 아님 - 수동 해제로 보고 다음 글로 진행${suffix}`);
-        return true;
-      }
-    } catch (error) {
-      if (isBlockSignalMessage(error.message)) {
-        throw error;
-      }
-    }
-
-    return false;
   }
 
   log(message) {
@@ -596,6 +445,7 @@ class Scheduler {
         autoCutReleaseRecommendThreshold: Math.max(0, Number(schedulerState.config?.autoCutReleaseRecommendThreshold) || DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD),
         autoCutReleaseConsecutiveCount: Math.max(1, Number(schedulerState.config?.autoCutReleaseConsecutiveCount) || DEFAULT_AUTO_CUT_RELEASE_CONSECUTIVE_COUNT),
       };
+      this.applyRecommendCutCoordinatorStatus(getConceptRecommendCutCoordinatorStatus());
     } catch (error) {
       console.error('[ConceptMonitorScheduler] 상태 복원 실패:', error.message);
     }
@@ -624,6 +474,7 @@ class Scheduler {
   }
 
   getStatus() {
+    const coordinatorStatus = getConceptRecommendCutCoordinatorStatus();
     return {
       isRunning: this.isRunning,
       currentPostNo: this.currentPostNo,
@@ -642,13 +493,24 @@ class Scheduler {
       autoCutReleaseHitCount: this.autoCutReleaseHitCount,
       lastRecommendDelta: this.lastRecommendDelta,
       lastComparedPostCount: this.lastComparedPostCount,
-      lastCutChangedAt: this.lastCutChangedAt,
-      lastAppliedRecommendCut: this.lastAppliedRecommendCut,
-      lastRecommendCutApplySucceeded: this.lastRecommendCutApplySucceeded,
+      lastCutChangedAt: coordinatorStatus.lastCutChangedAt || this.lastCutChangedAt,
+      lastAppliedRecommendCut: coordinatorStatus.lastAppliedRecommendCut ?? this.lastAppliedRecommendCut,
+      lastRecommendCutApplySucceeded: coordinatorStatus.lastRecommendCutApplySucceeded ?? this.lastRecommendCutApplySucceeded,
+      sharedRecommendCutStatus: coordinatorStatus,
       blockedUntilTs: this.blockedUntilTs,
       logs: this.logs.slice(0, 20),
       config: this.config,
     };
+  }
+
+  applyRecommendCutCoordinatorStatus(status) {
+    if (!status) {
+      return;
+    }
+
+    this.lastAppliedRecommendCut = status.lastAppliedRecommendCut ?? this.lastAppliedRecommendCut;
+    this.lastRecommendCutApplySucceeded = status.lastRecommendCutApplySucceeded !== false;
+    this.lastCutChangedAt = status.lastCutChangedAt || '';
   }
 }
 

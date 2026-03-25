@@ -1,4 +1,13 @@
+const PAGE_END_LINK_REGEX = /<a[^>]*(?:class="[^"]*\bpage_end\b[^"]*"[^>]*href="([^"]+)"|href="([^"]+)"[^>]*class="[^"]*\bpage_end\b[^"]*")/i;
+const PAGE_ANCHOR_REGEX = /<a[^>]*href="([^"]*?[?&](?:p|page)=\d+[^"]*)"[^>]*>\s*(\d+)\s*<\/a>/gi;
+const CURRENT_PAGE_REGEX = /<(?:em|strong|b|span)[^>]*>\s*1\s*<\/(?:em|strong|b|span)>/i;
+const PAGING_BOX_REGEX = /<div[^>]*class="[^"]*(?:\bbottom_paging_box\b[^"]*\biconpaging\b|\biconpaging\b[^"]*\bbottom_paging_box\b)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
+
 function parseConceptListPosts(html, limit = 20) {
+  return parseConceptListPagePosts(html).slice(0, Math.max(0, Number(limit) || 0));
+}
+
+function parseConceptListPagePosts(html) {
   const results = [];
   const seen = new Set();
   const rowPattern = /<tr[^>]*class="[^"]*ub-content[^"]*"[^>]*>([\s\S]*?)<\/tr>/ig;
@@ -21,11 +30,8 @@ function parseConceptListPosts(html, limit = 20) {
       no: postNo,
       currentHead,
       subject: extractSubject(rowHtml),
+      rowHtml,
     });
-
-    if (results.length >= limit) {
-      break;
-    }
   }
 
   return results;
@@ -64,6 +70,61 @@ function parseBoardRecommendSnapshot(html) {
   }
 
   return results;
+}
+
+function parseConceptListDetectedMaxPage(html, fallbackMaxPage = 1) {
+  const normalizedFallback = Math.max(1, Number(fallbackMaxPage) || 1);
+  const rawHtml = String(html || '');
+  const decodedHtml = decodeHtmlAttribute(rawHtml);
+  const pagingHtmlCandidates = extractPagingHtmlCandidates(decodedHtml);
+
+  for (const pagingHtml of pagingHtmlCandidates) {
+    const pageEndMatch = pagingHtml.match(PAGE_END_LINK_REGEX);
+    if (!pageEndMatch) {
+      continue;
+    }
+
+    const pageFromEndLink = extractPageNumberFromHref(pageEndMatch[1] || pageEndMatch[2]);
+    if (pageFromEndLink > 0) {
+      return {
+        detectedMaxPage: pageFromEndLink,
+        source: 'page_end',
+      };
+    }
+  }
+
+  let maxNumericPage = 0;
+  for (const pagingHtml of pagingHtmlCandidates) {
+    PAGE_ANCHOR_REGEX.lastIndex = 0;
+    let pageMatch = null;
+    while ((pageMatch = PAGE_ANCHOR_REGEX.exec(pagingHtml)) !== null) {
+      const pageNumber = extractPageNumberFromHref(pageMatch[1]) || Number(pageMatch[2]) || 0;
+      if (pageNumber > maxNumericPage) {
+        maxNumericPage = pageNumber;
+      }
+    }
+  }
+
+  if (maxNumericPage > 0) {
+    return {
+      detectedMaxPage: maxNumericPage,
+      source: 'numeric_anchor',
+    };
+  }
+
+  for (const pagingHtml of pagingHtmlCandidates) {
+    if (pagingHtml && CURRENT_PAGE_REGEX.test(pagingHtml)) {
+      return {
+        detectedMaxPage: 1,
+        source: 'single_page',
+      };
+    }
+  }
+
+  return {
+    detectedMaxPage: normalizedFallback,
+    source: 'fallback',
+  };
 }
 
 function extractConceptPostMetrics(html, options = {}) {
@@ -257,6 +318,39 @@ function decodeHtml(text) {
     .replace(/&gt;/gi, '>');
 }
 
+function decodeHtmlAttribute(value) {
+  return decodeHtml(String(value || '')).trim();
+}
+
+function extractPagingHtmlCandidates(decodedHtml) {
+  const candidates = [];
+  const html = String(decodedHtml || '');
+  let match = null;
+
+  PAGING_BOX_REGEX.lastIndex = 0;
+  while ((match = PAGING_BOX_REGEX.exec(html)) !== null) {
+    candidates.push(match[1] || '');
+  }
+
+  return candidates;
+}
+
+function extractPageNumberFromHref(rawHref) {
+  const href = decodeHtmlAttribute(rawHref);
+  if (!href) {
+    return 0;
+  }
+
+  try {
+    const parsed = new URL(href, 'https://gall.dcinside.com');
+    const pageValue = parsed.searchParams.get('p') || parsed.searchParams.get('page') || '';
+    const pageNumber = Number.parseInt(pageValue, 10);
+    return Number.isFinite(pageNumber) && pageNumber > 0 ? pageNumber : 0;
+  } catch (_error) {
+    return 0;
+  }
+}
+
 function escapeRegExp(text) {
   return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -287,6 +381,9 @@ function hasText(text, pattern) {
 
 export {
   extractConceptPostMetrics,
+  extractPageNumberFromHref,
   parseBoardRecommendSnapshot,
+  parseConceptListDetectedMaxPage,
+  parseConceptListPagePosts,
   parseConceptListPosts,
 };

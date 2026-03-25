@@ -60,16 +60,22 @@ async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
 }
 
 async function fetchConceptListHTML(config = {}) {
-  return withDcRequestLease({ feature: 'conceptMonitor', kind: 'fetchConceptListHTML' }, async () => {
+  return fetchConceptListPageHTML(config, 1, 'conceptMonitor');
+}
+
+async function fetchConceptListPageHTML(config = {}, page = 1, leaseFeature = 'conceptPatrol') {
+  return withDcRequestLease({ feature: leaseFeature, kind: 'fetchConceptListHTML' }, async () => {
     const resolved = resolveConfig(config);
+    const normalizedPage = Math.max(1, Number(page) || 1);
     const url = new URL('/mgallery/board/lists/', resolved.baseUrl);
     url.searchParams.set('id', resolved.galleryId);
     url.searchParams.set('exception_mode', 'recommend');
+    url.searchParams.set('page', String(normalizedPage));
 
     const response = await dcFetchWithRetry(url.toString());
     const html = await response.text();
     assertValidHtmlResponse(response, html, {
-      label: '개념글 목록 페이지',
+      label: `개념글 목록 페이지 ${normalizedPage}`,
       shapeCheck: looksLikeConceptListHtml,
     });
 
@@ -94,8 +100,8 @@ async function fetchBoardListHTML(config = {}) {
   });
 }
 
-async function fetchConceptPostViewHTML(config = {}, postNo) {
-  return withDcRequestLease({ feature: 'conceptMonitor', kind: 'fetchConceptPostViewHTML' }, async () => {
+async function fetchConceptPostViewHTML(config = {}, postNo, leaseFeature = 'conceptMonitor') {
+  return withDcRequestLease({ feature: leaseFeature, kind: 'fetchConceptPostViewHTML' }, async () => {
     const resolved = resolveConfig(config);
     const url = buildPostViewUrl(resolved, postNo);
     const response = await dcFetchWithRetry(url);
@@ -109,8 +115,8 @@ async function fetchConceptPostViewHTML(config = {}, postNo) {
   });
 }
 
-async function releaseConceptPost(config = {}, postNo) {
-  return withDcRequestLease({ feature: 'conceptMonitor', kind: 'releaseConceptPost' }, async () => {
+async function releaseConceptPost(config = {}, postNo, leaseFeature = 'conceptMonitor') {
+  return withDcRequestLease({ feature: leaseFeature, kind: 'releaseConceptPost' }, async () => {
     const resolved = resolveConfig(config);
     const ciToken = await getCiToken(resolved.baseUrl);
 
@@ -156,8 +162,8 @@ async function releaseConceptPost(config = {}, postNo) {
   });
 }
 
-async function updateRecommendCut(config = {}, recommendCount) {
-  return withDcRequestLease({ feature: 'conceptMonitor', kind: 'updateRecommendCut' }, async () => {
+async function updateRecommendCut(config = {}, recommendCount, leaseFeature = 'conceptRecommendCut') {
+  return withDcRequestLease({ feature: leaseFeature, kind: 'updateRecommendCut' }, async () => {
     const resolved = resolveConfig(config);
     const ciToken = await getCiToken(resolved.baseUrl);
 
@@ -325,6 +331,7 @@ export {
   delay,
   fetchBoardListHTML,
   fetchConceptListHTML,
+  fetchConceptListPageHTML,
   fetchConceptPostViewHTML,
   releaseConceptPost,
   resolveConfig,
