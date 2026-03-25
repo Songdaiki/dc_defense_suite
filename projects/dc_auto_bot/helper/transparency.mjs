@@ -54,11 +54,11 @@ function renderTransparencyListPage({
         <div class="stats-bar">
           <span class="stats-total">총 <strong>${escapeHtml(String(total))}</strong>건</span>
           <div class="stats-counts">
-            <span class="stat-item"><span class="stat-dot stat-dot-allow"></span> 삭제 승인 ${resolvedStats.allow}</span>
-            <span class="stat-item"><span class="stat-dot stat-dot-deny"></span> 삭제 반려 ${resolvedStats.deny}</span>
-            <span class="stat-item"><span class="stat-dot stat-dot-review"></span> 검토 필요 ${resolvedStats.review}</span>
-            <span class="stat-item"><span class="stat-dot stat-dot-filtered"></span> 처리 불가 ${resolvedStats.filtered}</span>
-            <span class="stat-item"><span class="stat-dot stat-dot-forced"></span> 강제 승인 ${resolvedStats.forced}</span>
+            <span class="stat-item"><span class="stat-dot stat-dot-allow"></span><span class="stat-text">삭제 승인</span><span class="stat-value">${resolvedStats.allow}</span></span>
+            <span class="stat-item"><span class="stat-dot stat-dot-deny"></span><span class="stat-text">삭제 반려</span><span class="stat-value">${resolvedStats.deny}</span></span>
+            <span class="stat-item"><span class="stat-dot stat-dot-review"></span><span class="stat-text">검토 필요</span><span class="stat-value">${resolvedStats.review}</span></span>
+            <span class="stat-item"><span class="stat-dot stat-dot-filtered"></span><span class="stat-text">처리 불가</span><span class="stat-value">${resolvedStats.filtered}</span></span>
+            <span class="stat-item"><span class="stat-dot stat-dot-forced"></span><span class="stat-text">강제 승인</span><span class="stat-value">${resolvedStats.forced}</span></span>
           </div>
         </div>
 
@@ -73,10 +73,40 @@ function renderTransparencyListPage({
       </div>
 
       ${renderSidebar(total, resolvedStats, reporterRanking)}
+
+      <div id="ranking-modal" class="ranking-modal">
+        <div class="ranking-modal-overlay"></div>
+        <div class="ranking-modal-content">
+          <div class="ranking-modal-header">
+            <span>특갤봇 랭킹</span>
+            <button class="ranking-modal-close">&times;</button>
+          </div>
+          <div class="ranking-modal-body">
+            ${renderReporterRanking(reporterRanking)}
+          </div>
+        </div>
+      </div>
+
       <script>
         setTimeout(() => {
           window.location.reload();
         }, ${TRANSPARENCY_AUTO_REFRESH_MS});
+
+        (function() {
+          var modal = document.getElementById('ranking-modal');
+          var toggle = document.getElementById('ranking-toggle');
+          if (!modal || !toggle) return;
+          toggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            modal.classList.add('open');
+          });
+          modal.querySelector('.ranking-modal-overlay').addEventListener('click', function() {
+            modal.classList.remove('open');
+          });
+          modal.querySelector('.ranking-modal-close').addEventListener('click', function() {
+            modal.classList.remove('open');
+          });
+        })();
       </script>
     `,
     healthStatus,
@@ -397,7 +427,8 @@ function renderPageLayout(title, bodyHtml, healthStatus = { isHealthy: false, la
     <div class="top-nav-inner">
       <span class="top-nav-logo">특이점이 온다 <span>운영 내역</span></span>
       <div class="top-nav-links">
-        <a href="/transparency">운영 내역</a>
+        <a href="/transparency" class="nav-link-history">운영 내역</a>
+        <a href="#" id="ranking-toggle" class="ranking-toggle">특갤랭킹</a>
         <span class="server-status ${healthStatus.isHealthy ? 'healthy' : 'unhealthy'}">${escapeHtml(healthStatus.label)} ${escapeHtml(healthStatus.emoji)}</span>
       </div>
     </div>
