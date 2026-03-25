@@ -75,6 +75,10 @@ function extractActionableManagementRows(html, options = {}) {
       continue;
     }
 
+    if (!row.isActive) {
+      continue;
+    }
+
     if (getHanScriptCharCount(row.title || '') < MIN_HAN_CHAR_COUNT) {
       continue;
     }
