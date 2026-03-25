@@ -853,6 +853,12 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
     return '순회 페이지 수는 개념글순회를 정지한 뒤 변경하세요.';
   }
 
+  if (feature === 'ip'
+    && config.includeUidTargetsOnManualStart !== undefined
+    && Boolean(config.includeUidTargetsOnManualStart) !== Boolean(scheduler.config.includeUidTargetsOnManualStart)) {
+    return '반고닉/고닉 포함 설정은 IP 차단을 정지한 뒤 변경하세요.';
+  }
+
   return '';
 }
 
@@ -1170,6 +1176,7 @@ function resetIpSchedulerState(message) {
   scheduler.currentRunId = '';
   scheduler.currentSource = 'manual';
   scheduler.includeExistingTargetsMode = false;
+  scheduler.includeUidTargetsMode = false;
   scheduler.activeBans = [];
   scheduler.isReleaseRunning = false;
   scheduler.runtimeDeleteEnabled = false;

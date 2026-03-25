@@ -32,6 +32,7 @@ class Scheduler {
     this.activeBans = [];
     this.currentSource = 'manual';
     this.includeExistingTargetsMode = false;
+    this.includeUidTargetsMode = false;
     this.runtimeDeleteEnabled = false;
     this.lastDeleteLimitExceededAt = '';
     this.lastDeleteLimitMessage = '';
@@ -55,6 +56,7 @@ class Scheduler {
       delChk: DEFAULT_CONFIG.delChk,
       avoidTypeChk: DEFAULT_CONFIG.avoidTypeChk,
       includeExistingTargetsOnStart: false,
+      includeUidTargetsOnManualStart: false,
     };
   }
 
@@ -66,6 +68,7 @@ class Scheduler {
 
     const normalizedOptions = normalizeStartOptions(options);
     const includeExistingTargets = shouldIncludeExistingTargetsOnManualStart(this.config, normalizedOptions);
+    const includeUidTargets = shouldIncludeUidTargetsOnManualStart(this.config, normalizedOptions);
     const cutoffPostNo = normalizedOptions.hasExplicitCutoff
       ? normalizedOptions.cutoffPostNo
       : includeExistingTargets
@@ -83,6 +86,7 @@ class Scheduler {
     this.currentRunId = createRunId();
     this.currentSource = normalizedOptions.source;
     this.includeExistingTargetsMode = includeExistingTargets;
+    this.includeUidTargetsMode = includeUidTargets;
     this.runtimeDeleteEnabled = normalizedOptions.delChk;
     this.lastDeleteLimitExceededAt = '';
     this.lastDeleteLimitMessage = '';
@@ -90,6 +94,9 @@ class Scheduler {
       this.log('🧹 수동 도배기탭 삭제기 모드 시작 - 시작 전에 이미 올라와 있던 도배기탭 글도 같이 처리합니다.');
     } else {
       this.log(`🧷 ${getCutoffSourceLabel(normalizedOptions.source)} cutoff 저장 (#${cutoffPostNo})`);
+    }
+    if (includeUidTargets) {
+      this.log('🪪 수동 도배기 전체 처리 모드 시작 - 유동뿐 아니라 식별코드(uid) 글도 같이 차단/삭제합니다.');
     }
     this.log(`🗑️ 게시물 삭제 요청 설정: del_chk=${this.runtimeDeleteEnabled ? '1' : '0'}`);
     this.log(`🟢 자동 차단 시작! (runId=${this.currentRunId})`);
@@ -102,6 +109,7 @@ class Scheduler {
     this.currentPage = 0;
     this.currentSource = 'manual';
     this.includeExistingTargetsMode = false;
+    this.includeUidTargetsMode = false;
     this.runtimeDeleteEnabled = Boolean(this.config.delChk);
     this.lastDeleteLimitExceededAt = '';
     this.lastDeleteLimitMessage = '';
@@ -257,13 +265,18 @@ class Scheduler {
 
           this.log(`📄 대상 탭 ${page}페이지 로딩...`);
           const html = await fetchTargetListHTML(this.config, page);
-          const posts = parseTargetPosts(html, this.config.headtextName || '');
+          const posts = parseTargetPosts(
+            html,
+            this.config.headtextName || '',
+            { includeUidTargets: this.includeUidTargetsMode },
+          );
           const uniquePosts = dedupeBanCandidates(posts);
           const cutoffPosts = uniquePosts.filter((post) => isPostAfterCutoff(post, this.config.cutoffPostNo));
           const candidates = cutoffPosts.filter((post) => !this.hasActiveBanForPost(post));
+          const targetLabel = this.includeUidTargetsMode ? '대상' : '유동';
 
           this.log(
-            `📄 ${page}페이지: 유동 ${posts.length}개, 고유 후보 ${uniquePosts.length}개, `
+            `📄 ${page}페이지: ${targetLabel} ${posts.length}개, 고유 후보 ${uniquePosts.length}개, `
             + `cutoff 이후 ${cutoffPosts.length}개, 신규 차단 후보 ${candidates.length}개`,
           );
 
@@ -680,6 +693,7 @@ class Scheduler {
           logs: this.logs.slice(0, 50),
           currentSource: this.currentSource,
           includeExistingTargetsMode: this.includeExistingTargetsMode,
+          includeUidTargetsMode: this.includeUidTargetsMode,
           runtimeDeleteEnabled: this.runtimeDeleteEnabled,
           lastDeleteLimitExceededAt: this.lastDeleteLimitExceededAt,
           lastDeleteLimitMessage: this.lastDeleteLimitMessage,
@@ -709,6 +723,7 @@ class Scheduler {
       this.logs = Array.isArray(schedulerState.logs) ? schedulerState.logs : [];
       this.currentSource = String(schedulerState.currentSource || 'manual').trim() || 'manual';
       this.includeExistingTargetsMode = Boolean(schedulerState.includeExistingTargetsMode);
+      this.includeUidTargetsMode = this.currentSource === 'manual' && Boolean(schedulerState.includeUidTargetsMode);
       this.runtimeDeleteEnabled = schedulerState.runtimeDeleteEnabled === undefined
         ? Boolean(schedulerState.config?.delChk)
         : Boolean(schedulerState.runtimeDeleteEnabled);
@@ -759,6 +774,7 @@ class Scheduler {
       currentRunId: this.currentRunId,
       currentSource: this.currentSource,
       includeExistingTargetsMode: this.includeExistingTargetsMode,
+      includeUidTargetsMode: this.includeUidTargetsMode,
       runtimeDeleteEnabled: this.runtimeDeleteEnabled,
       lastDeleteLimitExceededAt: this.lastDeleteLimitExceededAt,
       lastDeleteLimitMessage: this.lastDeleteLimitMessage,
@@ -806,6 +822,14 @@ function shouldIncludeExistingTargetsOnManualStart(config = {}, normalizedOption
   }
 
   return false;
+}
+
+function shouldIncludeUidTargetsOnManualStart(config = {}, normalizedOptions = {}) {
+  if (normalizedOptions.source !== 'manual') {
+    return false;
+  }
+
+  return Boolean(config.includeUidTargetsOnManualStart);
 }
 
 function getNormalizedPageRange(config = {}) {
@@ -966,6 +990,12 @@ function normalizeLegacyIpConfig(config = {}) {
   const legacyReasonText = String(config.avoidReasonText || '').trim();
   if (legacyReasonText === '도배' || legacyReasonText === '도배기') {
     config.avoidReasonText = DEFAULT_CONFIG.avoidReasonText;
+  }
+
+  if (config.includeUidTargetsOnManualStart === undefined) {
+    config.includeUidTargetsOnManualStart = false;
+  } else {
+    config.includeUidTargetsOnManualStart = Boolean(config.includeUidTargetsOnManualStart);
   }
 }
 

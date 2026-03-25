@@ -216,6 +216,7 @@ const FEATURE_DOM = {
     cycleDelayInput: document.getElementById('ipCycleDelay'),
     releaseScanMaxPagesInput: document.getElementById('ipReleaseScanMaxPages'),
     avoidHourInput: document.getElementById('ipAvoidHour'),
+    includeUidTargetsOnManualStartInput: document.getElementById('ipIncludeUidTargetsOnManualStart'),
     includeExistingTargetsOnStartInput: document.getElementById('ipIncludeExistingTargetsOnStart'),
     saveConfigBtn: document.getElementById('ipSaveConfigBtn'),
     releaseBtn: document.getElementById('ipReleaseBtn'),
@@ -1092,14 +1093,26 @@ function bindIpEvents() {
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
       releaseScanMaxPages: parseOptionalInt(dom.releaseScanMaxPagesInput.value, 40),
       avoidHour: String(Math.max(1, parseOptionalInt(dom.avoidHourInput.value, 6))),
+      includeUidTargetsOnManualStart: dom.includeUidTargetsOnManualStartInput.checked,
     };
 
     const response = await sendFeatureMessage('ip', { action: 'updateConfig', config });
-    if (response?.success) {
-      DIRTY_FEATURES.ip = false;
-      flashSaved(dom.saveConfigBtn);
-      updateIpUI(response.status);
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
     }
+
+    DIRTY_FEATURES.ip = false;
+    flashSaved(dom.saveConfigBtn);
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+      return;
+    }
+
+    updateIpUI(response.status);
   });
 
   dom.releaseBtn.addEventListener('click', async () => {
@@ -1684,6 +1697,7 @@ function updateIpUI(status) {
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
     [dom.releaseScanMaxPagesInput, status.config?.releaseScanMaxPages ?? 40],
     [dom.avoidHourInput, status.config?.avoidHour ?? '6'],
+    [dom.includeUidTargetsOnManualStartInput, status.config?.includeUidTargetsOnManualStart === true],
   ]);
   updateLogList(dom.logList, status.logs);
 }
@@ -1937,6 +1951,7 @@ function getFeatureConfigInputs(feature) {
       dom.cycleDelayInput,
       dom.releaseScanMaxPagesInput,
       dom.avoidHourInput,
+      dom.includeUidTargetsOnManualStartInput,
     ];
   }
 

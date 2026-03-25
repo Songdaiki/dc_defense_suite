@@ -1,4 +1,5 @@
-function parseTargetPosts(html, headtextName = '도배기') {
+function parseTargetPosts(html, headtextName = '도배기', options = {}) {
+  const includeUidTargets = Boolean(options.includeUidTargets);
   const results = [];
   const rowRegex = /<tr[^>]*class="ub-content[^"]*"[^>]*data-no="(\d+)"[^>]*>([\s\S]*?)<\/tr>/g;
   let match;
@@ -20,8 +21,14 @@ function parseTargetPosts(html, headtextName = '도배기') {
     }
 
     const writerTag = writerTagMatch[0];
-    const ip = extractAttribute(writerTag, 'data-ip');
-    if (!ip) {
+    const ip = decodeHtml(extractAttribute(writerTag, 'data-ip'));
+    const uid = decodeHtml(extractAttribute(writerTag, 'data-uid'));
+    const writerToken = ip || uid;
+    if (!writerToken) {
+      continue;
+    }
+
+    if (!ip && !includeUidTargets) {
       continue;
     }
 
@@ -37,10 +44,14 @@ function parseTargetPosts(html, headtextName = '도배기') {
       no: postNo,
       nick,
       ip,
+      uid,
       subject,
       currentHead,
-      writerKey: makeWriterKey(nick, ip),
-      writerDisplay: `${nick}(${ip})`,
+      isFluid: Boolean(ip),
+      hasUid: Boolean(uid),
+      writerToken,
+      writerKey: makeWriterKey(nick, writerToken),
+      writerDisplay: `${nick}(${writerToken})`,
     });
   }
 

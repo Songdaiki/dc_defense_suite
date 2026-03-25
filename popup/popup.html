@@ -748,7 +748,7 @@
         <div class="feature-header feature-ip">
           <div>
             <h2>IP차단/삭제</h2>
-            <p>도배기 탭 유동 게시물 자동 차단 / 삭제 / 수동 해제</p>
+            <p>도배기 탭 게시물 자동 차단 / 삭제 / 수동 해제</p>
           </div>
           <div class="toggle-section">
             <label class="toggle-switch">
@@ -823,6 +823,10 @@
             <div class="setting-item">
               <label for="ipAvoidHour">차단 시간 (시)</label>
               <input type="number" id="ipAvoidHour" min="1" max="720" value="6">
+            </div>
+            <div class="setting-item setting-item-checkbox">
+              <label for="ipIncludeUidTargetsOnManualStart">수동 시 반고닉/고닉도 같이 처리</label>
+              <input type="checkbox" id="ipIncludeUidTargetsOnManualStart">
             </div>
             <button id="ipSaveConfigBtn" class="btn btn-primary">설정 저장</button>
           </div>
