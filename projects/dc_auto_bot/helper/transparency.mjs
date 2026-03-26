@@ -479,6 +479,7 @@ function countDecisions(records) {
     }
     if (status === 'failed') {
       if (isLikelyAlreadyProcessedPost(record)) {
+        allow += 1;
         continue;
       }
       if (isProcessingExcluded(record)) {

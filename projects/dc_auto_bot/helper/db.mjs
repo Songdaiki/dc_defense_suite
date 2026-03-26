@@ -236,8 +236,13 @@ class ModerationRecordStore {
 
       existing.totalReports += 1;
 
-      if (String(record?.status || '').trim().toLowerCase() === 'completed'
-        && String(record?.decision || '').trim().toLowerCase() === 'allow') {
+      if (
+        (
+          String(record?.status || '').trim().toLowerCase() === 'completed'
+          && String(record?.decision || '').trim().toLowerCase() === 'allow'
+        )
+        || isLikelyAlreadyProcessedPost(record)
+      ) {
         existing.allowCount += 1;
       }
 
@@ -478,6 +483,7 @@ function summarizeDecisionCounts(records) {
     }
     if (status === 'failed') {
       if (isLikelyAlreadyProcessedPost(record)) {
+        allow += 1;
         continue;
       }
       if (isProcessingExcluded(record)) {
