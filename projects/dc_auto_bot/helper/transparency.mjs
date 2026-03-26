@@ -400,6 +400,7 @@ function renderTableRow(record) {
   const title = getDisplayTitle(record);
   const detailHref = `/transparency/${encodeURIComponent(record.id)}`;
   const policyText = formatPolicyIds(record.policyIds);
+  const listDateValue = getRecordListDateValue(record);
 
   return `
     <tr>
@@ -408,7 +409,7 @@ function renderTableRow(record) {
       <td class="cell-decision"><span class="badge badge-${escapeAttribute(decision.className)}">${escapeHtml(decision.label)}</span></td>
       <td class="cell-policy">${escapeHtml(policyText)}</td>
       <td class="cell-reason">${escapeHtml(truncateText(record.reportReason || '-', 12))}</td>
-      <td class="cell-date">${escapeHtml(formatShortDate(record.createdAt))}</td>
+      <td class="cell-date">${escapeHtml(formatShortDate(listDateValue))}</td>
     </tr>
   `;
 }
@@ -562,6 +563,10 @@ function formatDateTime(value) {
   } catch {
     return String(value);
   }
+}
+
+function getRecordListDateValue(record) {
+  return String(record?.updatedAt || record?.createdAt || '').trim();
 }
 
 function formatShortDate(value) {
