@@ -457,7 +457,7 @@ function bindConceptMonitorEvents() {
 
   dom.saveConfigBtn.addEventListener('click', async () => {
     const nextTestMode = dom.testModeInput.checked;
-    if (latestConceptMonitorStatus?.config?.testMode !== false
+    if (latestConceptMonitorStatus?.config?.testMode === true
       && nextTestMode === false
       && !confirm('테스트 모드를 끄면 실제 개념글 해제를 실행할 수 있습니다. 저장하시겠습니까?')) {
       return;
@@ -564,7 +564,7 @@ function bindConceptPatrolEvents() {
 
   dom.saveConfigBtn.addEventListener('click', async () => {
     const nextTestMode = dom.testModeInput.checked;
-    if (latestConceptPatrolStatus?.config?.testMode !== false
+    if (latestConceptPatrolStatus?.config?.testMode === true
       && nextTestMode === false
       && !confirm('테스트 모드를 끄면 실제 개념글 해제를 실행할 수 있습니다. 저장하시겠습니까?')) {
       return;
@@ -1483,7 +1483,7 @@ function updateConceptMonitorUI(status) {
     [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 30000],
     [dom.snapshotPostLimitInput, status.config?.snapshotPostLimit ?? 5],
     [dom.fluidRatioThresholdInput, status.config?.fluidRatioThresholdPercent ?? 90],
-    [dom.testModeInput, status.config?.testMode !== false],
+    [dom.testModeInput, status.config?.testMode === true],
     [dom.autoCutEnabledInput, status.config?.autoCutEnabled === true],
     [dom.autoCutPollIntervalMsInput, status.config?.autoCutPollIntervalMs ?? 30000],
     [dom.autoCutAttackThresholdInput, status.config?.autoCutAttackRecommendThreshold ?? 200],
@@ -1531,7 +1531,7 @@ function updateConceptPatrolUI(status) {
     [dom.fluidRatioThresholdInput, status.config?.fluidRatioThresholdPercent ?? 90],
     [dom.candidateThresholdInput, status.config?.patrolDefendingCandidateThreshold ?? 2],
     [dom.holdMsInput, status.config?.patrolDefendingHoldMs ?? 300000],
-    [dom.testModeInput, status.config?.testMode !== false],
+    [dom.testModeInput, status.config?.testMode === true],
   ]);
   updateLogList(dom.logList, status.logs);
 }

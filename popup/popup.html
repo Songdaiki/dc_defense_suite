@@ -33,7 +33,7 @@
         <div class="feature-header feature-concept-monitor">
           <div>
             <h2>개념글 방어</h2>
-            <p>기본은 테스트 모드이며, 설정된 최근 개념글 snapshot 중 일반 머릿말만 점검해 해제 후보를 식별합니다</p>
+            <p>기본은 실행 모드이며, 설정된 최근 개념글 snapshot 중 일반 머릿말만 점검해 해제 후보를 식별합니다</p>
           </div>
           <div class="toggle-section">
             <label class="toggle-switch">
@@ -119,8 +119,8 @@
               <input type="number" id="conceptMonitorFluidRatioThreshold" min="0" max="100" value="90">
             </div>
             <div class="setting-item">
-              <label for="conceptMonitorTestMode">해제시 실제모드</label>
-              <input type="checkbox" id="conceptMonitorTestMode" checked>
+              <label for="conceptMonitorTestMode">테스트 모드</label>
+              <input type="checkbox" id="conceptMonitorTestMode">
             </div>
             <div class="subfeature-divider">
               <span>개념컷 자동조절</span>
@@ -282,8 +282,8 @@
               <input type="number" id="conceptPatrolHoldMs" min="1000" max="3600000" step="1000" value="300000">
             </div>
             <div class="setting-item">
-              <label for="conceptPatrolTestMode">실제 해제 실행</label>
-              <input type="checkbox" id="conceptPatrolTestMode" checked>
+              <label for="conceptPatrolTestMode">테스트 모드</label>
+              <input type="checkbox" id="conceptPatrolTestMode">
             </div>
             <button id="conceptPatrolSaveConfigBtn" class="btn btn-primary">설정 저장</button>
           </div>

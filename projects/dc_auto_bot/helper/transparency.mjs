@@ -429,7 +429,7 @@ function renderPageLayout(title, bodyHtml, healthStatus = { isHealthy: false, la
       <span class="top-nav-logo">특이점이 온다 <span>운영 내역</span></span>
       <div class="top-nav-links">
         <a href="/transparency" class="nav-link-history">운영 내역</a>
-        <a href="#" id="ranking-toggle" class="ranking-toggle">특갤랭킹</a>
+        <a href="#" id="ranking-toggle" class="ranking-toggle">🏆 특갤랭킹</a>
         <span class="server-status ${healthStatus.isHealthy ? 'healthy' : 'unhealthy'}">${escapeHtml(healthStatus.label)} ${escapeHtml(healthStatus.emoji)}</span>
       </div>
     </div>
