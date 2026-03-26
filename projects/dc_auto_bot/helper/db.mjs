@@ -457,6 +457,9 @@ function collapseDuplicatePendingForList(records) {
 }
 
 function getRecordUpdatedAt(record) {
+  if (isTransientCleanupFailed(record)) {
+    return normalizeIsoDate(record?.createdAt) || normalizeIsoDate(record?.updatedAt);
+  }
   return normalizeIsoDate(record?.updatedAt) || normalizeIsoDate(record?.createdAt);
 }
 
@@ -640,8 +643,8 @@ function safeParseJson(value) {
 
 function sortRecordsDescending(records) {
   records.sort((left, right) => {
-    const leftTime = Date.parse(left.updatedAt || left.createdAt || 0);
-    const rightTime = Date.parse(right.updatedAt || right.createdAt || 0);
+    const leftTime = Date.parse(getRecordUpdatedAt(left) || 0);
+    const rightTime = Date.parse(getRecordUpdatedAt(right) || 0);
     if (rightTime !== leftTime) {
       return rightTime - leftTime;
     }

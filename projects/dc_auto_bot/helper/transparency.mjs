@@ -566,6 +566,9 @@ function formatDateTime(value) {
 }
 
 function getRecordListDateValue(record) {
+  if (isTransientCleanupFailed(record)) {
+    return String(record?.createdAt || record?.updatedAt || '').trim();
+  }
   return String(record?.updatedAt || record?.createdAt || '').trim();
 }
 
@@ -675,6 +678,17 @@ function isProcessingExcluded(record) {
 function isInternalErrorFailed(record) {
   const rawReason = String(record?.reason || '').trim();
   return !isKnownFailedReason(rawReason);
+}
+
+function isTransientCleanupFailed(record) {
+  const status = String(record?.status || '').trim().toLowerCase();
+  if (status !== 'failed') {
+    return false;
+  }
+
+  const rawReason = String(record?.reason || '').trim();
+  return rawReason === '자동 처리 중단: 확장 재시작/중지/abort'
+    || rawReason === '자동 처리 중단: stale pending 정리';
 }
 
 /**
