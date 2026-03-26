@@ -805,7 +805,15 @@ lookup/cleanup helper route가 실패했다고:
    - 그 pending row는 목록에서 숨긴다.
 2. 같은 key에 `pending`만 여러 개 있으면
    - `updatedAt` 최신 `pending` 1개만 목록에 남긴다.
-3. `manual_test`는 dedupe 대상에서 제외한다.
+3. 같은 key에 **정상 `completed` row가 있고**, 다른 row가
+   - `자동 처리 중단: 확장 재시작/중지/abort`
+   - `자동 처리 중단: stale pending 정리`
+   같은 **정리용 failed row**라면
+   - 그 정리용 failed row는 목록에서 숨긴다.
+4. stale pending을 failed로 정리할 때도
+   - `updatedAt`을 현재 시각으로 끌어올리지 않고
+   - 원래 stale 시각을 유지한다.
+5. `manual_test`는 dedupe 대상에서 제외한다.
 
 즉 결과적으로 목록에서는:
 

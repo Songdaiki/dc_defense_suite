@@ -163,7 +163,6 @@ class ModerationRecordStore {
     }
 
     let updatedCount = 0;
-    const nextUpdatedAt = new Date().toISOString();
     this.records = this.records.map((record) => {
       if (normalizeOptionalString(record?.source) !== source) {
         return record;
@@ -182,7 +181,7 @@ class ModerationRecordStore {
         ...record,
         status: 'failed',
         reason,
-        updatedAt: nextUpdatedAt,
+        updatedAt: recordUpdatedAt,
       });
     });
 
@@ -395,6 +394,7 @@ function collapseDuplicatePendingForList(records) {
     const meta = groupMetaMap.get(key) || {
       latestPendingId: '',
       latestPendingUpdatedAt: '',
+      latestCompletedUpdatedAt: '',
       latestTerminalUpdatedAt: '',
     };
     const status = normalizeStatus(record?.status);
@@ -412,6 +412,9 @@ function collapseDuplicatePendingForList(records) {
       if (compareRecordTimestamp(terminalUpdatedAt, meta.latestTerminalUpdatedAt) > 0) {
         meta.latestTerminalUpdatedAt = terminalUpdatedAt;
       }
+      if (status === 'completed' && compareRecordTimestamp(terminalUpdatedAt, meta.latestCompletedUpdatedAt) > 0) {
+        meta.latestCompletedUpdatedAt = terminalUpdatedAt;
+      }
     }
 
     groupMetaMap.set(key, meta);
@@ -428,6 +431,14 @@ function collapseDuplicatePendingForList(records) {
     }
 
     const status = normalizeStatus(record?.status);
+    if (status === 'failed' && isTransientCleanupFailed(record)) {
+      const meta = groupMetaMap.get(key);
+      if (!meta) {
+        return true;
+      }
+      return !meta.latestCompletedUpdatedAt;
+    }
+
     if (status !== 'pending') {
       return true;
     }
@@ -522,6 +533,17 @@ function isProcessingExcluded(record) {
 function isInternalErrorFailed(record) {
   const rawReason = String(record?.reason || '').trim();
   return !isKnownFailedReason(rawReason);
+}
+
+function isTransientCleanupFailed(record) {
+  const status = String(record?.status || '').trim().toLowerCase();
+  if (status !== 'failed') {
+    return false;
+  }
+
+  const rawReason = String(record?.reason || '').trim();
+  return rawReason === '자동 처리 중단: 확장 재시작/중지/abort'
+    || rawReason === '자동 처리 중단: stale pending 정리';
 }
 
 function isKnownFailedReason(rawReason) {
