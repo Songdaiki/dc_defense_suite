@@ -690,6 +690,144 @@ async function callCliHelperRecord(config = {}, record, signal) {
   }
 }
 
+async function findLatestPendingTransparencyRecord(
+  config = {},
+  source = 'auto_report',
+  targetUrl = '',
+  targetPostNo = '',
+  staleBeforeIso = '',
+  signal,
+) {
+  const resolved = resolveConfig(config);
+  const endpointResult = buildCliHelperUrl(resolved.cliHelperEndpoint, '/api/moderation-records/pending-latest');
+  if (!endpointResult.success) {
+    return {
+      success: false,
+      message: endpointResult.message,
+      record: null,
+    };
+  }
+
+  const url = new URL(endpointResult.url);
+  url.searchParams.set('source', String(source || 'auto_report').trim() || 'auto_report');
+  if (String(targetUrl || '').trim()) {
+    url.searchParams.set('targetUrl', String(targetUrl || '').trim());
+  }
+  if (String(targetPostNo || '').trim()) {
+    url.searchParams.set('targetPostNo', String(targetPostNo || '').trim());
+  }
+  if (String(staleBeforeIso || '').trim()) {
+    url.searchParams.set('staleBeforeIso', String(staleBeforeIso || '').trim());
+  }
+
+  try {
+    const response = await dcFetchWithRetry(url.toString(), {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+      signal,
+    }, 1);
+
+    const responseText = await response.text();
+    const parsed = safeParseJson(responseText);
+    if (!response.ok) {
+      return {
+        success: false,
+        message: summarizeResponse(parsed, responseText) || `HTTP ${response.status}`,
+        record: null,
+      };
+    }
+
+    if (!parsed || parsed.success !== true) {
+      return {
+        success: false,
+        message: String(parsed?.message || 'pending record 조회 실패'),
+        record: null,
+      };
+    }
+
+    return {
+      success: true,
+      record: parsed.record && typeof parsed.record === 'object' ? parsed.record : null,
+    };
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw error;
+    }
+
+    return {
+      success: false,
+      message: `pending record 조회 실패: ${error.message}`,
+      record: null,
+    };
+  }
+}
+
+async function cleanupStalePendingTransparencyRecords(config = {}, payload = {}, signal) {
+  const resolved = resolveConfig(config);
+  const endpointResult = buildCliHelperUrl(resolved.cliHelperEndpoint, '/api/moderation-records/cleanup-stale-pending');
+  if (!endpointResult.success) {
+    return {
+      success: false,
+      message: endpointResult.message,
+      updatedCount: 0,
+    };
+  }
+
+  try {
+    const response = await dcFetchWithRetry(
+      endpointResult.url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload || {}),
+        signal,
+      },
+      1,
+    );
+
+    const responseText = await response.text();
+    const parsed = safeParseJson(responseText);
+    if (!response.ok) {
+      return {
+        success: false,
+        message: summarizeResponse(parsed, responseText) || `HTTP ${response.status}`,
+        updatedCount: 0,
+      };
+    }
+
+    if (!parsed || parsed.success !== true) {
+      return {
+        success: false,
+        message: String(parsed?.message || 'stale pending 정리 실패'),
+        updatedCount: 0,
+      };
+    }
+
+    return {
+      success: true,
+      updatedCount: Math.max(0, Number(parsed.updatedCount) || 0),
+    };
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw error;
+    }
+
+    return {
+      success: false,
+      message: `stale pending 정리 실패: ${error.message}`,
+      updatedCount: 0,
+    };
+  }
+}
+
+async function persistTransparencyRecordWithoutAbort(config = {}, record) {
+  return callCliHelperRecord(config, record);
+}
+
 function parseCliHelperJudgeResponse(data, responseText) {
   if (!data || typeof data !== 'object') {
     return {
@@ -1009,11 +1147,13 @@ export {
   buildReasonText,
   callCliHelperJudge,
   callCliHelperRecord,
+  cleanupStalePendingTransparencyRecords,
   delay,
   executeDeleteAndBan,
   extractEsno,
   fetchAllComments,
   fetchComments,
+  findLatestPendingTransparencyRecord,
   fetchRecentComments,
   fetchPostPage,
   fetchPostListHTML,
@@ -1023,5 +1163,6 @@ export {
   parseActivityStatsResponse,
   parseCliHelperJudgeResponse,
   parseModerationDecisionPayload,
+  persistTransparencyRecordWithoutAbort,
   resolveConfig,
 };

@@ -1035,6 +1035,43 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
         return;
       }
 
+      if (request.method === 'GET' && requestUrl.pathname === '/api/moderation-records/pending-latest') {
+        const sanitized = sanitizePendingLatestRequest(requestUrl.searchParams);
+        if (!sanitized.success) {
+          writeJson(response, 400, {
+            success: false,
+            message: sanitized.message,
+          });
+          return;
+        }
+
+        const record = await store.findLatestPendingRecord(sanitized.filters);
+        writeJson(response, 200, {
+          success: true,
+          record,
+        });
+        return;
+      }
+
+      if (request.method === 'POST' && requestUrl.pathname === '/api/moderation-records/cleanup-stale-pending') {
+        const requestBody = await readJsonBody(request);
+        const sanitized = sanitizeCleanupStalePendingRequest(requestBody);
+        if (!sanitized.success) {
+          writeJson(response, 400, {
+            success: false,
+            message: sanitized.message,
+          });
+          return;
+        }
+
+        const result = await store.markStalePendingAsFailed(sanitized.filters);
+        writeJson(response, 200, {
+          success: true,
+          updatedCount: Math.max(0, Number(result?.updatedCount) || 0),
+        });
+        return;
+      }
+
       if (request.method === 'GET' && requestUrl.pathname.startsWith('/api/moderation-records/')) {
         const recordId = decodeURIComponent(requestUrl.pathname.replace(/^\/api\/moderation-records\//, ''));
         const record = await store.getRecord(recordId);
@@ -1649,6 +1686,87 @@ function sanitizeRecordRequest(input) {
       debugFailureRawText,
       debugRecoveryAttempted,
       debugRecoveredByLoginRetry,
+    },
+  };
+}
+
+function sanitizePendingLatestRequest(searchParams) {
+  const source = String(searchParams?.get('source') || 'auto_report').trim() || 'auto_report';
+  const targetUrl = String(searchParams?.get('targetUrl') || '').trim();
+  const targetPostNo = String(searchParams?.get('targetPostNo') || '').trim();
+  const staleBeforeIso = String(searchParams?.get('staleBeforeIso') || '').trim();
+
+  if (source !== 'auto_report' && source !== 'manual_test') {
+    return {
+      success: false,
+      message: 'source 값이 올바르지 않습니다.',
+    };
+  }
+
+  if (!targetUrl && !targetPostNo) {
+    return {
+      success: false,
+      message: 'targetUrl 또는 targetPostNo 중 하나는 필요합니다.',
+    };
+  }
+
+  if (staleBeforeIso && Number.isNaN(Date.parse(staleBeforeIso))) {
+    return {
+      success: false,
+      message: 'staleBeforeIso 값이 올바르지 않습니다.',
+    };
+  }
+
+  return {
+    success: true,
+    filters: {
+      source,
+      targetUrl,
+      targetPostNo,
+      staleBeforeIso,
+    },
+  };
+}
+
+function sanitizeCleanupStalePendingRequest(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return {
+      success: false,
+      message: 'cleanup 요청 본문 형식이 올바르지 않습니다.',
+    };
+  }
+
+  const source = String(input.source || 'auto_report').trim() || 'auto_report';
+  const staleBeforeIso = String(input.staleBeforeIso || '').trim();
+  const reason = String(input.reason || '').trim() || '자동 처리 중단: stale pending 정리';
+
+  if (source !== 'auto_report' && source !== 'manual_test') {
+    return {
+      success: false,
+      message: 'source 값이 올바르지 않습니다.',
+    };
+  }
+
+  if (!staleBeforeIso || Number.isNaN(Date.parse(staleBeforeIso))) {
+    return {
+      success: false,
+      message: 'staleBeforeIso 값이 올바르지 않습니다.',
+    };
+  }
+
+  if (!reason) {
+    return {
+      success: false,
+      message: 'reason 값이 올바르지 않습니다.',
+    };
+  }
+
+  return {
+    success: true,
+    filters: {
+      source,
+      staleBeforeIso,
+      reason,
     },
   };
 }

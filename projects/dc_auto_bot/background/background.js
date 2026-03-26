@@ -1,10 +1,19 @@
 import { Scheduler } from './scheduler.js';
-import { callCliHelperJudge, callCliHelperRecord, fetchPostPage, normalizeCliHelperEndpoint, resolveConfig } from './api.js';
+import {
+  callCliHelperJudge,
+  callCliHelperRecord,
+  cleanupStalePendingTransparencyRecords,
+  fetchPostPage,
+  normalizeCliHelperEndpoint,
+  resolveConfig,
+} from './api.js';
 import { extractPostContentForLlm, normalizeReportTarget, parseTargetUrl } from './parser.js';
 
 const scheduler = new Scheduler();
+const SCHEDULER_STORAGE_KEY = 'reportBotSchedulerState';
 const LLM_STORAGE_KEY = 'reportBotLlmState';
 const LOGIN_AUTOMATION_RUNTIME_KEY = 'reportBotLoginAutomationRuntime';
+const PENDING_STALE_TIMEOUT_MS = 10 * 60 * 1000;
 const HELPER_HEALTH_CACHE_MS = 1500;
 const HELPER_HEALTH_TIMEOUT_MS = 3000;
 const LOGIN_CHECK_ALARM_NAME = 'loginSessionCheck';
@@ -53,6 +62,8 @@ const loginAutomationState = {
   cooldownUntilMs: 0,
   lastAttemptAt: '',
 };
+
+let resumeSchedulerPromise = null;
 
 scheduler.ensureLoginSession = ensureLoginSessionDelegated;
 scheduler.recoverLoginSession = recoverLoginSessionDelegated;
@@ -118,11 +129,51 @@ async function initialize() {
 }
 
 async function resumeScheduler() {
-  if (!scheduler.runPromise) {
-    await scheduler.loadState();
+  if (resumeSchedulerPromise) {
+    return resumeSchedulerPromise;
   }
 
-  scheduler.ensureRunLoop();
+  resumeSchedulerPromise = (async () => {
+    const stored = await chrome.storage.local.get(SCHEDULER_STORAGE_KEY);
+    const storedSchedulerState = stored[SCHEDULER_STORAGE_KEY] || {};
+    const cleanupConfig = {
+      ...scheduler.config,
+      ...(storedSchedulerState.config || {}),
+    };
+
+    await cleanupStalePendingTransparencyRecordsBestEffort(cleanupConfig);
+
+    if (!scheduler.runPromise) {
+      await scheduler.loadState();
+    }
+
+    scheduler.ensureRunLoop();
+  })().finally(() => {
+    resumeSchedulerPromise = null;
+  });
+
+  return resumeSchedulerPromise;
+}
+
+async function cleanupStalePendingTransparencyRecordsBestEffort(config = {}) {
+  const staleBeforeIso = new Date(Date.now() - PENDING_STALE_TIMEOUT_MS).toISOString();
+
+  try {
+    const result = await cleanupStalePendingTransparencyRecords(
+      config,
+      {
+        source: 'auto_report',
+        staleBeforeIso,
+        reason: '자동 처리 중단: stale pending 정리',
+      },
+    );
+
+    if (!result.success) {
+      console.warn('[ReportBot] stale pending 정리 실패:', result.message);
+    }
+  } catch (error) {
+    console.warn('[ReportBot] stale pending 정리 예외:', error?.message || String(error));
+  }
 }
 
 async function handleMessage(message) {

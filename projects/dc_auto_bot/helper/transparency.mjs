@@ -699,6 +699,8 @@ function isKnownFailedReason(rawReason) {
   if (rawReason === 'P15 단독 allow는 자동 삭제/차단 대상으로 처리할 수 없습니다.') return true;
   if (rawReason === 'allow 결정에는 최소 1개 이상의 정책 ID가 필요합니다.') return true;
   if (rawReason === 'CLI helper 판정 실패') return true;
+  if (rawReason === '자동 처리 중단: 확장 재시작/중지/abort') return true;
+  if (rawReason === '자동 처리 중단: stale pending 정리') return true;
   if (rawReason.includes('후 처리 실패:')) return true;
   return false;
 }
@@ -788,6 +790,14 @@ function mapFailedReasonToPublicMessage(reason) {
 
   if (rawReason === 'CLI helper 판정 실패') {
     return 'AI 판정 결과를 해석하지 못해 자동 처리를 중단했습니다.';
+  }
+
+  if (rawReason === '자동 처리 중단: 확장 재시작/중지/abort') {
+    return '확장 재시작 또는 중지로 자동 처리가 중단되었습니다.';
+  }
+
+  if (rawReason === '자동 처리 중단: stale pending 정리') {
+    return '중단된 오래된 검토 기록을 정리했습니다.';
   }
 
   if (rawReason.includes('후 처리 실패: 로그인 세션 실패:')) {

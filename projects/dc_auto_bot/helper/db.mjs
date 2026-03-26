@@ -83,12 +83,123 @@ class ModerationRecordStore {
     return this.records.find((record) => record.id === normalizedId) || null;
   }
 
+  async findLatestPendingRecord(filters = {}) {
+    await this.init();
+    const source = normalizeOptionalString(filters.source) || 'auto_report';
+    const targetUrl = normalizeOptionalString(filters.targetUrl);
+    const targetPostNo = normalizeOptionalString(filters.targetPostNo);
+    const staleBeforeIso = normalizeIsoDate(filters.staleBeforeIso);
+
+    const pendingRecords = this.records.filter((record) => {
+      if (normalizeOptionalString(record?.source) !== source) {
+        return false;
+      }
+      if (normalizeStatus(record?.status) !== 'pending') {
+        return false;
+      }
+
+      const recordUpdatedAt = normalizeIsoDate(record?.updatedAt) || normalizeIsoDate(record?.createdAt);
+      if (staleBeforeIso && recordUpdatedAt && recordUpdatedAt < staleBeforeIso) {
+        return false;
+      }
+
+      const recordTargetUrl = normalizeOptionalString(record?.targetUrl);
+      const recordTargetPostNo = normalizeOptionalString(record?.targetPostNo);
+
+      if (targetUrl && recordTargetUrl) {
+        return recordTargetUrl === targetUrl;
+      }
+
+      if (targetPostNo && recordTargetPostNo) {
+        return recordTargetPostNo === targetPostNo;
+      }
+
+      return false;
+    });
+
+    const latestPendingRecord = pendingRecords[0] || null;
+    if (!latestPendingRecord) {
+      return null;
+    }
+
+    const targetKey = buildRecordTargetKey(latestPendingRecord);
+    if (!targetKey) {
+      return latestPendingRecord;
+    }
+
+    let latestTerminalUpdatedAt = '';
+    for (const record of this.records) {
+      if (normalizeOptionalString(record?.source) !== source) {
+        continue;
+      }
+      const status = normalizeStatus(record?.status);
+      if (status !== 'completed' && status !== 'failed') {
+        continue;
+      }
+      if (buildRecordTargetKey(record) !== targetKey) {
+        continue;
+      }
+
+      const terminalUpdatedAt = getRecordUpdatedAt(record);
+      if (compareRecordTimestamp(terminalUpdatedAt, latestTerminalUpdatedAt) > 0) {
+        latestTerminalUpdatedAt = terminalUpdatedAt;
+      }
+    }
+
+    if (compareRecordTimestamp(latestTerminalUpdatedAt, getRecordUpdatedAt(latestPendingRecord)) >= 0) {
+      return null;
+    }
+
+    return latestPendingRecord;
+  }
+
+  async markStalePendingAsFailed(filters = {}) {
+    await this.init();
+    const source = normalizeOptionalString(filters.source) || 'auto_report';
+    const staleBeforeIso = normalizeIsoDate(filters.staleBeforeIso);
+    const reason = normalizeOptionalString(filters.reason) || '자동 처리 중단: stale pending 정리';
+    if (!staleBeforeIso) {
+      return { updatedCount: 0 };
+    }
+
+    let updatedCount = 0;
+    const nextUpdatedAt = new Date().toISOString();
+    this.records = this.records.map((record) => {
+      if (normalizeOptionalString(record?.source) !== source) {
+        return record;
+      }
+      if (normalizeStatus(record?.status) !== 'pending') {
+        return record;
+      }
+
+      const recordUpdatedAt = normalizeIsoDate(record?.updatedAt) || normalizeIsoDate(record?.createdAt);
+      if (!recordUpdatedAt || recordUpdatedAt >= staleBeforeIso) {
+        return record;
+      }
+
+      updatedCount += 1;
+      return normalizePublicModerationRecord({
+        ...record,
+        status: 'failed',
+        reason,
+        updatedAt: nextUpdatedAt,
+      });
+    });
+
+    if (updatedCount > 0) {
+      sortRecordsDescending(this.records);
+      await this.persist();
+    }
+
+    return { updatedCount };
+  }
+
   async listRecords(filters = {}) {
     await this.init();
     const limit = Math.max(1, Math.min(200, Number(filters.limit) || 50));
     const offset = Math.max(0, Number(filters.cursor) || 0);
 
-    const records = filterRecords(this.records, filters);
+    const records = filterRecords(collapseDuplicatePendingForList(this.records), filters);
 
     const sliced = records.slice(offset, offset + limit);
     const nextCursor = offset + limit < records.length ? String(offset + limit) : '';
@@ -267,6 +378,77 @@ function filterRecords(records, filters = {}) {
   return filtered;
 }
 
+function collapseDuplicatePendingForList(records) {
+  const inputRecords = Array.isArray(records) ? records : [];
+  const groupMetaMap = new Map();
+
+  for (const record of inputRecords) {
+    if (!shouldCollapseAutoReportPending(record)) {
+      continue;
+    }
+
+    const key = buildRecordTargetKey(record);
+    if (!key) {
+      continue;
+    }
+
+    const meta = groupMetaMap.get(key) || {
+      latestPendingId: '',
+      latestPendingUpdatedAt: '',
+      latestTerminalUpdatedAt: '',
+    };
+    const status = normalizeStatus(record?.status);
+    if (status === 'pending') {
+      const candidateUpdatedAt = getRecordUpdatedAt(record);
+      if (
+        !meta.latestPendingId
+        || compareRecordTimestamp(candidateUpdatedAt, meta.latestPendingUpdatedAt) > 0
+      ) {
+        meta.latestPendingId = String(record?.id || '').trim();
+        meta.latestPendingUpdatedAt = candidateUpdatedAt;
+      }
+    } else if (status === 'completed' || status === 'failed') {
+      const terminalUpdatedAt = getRecordUpdatedAt(record);
+      if (compareRecordTimestamp(terminalUpdatedAt, meta.latestTerminalUpdatedAt) > 0) {
+        meta.latestTerminalUpdatedAt = terminalUpdatedAt;
+      }
+    }
+
+    groupMetaMap.set(key, meta);
+  }
+
+  return inputRecords.filter((record) => {
+    if (!shouldCollapseAutoReportPending(record)) {
+      return true;
+    }
+
+    const key = buildRecordTargetKey(record);
+    if (!key) {
+      return true;
+    }
+
+    const status = normalizeStatus(record?.status);
+    if (status !== 'pending') {
+      return true;
+    }
+
+    const meta = groupMetaMap.get(key);
+    if (!meta) {
+      return true;
+    }
+
+    if (compareRecordTimestamp(meta.latestTerminalUpdatedAt, meta.latestPendingUpdatedAt) >= 0) {
+      return false;
+    }
+
+    return String(record?.id || '').trim() === meta.latestPendingId;
+  });
+}
+
+function getRecordUpdatedAt(record) {
+  return normalizeIsoDate(record?.updatedAt) || normalizeIsoDate(record?.createdAt);
+}
+
 function summarizeDecisionCounts(records) {
   let allow = 0;
   let deny = 0;
@@ -366,8 +548,46 @@ function isKnownFailedReason(rawReason) {
   if (rawReason === 'P15 단독 allow는 자동 삭제/차단 대상으로 처리할 수 없습니다.') return true;
   if (rawReason === 'allow 결정에는 최소 1개 이상의 정책 ID가 필요합니다.') return true;
   if (rawReason === 'CLI helper 판정 실패') return true;
+  if (rawReason === '자동 처리 중단: 확장 재시작/중지/abort') return true;
+  if (rawReason === '자동 처리 중단: stale pending 정리') return true;
   if (rawReason.includes('후 처리 실패:')) return true;
   return false;
+}
+
+function shouldCollapseAutoReportPending(record) {
+  return normalizeOptionalString(record?.source) === 'auto_report';
+}
+
+function buildRecordTargetKey(record) {
+  const targetUrl = normalizeOptionalString(record?.targetUrl);
+  if (targetUrl) {
+    return `url:${targetUrl}`;
+  }
+
+  const targetPostNo = normalizeOptionalString(record?.targetPostNo);
+  if (targetPostNo) {
+    return `post:${targetPostNo}`;
+  }
+
+  return '';
+}
+
+function compareRecordTimestamp(left, right) {
+  const leftTime = Date.parse(String(left || ''));
+  const rightTime = Date.parse(String(right || ''));
+
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
+    if (leftTime > rightTime) return 1;
+    if (leftTime < rightTime) return -1;
+    return 0;
+  }
+  if (Number.isFinite(leftTime)) {
+    return 1;
+  }
+  if (Number.isFinite(rightTime)) {
+    return -1;
+  }
+  return 0;
 }
 
 function normalizeNullableNumber(value) {

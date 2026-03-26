@@ -5,10 +5,12 @@ import {
   delay,
   executeDeleteAndBan,
   extractEsno,
+  findLatestPendingTransparencyRecord,
   fetchPostListHTML,
   fetchRecentComments,
   fetchPostPage,
   fetchUserActivityStats,
+  persistTransparencyRecordWithoutAbort,
 } from './api.js';
 import {
   buildCommandKey,
@@ -32,6 +34,9 @@ const RECENT_REGULAR_POST_LIMIT = 100;
 const RECENT_REGULAR_POST_CACHE_MS = 5000;
 const RECENT_REGULAR_POST_MAX_PAGES = 10;
 const FORCE_ALLOW_AUTHOR_NICK = '상냥한에옹';
+const PENDING_HEARTBEAT_INTERVAL_MS = 30000;
+const PENDING_STALE_TIMEOUT_MS = 10 * 60 * 1000;
+const ABORT_PENDING_REASON = '자동 처리 중단: 확장 재시작/중지/abort';
 const PHASE = {
   IDLE: 'IDLE',
   SEEDING: 'SEEDING',
@@ -340,364 +345,437 @@ class Scheduler {
       return;
     }
 
-    const recordId = createRecordId();
-    const pageHtml = await fetchPostPage(this.config, parsedCommand.targetPostNo, signal);
-    const content = extractPostContentForLlm(pageHtml, this.config.baseUrl);
-    await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-      id: recordId,
-      source: 'auto_report',
-      status: 'pending',
-      reporterUserId: trustedUser.userId,
-      reporterLabel: trustedUser.label,
-      targetUrl: parsedCommand.targetUrl,
-      targetPostNo: parsedCommand.targetPostNo,
-      reportReason: parsedCommand.reasonText,
-      title: content.title,
-      bodyText: content.bodyText,
-      imageUrls: content.imageUrls,
-      reason: '검토중',
-    }), signal);
-    const authorCheck = await this.evaluateTargetAuthorFromPageHtml(pageHtml, this.config, signal);
+    let activePendingRecord = null;
+    let pendingHeartbeatTimer = 0;
+    let pendingHeartbeatPromise = Promise.resolve();
+    let pendingHeartbeatGeneration = 0;
+    let pendingCompletedDecisionPersisted = false;
+    let pendingTerminalFinalized = false;
 
-    if (!authorCheck.success) {
-      this.totalFailedCommands += 1;
-      this.addLog(`❌ [${trustedUser.label}] 작성자 판정 실패 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
-      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-        id: recordId,
-        source: 'auto_report',
-        status: 'failed',
-        reporterUserId: trustedUser.userId,
-        reporterLabel: trustedUser.label,
-        targetUrl: parsedCommand.targetUrl,
-        targetPostNo: parsedCommand.targetPostNo,
-        reportReason: parsedCommand.reasonText,
-        title: content.title,
-        bodyText: content.bodyText,
-        imageUrls: content.imageUrls,
-        reason: `작성자 판정 실패: ${authorCheck.message}`,
-      }), signal);
-      return;
-    }
+    const stopPendingHeartbeat = async () => {
+      pendingHeartbeatGeneration += 1;
+      if (pendingHeartbeatTimer) {
+        clearTimeout(pendingHeartbeatTimer);
+        pendingHeartbeatTimer = 0;
+      }
 
-    if (!authorCheck.allowed) {
-      this.totalFailedCommands += 1;
-      this.addLog(`⏭️ [${trustedUser.label}] 자동 처리 제외 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
-      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-        id: recordId,
-        source: 'auto_report',
-        status: 'failed',
-        reporterUserId: trustedUser.userId,
-        reporterLabel: trustedUser.label,
-        targetUrl: parsedCommand.targetUrl,
-        targetPostNo: parsedCommand.targetPostNo,
-        reportReason: parsedCommand.reasonText,
-        title: content.title,
-        bodyText: content.bodyText,
-        imageUrls: content.imageUrls,
-        reason: `v2 core 작성자 필터 미통과: ${authorCheck.message}`,
-      }), signal);
-      return;
-    }
+      const inFlightHeartbeat = pendingHeartbeatPromise;
+      pendingHeartbeatPromise = Promise.resolve();
+      try {
+        await inFlightHeartbeat;
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          console.warn('[ReportBot] pending heartbeat 실패:', error?.message || String(error));
+        }
+      }
+    };
 
-    const recommendState = extractRecommendState(pageHtml);
-    if (!recommendState.success) {
-      this.totalFailedCommands += 1;
-      this.addLog(`❌ [${trustedUser.label}] 개념글 판정 실패 #${parsedCommand.targetPostNo} - ${recommendState.message}`);
-      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-        id: recordId,
-        source: 'auto_report',
-        status: 'failed',
-        reporterUserId: trustedUser.userId,
-        reporterLabel: trustedUser.label,
-        targetUrl: parsedCommand.targetUrl,
-        targetPostNo: parsedCommand.targetPostNo,
-        reportReason: parsedCommand.reasonText,
-        title: content.title,
-        bodyText: content.bodyText,
-        imageUrls: content.imageUrls,
-        reason: `개념글 판정 실패: ${recommendState.message}`,
-      }), signal);
-      return;
-    }
+    const mergeActivePendingRecord = (record) => {
+      if (!record) {
+        return;
+      }
 
-    if (recommendState.isConcept) {
-      this.totalFailedCommands += 1;
-      this.addLog(`⏭️ [${trustedUser.label}] 개념글 자동 처리 제외 #${parsedCommand.targetPostNo}`);
-      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-        id: recordId,
-        source: 'auto_report',
-        status: 'failed',
-        reporterUserId: trustedUser.userId,
-        reporterLabel: trustedUser.label,
-        targetUrl: parsedCommand.targetUrl,
-        targetPostNo: parsedCommand.targetPostNo,
-        reportReason: parsedCommand.reasonText,
-        title: content.title,
-        bodyText: content.bodyText,
-        imageUrls: content.imageUrls,
-        reason: '개념글은 자동 삭제/차단하지 않습니다.',
-      }), signal);
-      return;
-    }
+      activePendingRecord = mergeTransparencyRecordContext(activePendingRecord, record);
+    };
 
-    let recentRegularPosts = null;
-    try {
-      recentRegularPosts = await this.getRecentRegularPosts(signal);
-    } catch (error) {
-      this.totalFailedCommands += 1;
-      this.addLog(`❌ [${trustedUser.label}] 최근 100개 판정 실패 #${parsedCommand.targetPostNo} - ${error.message}`);
-      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-        id: recordId,
-        source: 'auto_report',
-        status: 'failed',
-        reporterUserId: trustedUser.userId,
-        reporterLabel: trustedUser.label,
-        targetUrl: parsedCommand.targetUrl,
-        targetPostNo: parsedCommand.targetPostNo,
-        reportReason: parsedCommand.reasonText,
-        title: content.title,
-        bodyText: content.bodyText,
-        imageUrls: content.imageUrls,
-        reason: `최근 100개 판정 실패: ${error.message}`,
-      }), signal);
-      return;
-    }
+    const buildActivePendingRecord = (overrides = {}) => {
+      if (!activePendingRecord) {
+        return null;
+      }
+      return buildTransparencyRecord({
+        ...activePendingRecord,
+        ...overrides,
+        id: activePendingRecord.id,
+        createdAt: normalizeIsoDateValue(overrides?.createdAt) || normalizeIsoDateValue(activePendingRecord.createdAt),
+        updatedAt: new Date().toISOString(),
+      });
+    };
 
-    const isWithinRecentWindow = recentRegularPosts.some((post) => String(post.no) === String(parsedCommand.targetPostNo));
-    if (!isWithinRecentWindow) {
-      this.totalFailedCommands += 1;
-      this.addLog(`⏭️ [${trustedUser.label}] 최근 100개 밖 자동 처리 제외 #${parsedCommand.targetPostNo}`);
-      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-        id: recordId,
-        source: 'auto_report',
-        status: 'failed',
-        targetUrl: parsedCommand.targetUrl,
-        targetPostNo: parsedCommand.targetPostNo,
-        reportReason: parsedCommand.reasonText,
-        title: content.title,
-        bodyText: content.bodyText,
-        imageUrls: content.imageUrls,
-        reason: '최근 100개 regular row 밖 게시물입니다.',
-      }), signal);
-      return;
-    }
+    const persistActiveTransparencyRecord = async (overrides = {}, options = {}) => {
+      if (!activePendingRecord) {
+        return { success: false, message: 'active pending record 없음' };
+      }
 
-    const helperResult = await callCliHelperJudge(
-      this.config,
-      {
-        targetUrl: parsedCommand.targetUrl,
-        title: content.title,
-        bodyText: content.bodyText,
-        imageUrls: content.imageUrls,
-        reportReason: parsedCommand.reasonText,
-        requestLabel: trustedUser.label,
-        authorNick: authorCheck.authorNick || '',
-        authorFilter: mapAuthorFilterResult(authorCheck),
-      },
-      signal,
-    );
+      const nextRecord = buildActivePendingRecord(overrides);
+      if (!nextRecord) {
+        return { success: false, message: 'active pending record 생성 실패' };
+      }
 
-    if (!helperResult.success) {
-      const helperForceAllowFallback = getHelperForceAllowFallback(helperResult, content);
-      if (helperForceAllowFallback) {
-        const loginSessionResult = await this.ensureLoginSessionForAction();
-        if (!loginSessionResult.success) {
-          this.totalFailedCommands += 1;
-          this.addLog(`❌ [${trustedUser.label}] 로그인 세션 실패 #${parsedCommand.targetPostNo} - ${loginSessionResult.message}`);
-          await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-            id: recordId,
-            source: 'auto_report',
-            status: 'failed',
-            reporterUserId: trustedUser.userId,
-            reporterLabel: trustedUser.label,
-            targetUrl: parsedCommand.targetUrl,
-            targetPostNo: parsedCommand.targetPostNo,
-            reportReason: parsedCommand.reasonText,
-            title: content.title,
-            bodyText: content.bodyText,
-            imageUrls: content.imageUrls,
-            reason: buildHelperForceAllowFallbackFailureReason(helperForceAllowFallback, `로그인 세션 실패: ${loginSessionResult.message}`),
-          }), signal);
+      if (nextRecord.status !== 'pending') {
+        await stopPendingHeartbeat();
+      }
+
+      let persistResult = options.ignoreAbort
+        ? await persistTransparencyRecordWithoutAbortBestEffort(this.config, nextRecord)
+        : await persistTransparencyRecordBestEffort(this.config, nextRecord, signal);
+
+      if (
+        nextRecord.status !== 'pending'
+        && options.terminal === true
+        && options.ignoreAbort !== true
+        && persistResult?.success !== true
+      ) {
+        persistResult = await persistTransparencyRecordWithoutAbortBestEffort(this.config, nextRecord);
+      }
+
+      mergeActivePendingRecord(nextRecord);
+      if (nextRecord.status === 'completed') {
+        pendingCompletedDecisionPersisted = persistResult?.success === true;
+      }
+      if (options.terminal) {
+        pendingTerminalFinalized = persistResult?.success === true;
+      }
+
+      return persistResult;
+    };
+
+    const markPendingTerminalFinalized = async () => {
+      await stopPendingHeartbeat();
+      if (
+        activePendingRecord
+        && activePendingRecord.status === 'completed'
+        && pendingCompletedDecisionPersisted !== true
+      ) {
+        const result = await persistTransparencyRecordWithoutAbortBestEffort(this.config, activePendingRecord);
+        if (result?.success) {
+          pendingCompletedDecisionPersisted = true;
+        }
+      }
+      pendingTerminalFinalized = pendingCompletedDecisionPersisted === true;
+    };
+
+    const startPendingHeartbeat = () => {
+      if (!activePendingRecord || pendingTerminalFinalized) {
+        return;
+      }
+
+      const generation = ++pendingHeartbeatGeneration;
+      const scheduleNext = () => {
+        if (generation !== pendingHeartbeatGeneration || !activePendingRecord || pendingTerminalFinalized) {
+          return;
+        }
+        pendingHeartbeatTimer = setTimeout(() => {
+          void tick();
+        }, PENDING_HEARTBEAT_INTERVAL_MS);
+      };
+
+      const tick = async () => {
+        if (generation !== pendingHeartbeatGeneration || !activePendingRecord || pendingTerminalFinalized) {
           return;
         }
 
-        const actionResult = await this.executeDeleteAndBanWithRecovery(
+        const heartbeatRecord = buildActivePendingRecord({
+          status: 'pending',
+          reason: '검토중',
+        });
+        if (!heartbeatRecord) {
+          return;
+        }
+
+        pendingHeartbeatPromise = (async () => {
+          await persistTransparencyRecordBestEffort(this.config, heartbeatRecord, signal);
+          mergeActivePendingRecord(heartbeatRecord);
+        })();
+
+        try {
+          await pendingHeartbeatPromise;
+        } catch (error) {
+          if (error?.name !== 'AbortError') {
+            console.warn('[ReportBot] pending heartbeat 예외:', error?.message || String(error));
+          }
+        }
+
+        scheduleNext();
+      };
+
+      scheduleNext();
+    };
+
+    const finalizeAbortPendingRecord = async () => {
+      if (!activePendingRecord || pendingTerminalFinalized) {
+        return;
+      }
+
+      await stopPendingHeartbeat();
+      const failedRecord = buildActivePendingRecord({
+        status: 'failed',
+        reason: ABORT_PENDING_REASON,
+      });
+      if (!failedRecord) {
+        return;
+      }
+
+      mergeActivePendingRecord(failedRecord);
+      const persistResult = await persistTransparencyRecordWithoutAbortBestEffort(this.config, failedRecord);
+      pendingTerminalFinalized = persistResult?.success === true;
+    };
+
+    try {
+      const pageHtml = await fetchPostPage(this.config, parsedCommand.targetPostNo, signal);
+      const content = extractPostContentForLlm(pageHtml, this.config.baseUrl);
+      const staleBeforeIso = new Date(Date.now() - PENDING_STALE_TIMEOUT_MS).toISOString();
+
+      let reusePendingRecord = null;
+      try {
+        const lookupResult = await findLatestPendingTransparencyRecord(
           this.config,
+          'auto_report',
+          parsedCommand.targetUrl,
           parsedCommand.targetPostNo,
-          trustedUser.label,
-          parsedCommand.reasonText,
+          staleBeforeIso,
           signal,
         );
+        if (lookupResult.success && lookupResult.record) {
+          reusePendingRecord = lookupResult.record;
+        } else if (!lookupResult.success) {
+          console.warn('[ReportBot] pending record 조회 실패:', lookupResult.message);
+        }
+      } catch (error) {
+        if (error?.name === 'AbortError') {
+          throw error;
+        }
+        console.warn('[ReportBot] pending record 조회 예외:', error?.message || String(error));
+      }
 
-        if (actionResult.success) {
-          this.incrementDailyUsage(trustedUser.userId);
-          this.totalSucceededCommands += 1;
-          this.addLog(
-            `✅ [${trustedUser.label}] ${helperForceAllowFallback.logLabel} 처리 #${parsedCommand.targetPostNo}`
-            + (actionResult.recoveredByLoginRetry ? ' (세션 재검증 후 복구)' : ''),
+      activePendingRecord = buildTransparencyRecord({
+        id: String(reusePendingRecord?.id || '').trim() || createRecordId(),
+        source: 'auto_report',
+        status: 'pending',
+        createdAt: normalizeIsoDateValue(reusePendingRecord?.createdAt) || '',
+        reporterUserId: String(reusePendingRecord?.reporterUserId || '').trim() || trustedUser.userId,
+        reporterLabel: String(reusePendingRecord?.reporterLabel || '').trim() || trustedUser.label,
+        targetUrl: parsedCommand.targetUrl,
+        targetPostNo: parsedCommand.targetPostNo,
+        reportReason: String(reusePendingRecord?.reportReason || '').trim() || parsedCommand.reasonText,
+        title: content.title,
+        bodyText: content.bodyText,
+        imageUrls: content.imageUrls,
+        reason: '검토중',
+      });
+      await persistTransparencyRecordBestEffort(this.config, activePendingRecord, signal);
+      startPendingHeartbeat();
+
+      const authorCheck = await this.evaluateTargetAuthorFromPageHtml(pageHtml, this.config, signal);
+
+      if (!authorCheck.success) {
+        this.totalFailedCommands += 1;
+        this.addLog(`❌ [${trustedUser.label}] 작성자 판정 실패 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
+        await persistActiveTransparencyRecord({
+          status: 'failed',
+          reason: `작성자 판정 실패: ${authorCheck.message}`,
+        }, { terminal: true });
+        return;
+      }
+
+      if (!authorCheck.allowed) {
+        this.totalFailedCommands += 1;
+        this.addLog(`⏭️ [${trustedUser.label}] 자동 처리 제외 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
+        await persistActiveTransparencyRecord({
+          status: 'failed',
+          reason: `v2 core 작성자 필터 미통과: ${authorCheck.message}`,
+        }, { terminal: true });
+        return;
+      }
+
+      const recommendState = extractRecommendState(pageHtml);
+      if (!recommendState.success) {
+        this.totalFailedCommands += 1;
+        this.addLog(`❌ [${trustedUser.label}] 개념글 판정 실패 #${parsedCommand.targetPostNo} - ${recommendState.message}`);
+        await persistActiveTransparencyRecord({
+          status: 'failed',
+          reason: `개념글 판정 실패: ${recommendState.message}`,
+        }, { terminal: true });
+        return;
+      }
+
+      if (recommendState.isConcept) {
+        this.totalFailedCommands += 1;
+        this.addLog(`⏭️ [${trustedUser.label}] 개념글 자동 처리 제외 #${parsedCommand.targetPostNo}`);
+        await persistActiveTransparencyRecord({
+          status: 'failed',
+          reason: '개념글은 자동 삭제/차단하지 않습니다.',
+        }, { terminal: true });
+        return;
+      }
+
+      let recentRegularPosts = null;
+      try {
+        recentRegularPosts = await this.getRecentRegularPosts(signal);
+      } catch (error) {
+        this.totalFailedCommands += 1;
+        this.addLog(`❌ [${trustedUser.label}] 최근 100개 판정 실패 #${parsedCommand.targetPostNo} - ${error.message}`);
+        await persistActiveTransparencyRecord({
+          status: 'failed',
+          reason: `최근 100개 판정 실패: ${error.message}`,
+        }, { terminal: true });
+        return;
+      }
+
+      const isWithinRecentWindow = recentRegularPosts.some((post) => String(post.no) === String(parsedCommand.targetPostNo));
+      if (!isWithinRecentWindow) {
+        this.totalFailedCommands += 1;
+        this.addLog(`⏭️ [${trustedUser.label}] 최근 100개 밖 자동 처리 제외 #${parsedCommand.targetPostNo}`);
+        await persistActiveTransparencyRecord({
+          status: 'failed',
+          reason: '최근 100개 regular row 밖 게시물입니다.',
+        }, { terminal: true });
+        return;
+      }
+
+      const helperResult = await callCliHelperJudge(
+        this.config,
+        {
+          targetUrl: parsedCommand.targetUrl,
+          title: content.title,
+          bodyText: content.bodyText,
+          imageUrls: content.imageUrls,
+          reportReason: parsedCommand.reasonText,
+          requestLabel: trustedUser.label,
+          authorNick: authorCheck.authorNick || '',
+          authorFilter: mapAuthorFilterResult(authorCheck),
+        },
+        signal,
+      );
+
+      if (!helperResult.success) {
+        const helperForceAllowFallback = getHelperForceAllowFallback(helperResult, content);
+        if (helperForceAllowFallback) {
+          const loginSessionResult = await this.ensureLoginSessionForAction();
+          if (!loginSessionResult.success) {
+            this.totalFailedCommands += 1;
+            this.addLog(`❌ [${trustedUser.label}] 로그인 세션 실패 #${parsedCommand.targetPostNo} - ${loginSessionResult.message}`);
+            await persistActiveTransparencyRecord({
+              status: 'failed',
+              reason: buildHelperForceAllowFallbackFailureReason(helperForceAllowFallback, `로그인 세션 실패: ${loginSessionResult.message}`),
+            }, { terminal: true });
+            return;
+          }
+
+          const actionResult = await this.executeDeleteAndBanWithRecovery(
+            this.config,
+            parsedCommand.targetPostNo,
+            trustedUser.label,
+            parsedCommand.reasonText,
+            signal,
           );
-          await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-            id: recordId,
-            source: 'auto_report',
-            status: 'completed',
-            decisionSource: helperForceAllowFallback.decisionSource,
-            reporterUserId: trustedUser.userId,
-            reporterLabel: trustedUser.label,
-            targetUrl: parsedCommand.targetUrl,
-            targetPostNo: parsedCommand.targetPostNo,
-            reportReason: parsedCommand.reasonText,
-            title: content.title,
-            bodyText: content.bodyText,
-            imageUrls: content.imageUrls,
-            decision: 'allow',
-            confidence: null,
-            policyIds: [],
-            reason: helperForceAllowFallback.reason,
-          }), signal);
+
+          if (actionResult.success) {
+            this.incrementDailyUsage(trustedUser.userId);
+            this.totalSucceededCommands += 1;
+            this.addLog(
+              `✅ [${trustedUser.label}] ${helperForceAllowFallback.logLabel} 처리 #${parsedCommand.targetPostNo}`
+              + (actionResult.recoveredByLoginRetry ? ' (세션 재검증 후 복구)' : ''),
+            );
+            await persistActiveTransparencyRecord({
+              status: 'completed',
+              decisionSource: helperForceAllowFallback.decisionSource,
+              decision: 'allow',
+              confidence: null,
+              policyIds: [],
+              reason: helperForceAllowFallback.reason,
+            }, { terminal: true });
+            return;
+          }
+
+          this.totalFailedCommands += 1;
+          this.addLog(
+            `❌ [${trustedUser.label}] ${helperForceAllowFallback.logLabel} 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`
+            + buildDeleteActionDiagnosticSuffix(actionResult),
+          );
+          await persistActiveTransparencyRecord({
+            status: 'failed',
+            reason: buildHelperForceAllowFallbackFailureReason(helperForceAllowFallback, actionResult.message || '응답 확인 실패'),
+            ...buildDeleteActionDebugFields(actionResult),
+          }, { terminal: true });
           return;
         }
 
         this.totalFailedCommands += 1;
-        this.addLog(
-          `❌ [${trustedUser.label}] ${helperForceAllowFallback.logLabel} 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`
-          + buildDeleteActionDiagnosticSuffix(actionResult),
-        );
-        await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-          id: recordId,
-          source: 'auto_report',
+        this.addLog(`❌ [${trustedUser.label}] LLM helper 실패 #${parsedCommand.targetPostNo} - ${helperResult.message || '응답 확인 실패'}`);
+        await persistActiveTransparencyRecord({
           status: 'failed',
-          reporterUserId: trustedUser.userId,
-          reporterLabel: trustedUser.label,
-          targetUrl: parsedCommand.targetUrl,
-          targetPostNo: parsedCommand.targetPostNo,
-          reportReason: parsedCommand.reasonText,
-          title: content.title,
-          bodyText: content.bodyText,
-          imageUrls: content.imageUrls,
-          reason: buildHelperForceAllowFallbackFailureReason(helperForceAllowFallback, actionResult.message || '응답 확인 실패'),
-          ...buildDeleteActionDebugFields(actionResult),
-        }), signal);
+          reason: helperResult.message || 'CLI helper 판정 실패',
+        }, { terminal: true });
+        return;
+      }
+
+      await persistActiveTransparencyRecord({
+        status: 'completed',
+        decision: helperResult.decision,
+        confidence: helperResult.confidence,
+        policyIds: helperResult.policy_ids || [],
+        reason: helperResult.reason || '',
+      });
+
+      if (helperResult.decision !== 'allow') {
+        this.incrementDailyUsage(trustedUser.userId);
+        this.totalFailedCommands += 1;
+        this.addLog(`⏭️ [${trustedUser.label}] LLM 보류 #${parsedCommand.targetPostNo} - ${formatLlmDecisionSummary(helperResult)}`);
+        await markPendingTerminalFinalized();
+        return;
+      }
+
+      const confidenceThreshold = clampConfidenceThreshold(this.config.llmConfidenceThreshold);
+      if (helperResult.confidence < confidenceThreshold) {
+        this.incrementDailyUsage(trustedUser.userId);
+        this.totalFailedCommands += 1;
+        this.addLog(`⏭️ [${trustedUser.label}] LLM 신뢰도 부족 #${parsedCommand.targetPostNo} - ${formatLlmDecisionSummary(helperResult)} / threshold=${confidenceThreshold.toFixed(2)}`);
+        await markPendingTerminalFinalized();
+        return;
+      }
+
+      const loginSessionResult = await this.ensureLoginSessionForAction();
+      if (!loginSessionResult.success) {
+        this.totalFailedCommands += 1;
+        this.addLog(`❌ [${trustedUser.label}] 로그인 세션 실패 #${parsedCommand.targetPostNo} - ${loginSessionResult.message}`);
+        await persistActiveTransparencyRecord({
+          status: 'failed',
+          reason: `로그인 세션 실패: ${loginSessionResult.message || 'login 연결실패'}`,
+        }, { terminal: true });
+        return;
+      }
+
+      const actionResult = await this.executeDeleteAndBanWithRecovery(
+        this.config,
+        parsedCommand.targetPostNo,
+        trustedUser.label,
+        parsedCommand.reasonText,
+        signal,
+      );
+
+      if (actionResult.success) {
+        this.incrementDailyUsage(trustedUser.userId);
+        this.totalSucceededCommands += 1;
+        this.addLog(
+          `✅ [${trustedUser.label}] 처리 완료 #${parsedCommand.targetPostNo} `
+          + `(${authorCheck.message} / ${formatLlmDecisionSummary(helperResult)} / ${actionResult.reasonText})`
+          + (actionResult.recoveredByLoginRetry ? ' [세션 재검증 후 복구]' : ''),
+        );
+        await markPendingTerminalFinalized();
         return;
       }
 
       this.totalFailedCommands += 1;
-      this.addLog(`❌ [${trustedUser.label}] LLM helper 실패 #${parsedCommand.targetPostNo} - ${helperResult.message || '응답 확인 실패'}`);
-      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-        id: recordId,
-        source: 'auto_report',
-        status: 'failed',
-        reporterUserId: trustedUser.userId,
-        reporterLabel: trustedUser.label,
-        targetUrl: parsedCommand.targetUrl,
-        targetPostNo: parsedCommand.targetPostNo,
-        reportReason: parsedCommand.reasonText,
-        title: content.title,
-        bodyText: content.bodyText,
-        imageUrls: content.imageUrls,
-        reason: helperResult.message || 'CLI helper 판정 실패',
-      }), signal);
-      return;
-    }
-
-    await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-      id: recordId,
-      source: 'auto_report',
-      status: 'completed',
-      reporterUserId: trustedUser.userId,
-      reporterLabel: trustedUser.label,
-      targetUrl: parsedCommand.targetUrl,
-      targetPostNo: parsedCommand.targetPostNo,
-      reportReason: parsedCommand.reasonText,
-      title: content.title,
-      bodyText: content.bodyText,
-      imageUrls: content.imageUrls,
-      decision: helperResult.decision,
-      confidence: helperResult.confidence,
-      policyIds: helperResult.policy_ids || [],
-      reason: helperResult.reason || '',
-    }), signal);
-
-    if (helperResult.decision !== 'allow') {
-      this.incrementDailyUsage(trustedUser.userId);
-      this.totalFailedCommands += 1;
-      this.addLog(`⏭️ [${trustedUser.label}] LLM 보류 #${parsedCommand.targetPostNo} - ${formatLlmDecisionSummary(helperResult)}`);
-      return;
-    }
-
-    const confidenceThreshold = clampConfidenceThreshold(this.config.llmConfidenceThreshold);
-    if (helperResult.confidence < confidenceThreshold) {
-      this.incrementDailyUsage(trustedUser.userId);
-      this.totalFailedCommands += 1;
-      this.addLog(`⏭️ [${trustedUser.label}] LLM 신뢰도 부족 #${parsedCommand.targetPostNo} - ${formatLlmDecisionSummary(helperResult)} / threshold=${confidenceThreshold.toFixed(2)}`);
-      return;
-    }
-
-    const loginSessionResult = await this.ensureLoginSessionForAction();
-    if (!loginSessionResult.success) {
-      this.totalFailedCommands += 1;
-      this.addLog(`❌ [${trustedUser.label}] 로그인 세션 실패 #${parsedCommand.targetPostNo} - ${loginSessionResult.message}`);
-      await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-        id: recordId,
-        source: 'auto_report',
-        status: 'failed',
-        reporterUserId: trustedUser.userId,
-        reporterLabel: trustedUser.label,
-        targetUrl: parsedCommand.targetUrl,
-        targetPostNo: parsedCommand.targetPostNo,
-        reportReason: parsedCommand.reasonText,
-        title: content.title,
-        bodyText: content.bodyText,
-        imageUrls: content.imageUrls,
-        decision: helperResult.decision,
-        confidence: helperResult.confidence,
-        policyIds: helperResult.policy_ids || [],
-        reason: `로그인 세션 실패: ${loginSessionResult.message || 'login 연결실패'}`,
-      }), signal);
-      return;
-    }
-
-    const actionResult = await this.executeDeleteAndBanWithRecovery(
-      this.config,
-      parsedCommand.targetPostNo,
-      trustedUser.label,
-      parsedCommand.reasonText,
-      signal,
-    );
-
-    if (actionResult.success) {
-      this.incrementDailyUsage(trustedUser.userId);
-      this.totalSucceededCommands += 1;
       this.addLog(
-        `✅ [${trustedUser.label}] 처리 완료 #${parsedCommand.targetPostNo} `
-        + `(${authorCheck.message} / ${formatLlmDecisionSummary(helperResult)} / ${actionResult.reasonText})`
-        + (actionResult.recoveredByLoginRetry ? ' [세션 재검증 후 복구]' : ''),
+        `❌ [${trustedUser.label}] 처리 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`
+        + buildDeleteActionDiagnosticSuffix(actionResult),
       );
-      return;
+      await persistActiveTransparencyRecord({
+        status: 'failed',
+        reason: buildDeleteActionFailureReason(actionResult),
+        ...buildDeleteActionDebugFields(actionResult),
+      }, { terminal: true });
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        await finalizeAbortPendingRecord();
+      }
+      throw error;
+    } finally {
+      await stopPendingHeartbeat();
+      activePendingRecord = null;
+      pendingCompletedDecisionPersisted = false;
+      pendingTerminalFinalized = false;
     }
-
-    this.totalFailedCommands += 1;
-    this.addLog(
-      `❌ [${trustedUser.label}] 처리 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`
-      + buildDeleteActionDiagnosticSuffix(actionResult),
-    );
-    await persistTransparencyRecordBestEffort(this.config, buildTransparencyRecord({
-      id: recordId,
-      source: 'auto_report',
-      status: 'failed',
-      reporterUserId: trustedUser.userId,
-      reporterLabel: trustedUser.label,
-      targetUrl: parsedCommand.targetUrl,
-      targetPostNo: parsedCommand.targetPostNo,
-      reportReason: parsedCommand.reasonText,
-      title: content.title,
-      bodyText: content.bodyText,
-      imageUrls: content.imageUrls,
-      decision: helperResult.decision,
-      confidence: helperResult.confidence,
-      policyIds: helperResult.policy_ids || [],
-      reason: buildDeleteActionFailureReason(actionResult),
-      ...buildDeleteActionDebugFields(actionResult),
-    }), signal);
   }
 
   async ensureLoginSessionForAction() {
@@ -1062,10 +1140,13 @@ function clampConfidenceThreshold(value) {
 }
 
 function buildTransparencyRecord(input) {
+  const nowIso = new Date().toISOString();
+  const createdAt = normalizeIsoDateValue(input?.createdAt) || nowIso;
+  const updatedAt = normalizeIsoDateValue(input?.updatedAt) || nowIso;
   return {
     id: String(input.id || createRecordId()),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt,
+    updatedAt,
     source: String(input.source || 'auto_report'),
     status: String(input.status || 'completed'),
     decisionSource: String(input.decisionSource || 'gemini'),
@@ -1092,7 +1173,7 @@ function buildTransparencyRecord(input) {
 
 async function persistTransparencyRecordBestEffort(config, record, signal) {
   if (!record) {
-    return;
+    return { success: false, message: 'record가 없습니다.' };
   }
 
   try {
@@ -1100,12 +1181,70 @@ async function persistTransparencyRecordBestEffort(config, record, signal) {
     if (!result.success) {
       console.warn('[ReportBot] transparency record 저장 실패:', result.message);
     }
+    return result;
   } catch (error) {
     if (error?.name === 'AbortError') {
-      return;
+      throw error;
     }
     console.warn('[ReportBot] transparency record 저장 예외:', error.message);
+    return {
+      success: false,
+      message: error?.message || 'transparency record 저장 예외',
+    };
   }
+}
+
+async function persistTransparencyRecordWithoutAbortBestEffort(config, record) {
+  if (!record) {
+    return { success: false, message: 'record가 없습니다.' };
+  }
+
+  try {
+    const result = await persistTransparencyRecordWithoutAbort(config, record);
+    if (!result.success) {
+      console.warn('[ReportBot] transparency record(no-abort) 저장 실패:', result.message);
+    }
+    return result;
+  } catch (error) {
+    console.warn('[ReportBot] transparency record(no-abort) 저장 예외:', error?.message || String(error));
+    return {
+      success: false,
+      message: error?.message || 'transparency record(no-abort) 저장 예외',
+    };
+  }
+}
+
+function mergeTransparencyRecordContext(previousRecord, nextRecord) {
+  if (!previousRecord && !nextRecord) {
+    return null;
+  }
+
+  const nowIso = new Date().toISOString();
+  const previousCreatedAt = normalizeIsoDateValue(previousRecord?.createdAt);
+  const nextCreatedAt = normalizeIsoDateValue(nextRecord?.createdAt);
+  const previousUpdatedAt = normalizeIsoDateValue(previousRecord?.updatedAt);
+  const nextUpdatedAt = normalizeIsoDateValue(nextRecord?.updatedAt);
+
+  return {
+    ...(previousRecord || {}),
+    ...(nextRecord || {}),
+    createdAt: previousCreatedAt || nextCreatedAt || nowIso,
+    updatedAt: nextUpdatedAt || previousUpdatedAt || nowIso,
+  };
+}
+
+function normalizeIsoDateValue(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return '';
+  }
+
+  const parsed = Date.parse(text);
+  if (!Number.isFinite(parsed)) {
+    return '';
+  }
+
+  return new Date(parsed).toISOString();
 }
 
 function createRecordId() {
