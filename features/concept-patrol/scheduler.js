@@ -74,7 +74,7 @@ class Scheduler {
       fluidRatioThresholdPercent: DEFAULT_FLUID_RATIO_THRESHOLD_PERCENT,
       patrolDefendingCandidateThreshold: DEFAULT_PATROL_DEFENDING_CANDIDATE_THRESHOLD,
       patrolDefendingHoldMs: DEFAULT_PATROL_DEFENDING_HOLD_MS,
-      testMode: true,
+      testMode: false,
     });
   }
 
@@ -589,7 +589,7 @@ function normalizeConfig(config = {}) {
     fluidRatioThresholdPercent: clampPercent(config.fluidRatioThresholdPercent, DEFAULT_FLUID_RATIO_THRESHOLD_PERCENT),
     patrolDefendingCandidateThreshold: Math.max(1, Number(config.patrolDefendingCandidateThreshold) || DEFAULT_PATROL_DEFENDING_CANDIDATE_THRESHOLD),
     patrolDefendingHoldMs: Math.max(1000, Number(config.patrolDefendingHoldMs) || DEFAULT_PATROL_DEFENDING_HOLD_MS),
-    testMode: config.testMode !== false,
+    testMode: config.testMode === true,
   };
 }
 
