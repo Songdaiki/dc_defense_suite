@@ -27,6 +27,14 @@ import {
   syncDcSessionBrokerSharedConfig,
   updateDcSessionBrokerConfig,
 } from './dc-session-broker.js';
+import {
+  getUidRatioWarningStatusForActiveTab,
+  handleUidRatioWarningTabActivated,
+  handleUidRatioWarningTabRemoved,
+  handleUidRatioWarningTabUpdated,
+  resumeUidRatioWarningForActiveTab,
+  toggleUidRatioWarningForActiveTab,
+} from './uid-ratio-warning.js';
 
 const commentScheduler = new CommentScheduler();
 const commentMonitorScheduler = new CommentMonitorScheduler({
@@ -102,6 +110,21 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.tabs.onRemoved.addListener((tabId) => {
   handleDcSessionBrokerTabRemoved(tabId).catch((error) => {
     console.error('[DefenseSuite] broker session tab 제거 처리 실패:', error);
+  });
+  handleUidRatioWarningTabRemoved(tabId).catch((error) => {
+    console.error('[DefenseSuite] uid 경고 탭 제거 정리 실패:', error);
+  });
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  handleUidRatioWarningTabUpdated(tabId, changeInfo, tab).catch((error) => {
+    console.error('[DefenseSuite] uid 경고 탭 갱신 처리 실패:', error);
+  });
+});
+
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  handleUidRatioWarningTabActivated(activeInfo).catch((error) => {
+    console.error('[DefenseSuite] uid 경고 탭 활성화 처리 실패:', error);
   });
 });
 
@@ -187,6 +210,7 @@ async function resumeAllSchedulers() {
     await resumeStandaloneScheduler(schedulers.conceptMonitor, '🔁 저장된 개념글 방어 상태 복원');
     await resumeStandaloneScheduler(schedulers.conceptPatrol, '🔁 저장된 개념글순회 상태 복원');
     await resumeStandaloneScheduler(schedulers.hanRefreshIpBan, '🔁 저장된 도배기 갱신 차단 자동 상태 복원');
+    await resumeUidRatioWarningForActiveTab();
 
     if (typeof schedulers.conceptMonitor.syncRecommendCutCoordinator === 'function') {
       await schedulers.conceptMonitor.syncRecommendCutCoordinator();
@@ -237,6 +261,21 @@ async function handleMessage(message) {
       success: true,
       statuses: getAllStatuses(),
       sessionFallbackStatus: getDcSessionBrokerStatus(),
+      uidRatioWarningStatus: await getUidRatioWarningStatusForActiveTab(),
+    };
+  }
+
+  if (message.action === 'toggleUidRatioWarning') {
+    const result = await toggleUidRatioWarningForActiveTab({
+      enabled: message.enabled,
+      galleryId: schedulers.semiPost.config.galleryId,
+    });
+
+    return {
+      ...result,
+      statuses: getAllStatuses(),
+      sessionFallbackStatus: getDcSessionBrokerStatus(),
+      uidRatioWarningStatus: result.uidRatioWarningStatus ?? await getUidRatioWarningStatusForActiveTab(),
     };
   }
 

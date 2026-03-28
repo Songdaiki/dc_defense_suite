@@ -20,6 +20,7 @@ let latestMonitorStatus = null;
 let latestConceptMonitorStatus = null;
 let latestConceptPatrolStatus = null;
 let latestSessionFallbackStatus = null;
+let latestUidRatioWarningStatus = null;
 
 const SESSION_FALLBACK_DOM = {
   keepaliveToggle: document.getElementById('sessionFallbackKeepaliveToggle'),
@@ -200,6 +201,15 @@ const FEATURE_DOM = {
     saveConfigBtn: document.getElementById('semiPostSaveConfigBtn'),
     resetBtn: document.getElementById('semiPostResetBtn'),
   },
+  uidRatioWarning: {
+    uidRatioWarningToggleBtn: document.getElementById('uidRatioWarningToggleBtn'),
+    uidRatioWarningToggleLabel: document.getElementById('uidRatioWarningToggleLabel'),
+    uidRatioWarningStatusText: document.getElementById('uidRatioWarningStatusText'),
+    uidRatioWarningMatchedUidCount: document.getElementById('uidRatioWarningMatchedUidCount'),
+    uidRatioWarningWarnedUidCount: document.getElementById('uidRatioWarningWarnedUidCount'),
+    uidRatioWarningLastAppliedAt: document.getElementById('uidRatioWarningLastAppliedAt'),
+    uidRatioWarningMetaText: document.getElementById('uidRatioWarningMetaText'),
+  },
   ip: {
     toggleBtn: document.getElementById('ipToggleBtn'),
     toggleLabel: document.getElementById('ipToggleLabel'),
@@ -283,6 +293,7 @@ function bindFeatureEvents() {
   bindCommentEvents();
   bindPostEvents();
   bindSemiPostEvents();
+  bindUidRatioWarningEvents();
   bindIpEvents();
   bindMonitorEvents();
   bindConceptPatrolEvents();
@@ -1236,6 +1247,34 @@ function bindSemiPostEvents() {
   });
 }
 
+function bindUidRatioWarningEvents() {
+  const dom = FEATURE_DOM.uidRatioWarning;
+
+  dom.uidRatioWarningToggleBtn.addEventListener('change', async () => {
+    const response = await sendMessage({
+      action: 'toggleUidRatioWarning',
+      enabled: dom.uidRatioWarningToggleBtn.checked,
+    });
+
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.uidRatioWarningStatus) {
+      updateUidRatioWarningUI(response.uidRatioWarningStatus);
+    }
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+}
+
 function bindMonitorEvents() {
   const dom = FEATURE_DOM.monitor;
 
@@ -1318,6 +1357,7 @@ async function refreshAllStatuses() {
 
   applyStatuses(response.statuses);
   updateSessionFallbackUI(response.sessionFallbackStatus);
+  updateUidRatioWarningUI(response.uidRatioWarningStatus);
 }
 
 function applyStatuses(statuses) {
@@ -1728,6 +1768,31 @@ function updateSemiPostUI(status) {
   updateLogList(dom.logList, status.logs);
 }
 
+function updateUidRatioWarningUI(status) {
+  const dom = FEATURE_DOM.uidRatioWarning;
+  const nextStatus = status || buildDefaultUidRatioWarningStatus();
+  latestUidRatioWarningStatus = nextStatus;
+
+  updateToggle(
+    {
+      toggleBtn: dom.uidRatioWarningToggleBtn,
+      toggleLabel: dom.uidRatioWarningToggleLabel,
+    },
+    nextStatus.enabled,
+  );
+
+  dom.uidRatioWarningMatchedUidCount.textContent = `${nextStatus.matchedUidCount ?? 0}명`;
+  dom.uidRatioWarningWarnedUidCount.textContent = `${nextStatus.warnedUidCount ?? 0}명`;
+  dom.uidRatioWarningLastAppliedAt.textContent = formatTimestamp(nextStatus.lastAppliedAt);
+  updateStatusText(
+    dom.uidRatioWarningStatusText,
+    getUidRatioWarningStatusLabel(nextStatus),
+    getUidRatioWarningStatusClassName(nextStatus),
+  );
+  dom.uidRatioWarningMetaText.textContent = buildUidRatioWarningMetaText(nextStatus);
+  setDisabled(dom.uidRatioWarningToggleBtn, false);
+}
+
 function updateMonitorUI(status) {
   if (!status) {
     return;
@@ -1792,6 +1857,96 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus) {
   getFeatureConfigInputs('post').forEach((input) => setDisabled(input, postIpLocked));
   getFeatureConfigInputs('semiPost').forEach((input) => setDisabled(input, postIpLocked));
   getFeatureConfigInputs('ip').forEach((input) => setDisabled(input, postIpLocked));
+}
+
+function buildDefaultUidRatioWarningStatus() {
+  return {
+    enabled: false,
+    applying: false,
+    supported: true,
+    tabId: 0,
+    pageUrl: '',
+    matchedUidCount: 0,
+    warnedUidCount: 0,
+    lastAppliedAt: '',
+    lastError: '',
+  };
+}
+
+function getUidRatioWarningStatusLabel(status = {}) {
+  if (status.applying) {
+    return '🟠 검사 중';
+  }
+
+  if (status.lastError) {
+    return '🔴 적용 실패';
+  }
+
+  if (!status.supported) {
+    return '⚪ 디시 페이지 아님';
+  }
+
+  if (!status.enabled) {
+    return '🔴 미적용';
+  }
+
+  if ((status.warnedUidCount ?? 0) > 0) {
+    return `🟢 경고 ${status.warnedUidCount}명`;
+  }
+
+  if ((status.matchedUidCount ?? 0) > 0) {
+    return '🟡 경고 없음';
+  }
+
+  return '🟡 식별코드 없음';
+}
+
+function getUidRatioWarningStatusClassName(status = {}) {
+  if (status.applying) {
+    return 'status-warn';
+  }
+
+  if (status.lastError) {
+    return 'status-off';
+  }
+
+  if (!status.supported) {
+    return 'status-muted';
+  }
+
+  if (!status.enabled) {
+    return 'status-off';
+  }
+
+  return (status.warnedUidCount ?? 0) > 0 ? 'status-warn' : 'status-on';
+}
+
+function buildUidRatioWarningMetaText(status = {}) {
+  if (!status.supported) {
+    return '디시인사이드 게시판/본문 페이지에서만 사용할 수 있습니다.';
+  }
+
+  if (status.applying) {
+    return '현재 탭 식별코드 활동 통계를 조회하는 중입니다.';
+  }
+
+  if (status.lastError) {
+    return status.lastError;
+  }
+
+  if (!status.enabled) {
+    return '켜두면 디시 페이지를 옮겨도 현재 보는 탭에 다시 적용됩니다.';
+  }
+
+  if ((status.matchedUidCount ?? 0) === 0) {
+    return '현재 페이지에 식별코드 작성자가 없어 표시할 경고가 없습니다.';
+  }
+
+  if ((status.warnedUidCount ?? 0) === 0) {
+    return '현재 페이지 식별코드를 검사했지만 글 비중 90% 이상 경고 대상은 없습니다.';
+  }
+
+  return `현재 페이지 식별코드 ${status.matchedUidCount}명 중 ${status.warnedUidCount}명에 경고를 붙였습니다.`;
 }
 
 function updateToggle(dom, isRunning) {

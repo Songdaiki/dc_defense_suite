@@ -26,6 +26,7 @@
       <button class="tab-button" data-tab="post"><span class="tab-label">게시글<br>분류</span></button>
       <button class="tab-button" data-tab="semiPost"><span class="tab-label">반고닉<br>분류</span></button>
       <button class="tab-button" data-tab="ip"><span class="tab-label">IP차단<br>삭제</span></button>
+      <button class="tab-button tab-warning" data-tab="uidRatioWarning"><span class="tab-label">분탕<br>경고</span></button>
     </nav>
 
     <main class="panels">
@@ -841,6 +842,48 @@
           <h3>최근 로그</h3>
           <div id="ipLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
         </section>
+      </section>
+
+      <section class="panel" data-feature="uidRatioWarning">
+        <div class="feature-header feature-uid-ratio-warning">
+          <div>
+            <h2>분탕경고</h2>
+            <p>현재 보고 있는 디시 페이지에서 글 비중 90% 이상 식별코드에 빨간 - 분탕주의를 붙입니다</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="uidRatioWarningToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="uidRatioWarningToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="manual-utility-badges">
+          <span class="manual-utility-pill manual-utility-pill-warn">현재 탭 한정</span>
+          <span class="manual-utility-pill">자동 분류와 별도</span>
+        </div>
+
+        <div class="status-grid manual-utility-status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="uidRatioWarningStatusText" class="status-value status-off">🔴 미적용</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 페이지 UID</span>
+            <span id="uidRatioWarningMatchedUidCount" class="status-value">0명</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">경고 UID</span>
+            <span id="uidRatioWarningWarnedUidCount" class="status-value">0명</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">마지막 적용</span>
+            <span id="uidRatioWarningLastAppliedAt" class="status-value">-</span>
+          </div>
+        </div>
+
+        <p id="uidRatioWarningMetaText" class="manual-utility-meta">켜두면 디시 페이지를 옮겨도 현재 보는 탭에 다시 적용됩니다.</p>
       </section>
 
       <section class="panel is-active" data-feature="monitor">

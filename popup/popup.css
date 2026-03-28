@@ -11,6 +11,7 @@
   --concept-patrol: #f0c26d;
   --han-refresh-ip-ban: #ff9d72;
   --post: #ffb84f;
+  --uid-ratio-warning: #ff6b6b;
   --ip: #63d8e6;
   --monitor: #9cc2ff;
   --danger: #ff7b85;
@@ -173,7 +174,7 @@ body {
 }
 
 .tabs .tab-button:nth-child(n + 6) {
-  grid-column: span 5;
+  grid-column: span 4;
 }
 
 .tab-button {
@@ -203,6 +204,12 @@ body {
   color: #dcfff9;
 }
 
+.tab-button.tab-warning {
+  background: linear-gradient(180deg, rgba(255, 107, 107, 0.18), rgba(42, 19, 23, 0.98));
+  border-color: rgba(255, 107, 107, 0.4);
+  color: #ffe8e8;
+}
+
 .tab-button.is-active {
   background: #1b2636;
   border-color: #54637f;
@@ -213,6 +220,12 @@ body {
   background: linear-gradient(180deg, rgba(100, 229, 205, 0.3), rgba(20, 52, 59, 0.98));
   border-color: rgba(100, 229, 205, 0.68);
   box-shadow: inset 0 0 0 1px rgba(183, 255, 241, 0.08);
+}
+
+.tab-button.tab-warning.is-active {
+  background: linear-gradient(180deg, rgba(255, 107, 107, 0.34), rgba(62, 20, 26, 0.98));
+  border-color: rgba(255, 138, 138, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255, 214, 214, 0.08);
 }
 
 .panels {
@@ -285,6 +298,10 @@ body {
 
 .feature-semi-post {
   background: linear-gradient(180deg, rgba(212, 149, 255, 0.16), rgba(42, 23, 48, 0.95));
+}
+
+.feature-uid-ratio-warning {
+  background: linear-gradient(180deg, rgba(255, 107, 107, 0.18), rgba(56, 22, 26, 0.95));
 }
 
 .feature-ip {
@@ -360,6 +377,131 @@ body {
   margin-bottom: 12px;
 }
 
+.manual-utility-card {
+  margin-bottom: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.manual-warning-card {
+  position: relative;
+  background:
+    radial-gradient(circle at top right, rgba(255, 132, 117, 0.22), transparent 42%),
+    linear-gradient(180deg, rgba(255, 118, 98, 0.18), rgba(58, 20, 18, 0.97));
+  border-color: rgba(255, 120, 108, 0.42);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 120, 108, 0.08),
+    0 10px 24px rgba(31, 7, 7, 0.22);
+}
+
+.manual-warning-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: 10px 0 0 10px;
+  background: linear-gradient(180deg, rgba(255, 151, 138, 0.95), rgba(255, 96, 96, 0.55));
+}
+
+.manual-utility-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.manual-utility-header > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.manual-utility-header h3 {
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.manual-warning-card .manual-utility-header h3 {
+  color: #ffe0d9;
+}
+
+.manual-utility-header p {
+  color: #f0cfc8;
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
+.manual-utility-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.manual-utility-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #f0e9e6;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.manual-utility-pill-warn {
+  color: #ffe5df;
+  background: rgba(255, 107, 107, 0.16);
+  border-color: rgba(255, 107, 107, 0.28);
+}
+
+.manual-warning-card .toggle-section {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(53, 15, 15, 0.42);
+  border: 1px solid rgba(255, 120, 108, 0.22);
+}
+
+.manual-warning-card .slider {
+  background: rgba(112, 42, 42, 0.95);
+  border-color: rgba(255, 149, 137, 0.2);
+}
+
+.manual-warning-card .toggle-switch input:checked + .slider {
+  background: linear-gradient(180deg, #ff8c7d, #ff6262);
+  box-shadow: 0 0 0 1px rgba(255, 160, 149, 0.12);
+}
+
+.manual-warning-card .toggle-label.off {
+  color: #ffb1a6;
+}
+
+.manual-warning-card .toggle-label.on {
+  color: #ffd8d1;
+}
+
+.manual-utility-status-grid {
+  margin-bottom: 8px;
+}
+
+.manual-utility-meta {
+  color: #f0cfc8;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.manual-warning-card .status-item {
+  background: rgba(27, 14, 14, 0.82);
+  border-color: rgba(255, 120, 108, 0.16);
+}
+
+.manual-warning-card .status-label {
+  color: #efb8ad;
+}
+
 .status-item {
   background: #151d29;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -391,6 +533,10 @@ body {
 
 .status-warn {
   color: var(--warn) !important;
+}
+
+.status-muted {
+  color: var(--muted) !important;
 }
 
 .settings-section {
