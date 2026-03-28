@@ -476,11 +476,27 @@ async function handleMessage(message) {
 
     case 'updateConfig':
       if (message.config) {
+        let partialConfigMessage = '';
+
         if (message.feature === 'post' && message.config.manualAttackMode !== undefined) {
           message.config = {
             ...message.config,
             manualAttackMode: normalizePostManualAttackMode(message.config.manualAttackMode),
           };
+        }
+
+        if (message.feature === 'conceptMonitor') {
+          const conceptMonitorConfigAdjustment = adjustConceptMonitorConfigUpdateForRunningScheduler(scheduler, message.config);
+          message.config = conceptMonitorConfigAdjustment.config;
+          partialConfigMessage = conceptMonitorConfigAdjustment.message;
+          if (Object.keys(message.config).length <= 0) {
+            return {
+              success: false,
+              message: partialConfigMessage || '저장할 개념글 방어 설정 변경이 없습니다.',
+              status: scheduler.getStatus(),
+              statuses: getAllStatuses(),
+            };
+          }
         }
 
         if (message.feature === 'hanRefreshIpBan') {
@@ -531,6 +547,7 @@ async function handleMessage(message) {
       }
       return {
         success: true,
+        message: partialConfigMessage || '',
         status: scheduler.getStatus(),
         config: scheduler.config,
         statuses: getAllStatuses(),
@@ -1121,6 +1138,29 @@ function applyConceptMonitorConfigUpdate(scheduler, config) {
   if (currentEnabled && !nextEnabled) {
     scheduler.resetAutoCutState('ℹ️ 개념컷 자동조절 비활성화 - 상태를 초기화했습니다.');
   }
+}
+
+function adjustConceptMonitorConfigUpdateForRunningScheduler(scheduler, config) {
+  const nextConfig = { ...(config || {}) };
+  if (!scheduler?.isRunning || !Object.prototype.hasOwnProperty.call(nextConfig, 'testMode')) {
+    return {
+      config: nextConfig,
+      message: '',
+    };
+  }
+
+  if (Boolean(nextConfig.testMode) === Boolean(scheduler.config?.testMode)) {
+    return {
+      config: nextConfig,
+      message: '',
+    };
+  }
+
+  delete nextConfig.testMode;
+  return {
+    config: nextConfig,
+    message: '개념글 방어 실행 중이라 테스트 모드 변경은 저장되지 않았습니다. 나머지 설정만 저장했습니다.',
+  };
 }
 
 function resetPostSchedulerState(message) {
