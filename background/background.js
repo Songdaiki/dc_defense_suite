@@ -474,9 +474,9 @@ async function handleMessage(message) {
     case 'getStatus':
       return { success: true, status: scheduler.getStatus() };
 
-    case 'updateConfig':
+    case 'updateConfig': {
+      let partialConfigMessage = '';
       if (message.config) {
-        let partialConfigMessage = '';
 
         if (message.feature === 'post' && message.config.manualAttackMode !== undefined) {
           message.config = {
@@ -553,6 +553,7 @@ async function handleMessage(message) {
         statuses: getAllStatuses(),
         sessionFallbackStatus: getDcSessionBrokerStatus(),
       };
+    }
 
     case 'resetStats':
       resetSchedulerStats(message.feature, scheduler);
