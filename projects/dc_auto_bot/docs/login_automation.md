@@ -11,8 +11,8 @@
 
 관련 문서:
 
-- [dc_session_broker_login_keepalive_plan.md](/home/eorb915/projects/dc_defense_suite/docs/dc_session_broker_login_keepalive_plan.md)
-- [login_automation_dependency_removal_plan.md](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/docs/login_automation_dependency_removal_plan.md)
+- [dc_session_broker_login_keepalive_plan.md](../../../docs/dc_session_broker_login_keepalive_plan.md)
+- [login_automation_dependency_removal_plan.md](./login_automation_dependency_removal_plan.md)
 
 ## 목적
 

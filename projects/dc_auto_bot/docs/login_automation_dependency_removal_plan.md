@@ -10,9 +10,9 @@
 참조:
 
 - 메인 이전 플랜:
-  - [dc_session_broker_login_keepalive_plan.md](/home/eorb915/projects/dc_defense_suite/docs/dc_session_broker_login_keepalive_plan.md)
+  - [dc_session_broker_login_keepalive_plan.md](../../../docs/dc_session_broker_login_keepalive_plan.md)
 - 기존 신문고봇 로그인 자동화:
-  - [login_automation.md](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/docs/login_automation.md)
+  - [login_automation.md](./login_automation.md)
 
 
 ## 현재 실제 의존성
@@ -27,10 +27,10 @@
 
 기준:
 
-- [background.js#L207](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/background.js#L207)
-- [background.js#L289](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/background.js#L289)
-- [popup.html#L128](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/popup/popup.html#L128)
-- [popup.js#L468](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/popup/popup.js#L468)
+- [background.js#L207](../background/background.js#L207)
+- [background.js#L289](../background/background.js#L289)
+- [popup.html#L128](../popup/popup.html#L128)
+- [popup.js#L468](../popup/popup.js#L468)
 
 
 ### 2. 런타임 자동화 의존성
@@ -47,20 +47,20 @@
 
 기준:
 
-- [background.js#L78](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/background.js#L78)
-- [background.js#L1241](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/background.js#L1241)
-- [background.js#L1417](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/background.js#L1417)
-- [background.js#L1437](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/background.js#L1437)
+- [background.js#L78](../background/background.js#L78)
+- [background.js#L1241](../background/background.js#L1241)
+- [background.js#L1417](../background/background.js#L1417)
+- [background.js#L1437](../background/background.js#L1437)
 
 
 ### 3. scheduler 실행 경로 의존성
 
 신문고봇 scheduler는 실제 삭제/차단 직전에 로그인 보장을 기대한다.
 
-- [scheduler.js#L503](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/scheduler.js#L503)
-- [scheduler.js#L635](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/scheduler.js#L635)
-- [scheduler.js#L703](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/scheduler.js#L703)
-- [scheduler.js#L765](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/scheduler.js#L765)
+- [scheduler.js#L503](../background/scheduler.js#L503)
+- [scheduler.js#L635](../background/scheduler.js#L635)
+- [scheduler.js#L703](../background/scheduler.js#L703)
+- [scheduler.js#L765](../background/scheduler.js#L765)
 
 
 ## 목표 상태
@@ -129,7 +129,7 @@
 
 기준:
 
-- [projects/dc_auto_bot/background/background.js#L55](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/background.js#L55)
+- [projects/dc_auto_bot/background/background.js#L55](../background/background.js#L55)
 
 
 ### 2. 2차
@@ -213,8 +213,8 @@
 
 에 직접 묶여 있다.
 
-- [projects/dc_auto_bot/popup/popup.js#L3](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/popup/popup.js#L3)
-- [projects/dc_auto_bot/background/background.js#L207](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/background.js#L207)
+- [projects/dc_auto_bot/popup/popup.js#L3](../popup/popup.js#L3)
+- [projects/dc_auto_bot/background/background.js#L207](../background/background.js#L207)
 
 따라서 1차에서는:
 
@@ -249,10 +249,10 @@
 
 기준:
 
-- [projects/dc_auto_bot/popup/popup.js#L69](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/popup/popup.js#L69)
-- [projects/dc_auto_bot/popup/popup.js#L120](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/popup/popup.js#L120)
-- [projects/dc_auto_bot/background/background.js#L337](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/background.js#L337)
-- [projects/dc_auto_bot/background/background.js#L364](/home/eorb915/projects/dc_defense_suite/projects/dc_auto_bot/background/background.js#L364)
+- [projects/dc_auto_bot/popup/popup.js#L69](../popup/popup.js#L69)
+- [projects/dc_auto_bot/popup/popup.js#L120](../popup/popup.js#L120)
+- [projects/dc_auto_bot/background/background.js#L337](../background/background.js#L337)
+- [projects/dc_auto_bot/background/background.js#L364](../background/background.js#L364)
 
 즉 1차 제거 시에는 아래가 같이 필요하다.
 
