@@ -10,6 +10,7 @@ import {
 } from './parser.js';
 import {
   AUTO_CUT_STATE,
+  DEFENDING_RECOMMEND_CUT,
   NORMAL_RECOMMEND_CUT,
   getConceptRecommendCutCoordinatorStatus,
   syncConceptMonitorRecommendCutState,
@@ -79,7 +80,7 @@ class Scheduler {
     }
 
     if (this.config.autoCutEnabled) {
-      this.resetAutoCutState('ℹ️ 개념컷 자동조절 활성화 - NORMAL 기준으로 감시를 시작합니다.');
+      this.seedAutoCutStateFromCurrentCut('ℹ️ 개념컷 자동조절 활성화 - 현재 개념컷 기준으로 감시를 시작합니다.');
     }
 
     this.isRunning = true;
@@ -350,6 +351,30 @@ class Scheduler {
     this.lastRecommendSnapshot = [];
     this.lastAppliedRecommendCut = NORMAL_RECOMMEND_CUT;
     this.lastRecommendCutApplySucceeded = true;
+
+    if (message) {
+      this.log(message);
+    }
+  }
+
+  seedAutoCutStateFromCurrentCut(message = '') {
+    const coordinatorStatus = getConceptRecommendCutCoordinatorStatus();
+    const currentRecommendCut = Number(coordinatorStatus.effectiveRecommendCut) === DEFENDING_RECOMMEND_CUT
+      ? DEFENDING_RECOMMEND_CUT
+      : NORMAL_RECOMMEND_CUT;
+
+    this.autoCutState = currentRecommendCut === DEFENDING_RECOMMEND_CUT
+      ? AUTO_CUT_STATE.DEFENDING
+      : AUTO_CUT_STATE.NORMAL;
+    this.autoCutAttackHitCount = 0;
+    this.autoCutReleaseHitCount = 0;
+    this.lastRecommendDelta = 0;
+    this.lastComparedPostCount = 0;
+    this.lastCutChangedAt = coordinatorStatus.lastCutChangedAt || '';
+    this.lastAutoCutPollAt = '';
+    this.lastRecommendSnapshot = [];
+    this.lastAppliedRecommendCut = currentRecommendCut;
+    this.lastRecommendCutApplySucceeded = coordinatorStatus.lastRecommendCutApplySucceeded !== false;
 
     if (message) {
       this.log(message);
