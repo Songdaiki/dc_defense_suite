@@ -23,10 +23,10 @@ import {
 const STORAGE_KEY = 'conceptMonitorSchedulerState';
 const DEFAULT_SNAPSHOT_POST_LIMIT = 5;
 const DEFAULT_AUTO_CUT_POLL_INTERVAL_MS = 30000;
-const DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD = 200;
+const DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD = 25;
 const DEFAULT_AUTO_CUT_ATTACK_CONSECUTIVE_COUNT = 1;
-const DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD = 40;
-const DEFAULT_AUTO_CUT_RELEASE_CONSECUTIVE_COUNT = 2;
+const DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD = 15;
+const DEFAULT_AUTO_CUT_RELEASE_CONSECUTIVE_COUNT = 5;
 const TARGET_INSPECT_DELAY_MS = 5000;
 const INSPECT_DELAY_JITTER_MS = 500;
 
@@ -61,7 +61,7 @@ class Scheduler {
       galleryId: DEFAULT_CONFIG.galleryId,
       pollIntervalMs: 30000,
       snapshotPostLimit: DEFAULT_SNAPSHOT_POST_LIMIT,
-      fluidRatioThresholdPercent: 90,
+      fluidRatioThresholdPercent: 88,
       testMode: false,
       autoCutEnabled: false,
       autoCutPollIntervalMs: DEFAULT_AUTO_CUT_POLL_INTERVAL_MS,

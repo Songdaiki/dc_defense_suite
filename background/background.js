@@ -66,6 +66,7 @@ const schedulers = {
 };
 
 let resumeAllSchedulersPromise = null;
+let initialSchedulerResumeCompleted = false;
 
 void initializeApp();
 
@@ -228,11 +229,23 @@ async function resumeAllSchedulers() {
     }
 
     await resumeStandaloneScheduler(schedulers.monitor, '🔁 저장된 자동 감시 상태 복원');
+    initialSchedulerResumeCompleted = true;
   })().finally(() => {
     resumeAllSchedulersPromise = null;
   });
 
   return resumeAllSchedulersPromise;
+}
+
+async function ensureSchedulersReadyForMessage() {
+  if (resumeAllSchedulersPromise) {
+    await resumeAllSchedulersPromise;
+    return;
+  }
+
+  if (!initialSchedulerResumeCompleted) {
+    await resumeAllSchedulers();
+  }
 }
 
 function getScheduler(feature) {
@@ -255,6 +268,7 @@ function getAllStatuses() {
 
 async function handleMessage(message) {
   await initializeDcSessionBroker();
+  await ensureSchedulersReadyForMessage();
 
   if (message.action === 'getAllStatus') {
     return {

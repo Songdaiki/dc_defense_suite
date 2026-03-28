@@ -477,14 +477,14 @@ function bindConceptMonitorEvents() {
     const config = {
       pollIntervalMs: Math.max(1000, parseOptionalInt(dom.pollIntervalMsInput.value, 30000)),
       snapshotPostLimit: Math.max(1, parseOptionalInt(dom.snapshotPostLimitInput.value, 5)),
-      fluidRatioThresholdPercent: clampPercent(dom.fluidRatioThresholdInput.value, 90, 0),
+      fluidRatioThresholdPercent: clampPercent(dom.fluidRatioThresholdInput.value, 88, 0),
       testMode: nextTestMode,
       autoCutEnabled: dom.autoCutEnabledInput.checked,
       autoCutPollIntervalMs: Math.max(1000, parseOptionalInt(dom.autoCutPollIntervalMsInput.value, 30000)),
-      autoCutAttackRecommendThreshold: Math.max(0, parseOptionalInt(dom.autoCutAttackThresholdInput.value, 200)),
+      autoCutAttackRecommendThreshold: Math.max(0, parseOptionalInt(dom.autoCutAttackThresholdInput.value, 25)),
       autoCutAttackConsecutiveCount: Math.max(1, parseOptionalInt(dom.autoCutAttackConsecutiveCountInput.value, 1)),
-      autoCutReleaseRecommendThreshold: Math.max(0, parseOptionalInt(dom.autoCutReleaseThresholdInput.value, 40)),
-      autoCutReleaseConsecutiveCount: Math.max(1, parseOptionalInt(dom.autoCutReleaseConsecutiveCountInput.value, 2)),
+      autoCutReleaseRecommendThreshold: Math.max(0, parseOptionalInt(dom.autoCutReleaseThresholdInput.value, 15)),
+      autoCutReleaseConsecutiveCount: Math.max(1, parseOptionalInt(dom.autoCutReleaseConsecutiveCountInput.value, 5)),
     };
 
     const response = await sendFeatureMessage('conceptMonitor', { action: 'updateConfig', config });
@@ -1522,14 +1522,14 @@ function updateConceptMonitorUI(status) {
   syncFeatureConfigInputs('conceptMonitor', [
     [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 30000],
     [dom.snapshotPostLimitInput, status.config?.snapshotPostLimit ?? 5],
-    [dom.fluidRatioThresholdInput, status.config?.fluidRatioThresholdPercent ?? 90],
+    [dom.fluidRatioThresholdInput, status.config?.fluidRatioThresholdPercent ?? 88],
     [dom.testModeInput, status.config?.testMode === true],
     [dom.autoCutEnabledInput, status.config?.autoCutEnabled === true],
     [dom.autoCutPollIntervalMsInput, status.config?.autoCutPollIntervalMs ?? 30000],
-    [dom.autoCutAttackThresholdInput, status.config?.autoCutAttackRecommendThreshold ?? 200],
+    [dom.autoCutAttackThresholdInput, status.config?.autoCutAttackRecommendThreshold ?? 25],
     [dom.autoCutAttackConsecutiveCountInput, status.config?.autoCutAttackConsecutiveCount ?? 1],
-    [dom.autoCutReleaseThresholdInput, status.config?.autoCutReleaseRecommendThreshold ?? 40],
-    [dom.autoCutReleaseConsecutiveCountInput, status.config?.autoCutReleaseConsecutiveCount ?? 2],
+    [dom.autoCutReleaseThresholdInput, status.config?.autoCutReleaseRecommendThreshold ?? 15],
+    [dom.autoCutReleaseConsecutiveCountInput, status.config?.autoCutReleaseConsecutiveCount ?? 5],
   ]);
   updateToggle({ toggleBtn: dom.autoCutEnabledInput, toggleLabel: dom.autoCutEnabledLabel }, dom.autoCutEnabledInput.checked);
   updateLogList(dom.logList, status.logs);
