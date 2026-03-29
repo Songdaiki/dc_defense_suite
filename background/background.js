@@ -1132,7 +1132,7 @@ function applyConceptMonitorConfigUpdate(scheduler, config) {
     : Boolean(config.autoCutEnabled);
 
   if (!currentEnabled && nextEnabled) {
-    scheduler.seedAutoCutStateFromCurrentCut('ℹ️ 개념컷 자동조절 활성화 - 현재 개념컷 기준으로 감시를 시작합니다.');
+    scheduler.resetAutoCutState('ℹ️ 개념컷 자동조절 활성화 - 첫 비교 전까지 현재 개념컷을 유지합니다.');
     return;
   }
 
