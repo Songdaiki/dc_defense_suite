@@ -53,6 +53,7 @@ const uidWarningAutoBanScheduler = new UidWarningAutoBanScheduler();
 const monitorScheduler = new MonitorScheduler({
   postScheduler,
   ipScheduler,
+  uidWarningAutoBanScheduler,
 });
 
 const schedulers = {
@@ -777,6 +778,7 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.managedPostStarted = false;
     scheduler.managedIpStarted = false;
     scheduler.managedIpDeleteEnabled = true;
+    scheduler.managedUidWarningAutoBanSuspended = false;
     scheduler.logs = [];
   }
 }
@@ -972,6 +974,9 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
 }
 
 function getMonitorManualLockMessage(feature, action) {
+  const monitorOwnsUidWarningAutoBanLock = schedulers.monitor.isRunning
+    && [MONITOR_PHASE.ATTACKING, MONITOR_PHASE.RECOVERING].includes(schedulers.monitor.phase);
+
   if (feature === 'monitor'
     && action === 'start'
     && (schedulers.semiPost.isRunning || schedulers.semiPost.runPromise)) {
@@ -980,7 +985,7 @@ function getMonitorManualLockMessage(feature, action) {
 
   if (feature === 'uidWarningAutoBan'
     && action === 'start'
-    && (isSchedulerBusy(schedulers.monitor) || isSchedulerBusy(schedulers.ip) || schedulers.ip.isReleaseRunning)) {
+    && (monitorOwnsUidWarningAutoBanLock || isSchedulerBusy(schedulers.ip) || schedulers.ip.isReleaseRunning)) {
     return '분탕자동차단을 시작하기 전에 감시 자동화 / IP 차단을 먼저 정지하세요.';
   }
 
@@ -995,7 +1000,7 @@ function getMonitorManualLockMessage(feature, action) {
     return '감시 자동화 실행 중에는 게시글 분류 / 반고닉 분류 / IP 차단을 수동으로 조작할 수 없습니다.';
   }
 
-  if (schedulers.monitor.isRunning && feature === 'uidWarningAutoBan' && baseLockedActions.has(action)) {
+  if (monitorOwnsUidWarningAutoBanLock && feature === 'uidWarningAutoBan' && baseLockedActions.has(action)) {
     return '감시 자동화 실행 중에는 분탕자동차단을 수동으로 조작할 수 없습니다.';
   }
 
@@ -1076,7 +1081,10 @@ async function resolveUidWarningAutoBanResumeConflict() {
     return;
   }
 
-  if (isSchedulerBusy(schedulers.monitor) || isSchedulerBusy(schedulers.ip) || schedulers.ip.isReleaseRunning) {
+  const monitorOwnsUidWarningAutoBanLock = schedulers.monitor.isRunning
+    && [MONITOR_PHASE.ATTACKING, MONITOR_PHASE.RECOVERING].includes(schedulers.monitor.phase);
+
+  if (monitorOwnsUidWarningAutoBanLock || isSchedulerBusy(schedulers.ip) || schedulers.ip.isReleaseRunning) {
     await schedulers.uidWarningAutoBan.stop();
     schedulers.uidWarningAutoBan.log('ℹ️ 감시 자동화 / IP 차단과 충돌해 분탕자동차단 자동 복원을 취소했습니다.');
     await schedulers.uidWarningAutoBan.saveState();
@@ -1415,6 +1423,7 @@ function resetMonitorSchedulerState(message) {
   scheduler.managedPostStarted = false;
   scheduler.managedIpStarted = false;
   scheduler.managedIpDeleteEnabled = true;
+  scheduler.managedUidWarningAutoBanSuspended = false;
   scheduler.totalAttackDetected = 0;
   scheduler.totalAttackReleased = 0;
   scheduler.logs = [];

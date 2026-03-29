@@ -1931,6 +1931,9 @@ function updateMonitorUI(status) {
 
 function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uidWarningAutoBanStatus) {
   const postIpLocked = Boolean(monitorStatus?.isRunning);
+  const monitorUidWarningAutoBanLocked = Boolean(
+    monitorStatus?.isRunning && ['ATTACKING', 'RECOVERING'].includes(String(monitorStatus?.phase || '')),
+  );
   const commentLocked = Boolean(commentMonitorStatus?.isRunning);
   const ipLocked = Boolean(ipStatus?.isRunning || ipStatus?.isReleaseRunning);
   const uidWarningAutoBanLocked = Boolean(uidWarningAutoBanStatus?.isRunning);
@@ -1958,8 +1961,8 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uid
   setDisabled(ipDom.saveConfigBtn, postIpLocked || uidWarningAutoBanLocked);
   setDisabled(ipDom.resetBtn, postIpLocked || uidWarningAutoBanLocked);
   setDisabled(ipDom.releaseBtn, postIpLocked || uidWarningAutoBanLocked || ipDom.releaseBtn.disabled);
-  setDisabled(uidWarningAutoBanDom.toggleBtn, postIpLocked || ipLocked);
-  setDisabled(uidWarningAutoBanDom.resetBtn, postIpLocked || ipLocked);
+  setDisabled(uidWarningAutoBanDom.toggleBtn, monitorUidWarningAutoBanLocked || ipLocked);
+  setDisabled(uidWarningAutoBanDom.resetBtn, monitorUidWarningAutoBanLocked || ipLocked);
 
   getFeatureConfigInputs('comment').forEach((input) => setDisabled(input, commentLocked));
   getFeatureConfigInputs('post').forEach((input) => setDisabled(input, postIpLocked));

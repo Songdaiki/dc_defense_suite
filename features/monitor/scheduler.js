@@ -16,13 +16,14 @@ const PHASE = {
 };
 
 class Scheduler {
-  constructor({ postScheduler, ipScheduler } = {}) {
+  constructor({ postScheduler, ipScheduler, uidWarningAutoBanScheduler } = {}) {
     if (!postScheduler || !ipScheduler) {
       throw new Error('MonitorScheduler는 post/ip scheduler 의존성이 필요합니다.');
     }
 
     this.postScheduler = postScheduler;
     this.ipScheduler = ipScheduler;
+    this.uidWarningAutoBanScheduler = uidWarningAutoBanScheduler || null;
 
     this.isRunning = false;
     this.runPromise = null;
@@ -46,6 +47,7 @@ class Scheduler {
     this.managedPostStarted = false;
     this.managedIpStarted = false;
     this.managedIpDeleteEnabled = true;
+    this.managedUidWarningAutoBanSuspended = false;
     this.totalAttackDetected = 0;
     this.totalAttackReleased = 0;
     this.logs = [];
@@ -106,6 +108,7 @@ class Scheduler {
     this.managedPostStarted = false;
     this.managedIpStarted = false;
     this.managedIpDeleteEnabled = true;
+    this.managedUidWarningAutoBanSuspended = false;
     this.log('🟢 자동 감시 시작!');
     await this.saveState();
     this.ensureRunLoop();
@@ -118,6 +121,7 @@ class Scheduler {
       return;
     }
 
+    const shouldResumeUidWarningAutoBan = this.managedUidWarningAutoBanSuspended;
     this.isRunning = false;
     await this.stopManagedDefenses();
     this.clearAttackSession();
@@ -137,6 +141,7 @@ class Scheduler {
     this.pendingInitialSweepPosts = [];
     this.pendingManagedIpBanOnlyPosts = [];
     this.log('🔴 자동 감시 중지.');
+    await this.resumeUidWarningAutoBanAfterAttack(shouldResumeUidWarningAutoBan);
     await this.saveState();
   }
 
@@ -326,6 +331,7 @@ class Scheduler {
     } else {
       this.log(`🧹 initial sweep 대상 1페이지 유동 ${initialSweepTargetPosts.length}개`);
     }
+    await this.suspendUidWarningAutoBanForAttack();
     await this.ensureManagedDefensesStarted();
   }
 
@@ -518,6 +524,7 @@ class Scheduler {
   }
 
   async enterRecoveringMode() {
+    const shouldResumeUidWarningAutoBan = this.managedUidWarningAutoBanSuspended;
     this.phase = PHASE.RECOVERING;
     this.releaseHitCount = 0;
     this.log('🧊 공격 종료 확정. 자동 대응 종료 시작');
@@ -527,6 +534,7 @@ class Scheduler {
     this.clearAttackSession();
     this.phase = PHASE.NORMAL;
     this.log('✅ 감시 자동화 NORMAL 상태 복귀');
+    await this.resumeUidWarningAutoBanAfterAttack(shouldResumeUidWarningAutoBan);
   }
 
   async stopManagedDefenses() {
@@ -571,9 +579,60 @@ class Scheduler {
     this.managedPostStarted = false;
     this.managedIpStarted = false;
     this.managedIpDeleteEnabled = true;
+    this.managedUidWarningAutoBanSuspended = false;
     this.attackHitCount = 0;
     this.releaseHitCount = 0;
     this.postScheduler.clearRuntimeAttackMode();
+  }
+
+  async suspendUidWarningAutoBanForAttack() {
+    const scheduler = this.uidWarningAutoBanScheduler;
+    if (!scheduler || !scheduler.isRunning) {
+      this.managedUidWarningAutoBanSuspended = false;
+      return;
+    }
+
+    try {
+      await scheduler.stop();
+      scheduler.log('ℹ️ 게시물 자동화 공격 감지로 분탕자동차단을 일시 정지합니다.');
+      await scheduler.saveState();
+      this.managedUidWarningAutoBanSuspended = true;
+      this.log('🛑 분탕자동차단 일시 정지');
+    } catch (error) {
+      this.managedUidWarningAutoBanSuspended = false;
+      this.log(`⚠️ 분탕자동차단 일시 정지 실패 - ${error.message}`);
+    }
+  }
+
+  async resumeUidWarningAutoBanAfterAttack(shouldResume = this.managedUidWarningAutoBanSuspended) {
+    if (!shouldResume) {
+      this.managedUidWarningAutoBanSuspended = false;
+      return;
+    }
+
+    const scheduler = this.uidWarningAutoBanScheduler;
+    this.managedUidWarningAutoBanSuspended = false;
+    if (!scheduler) {
+      return;
+    }
+
+    if (scheduler.isRunning || scheduler.runPromise) {
+      return;
+    }
+
+    if (this.ipScheduler.isRunning || this.ipScheduler.runPromise || this.ipScheduler.isReleaseRunning) {
+      this.log('ℹ️ IP 차단 종료 전이라 분탕자동차단 자동 복원을 건너뜁니다.');
+      return;
+    }
+
+    try {
+      await scheduler.start();
+      scheduler.log('🔁 게시물 자동화 공격 종료로 분탕자동차단을 자동 복원합니다.');
+      await scheduler.saveState();
+      this.log('🔁 분탕자동차단 자동 복원');
+    } catch (error) {
+      this.log(`⚠️ 분탕자동차단 자동 복원 실패 - ${error.message}`);
+    }
   }
 
   activateManagedIpBanOnly(message = '') {
@@ -681,6 +740,7 @@ class Scheduler {
           managedPostStarted: this.managedPostStarted,
           managedIpStarted: this.managedIpStarted,
           managedIpDeleteEnabled: this.managedIpDeleteEnabled,
+          managedUidWarningAutoBanSuspended: this.managedUidWarningAutoBanSuspended,
           totalAttackDetected: this.totalAttackDetected,
           totalAttackReleased: this.totalAttackReleased,
           logs: this.logs.slice(0, 50),
@@ -725,6 +785,7 @@ class Scheduler {
       this.managedIpDeleteEnabled = schedulerState.managedIpDeleteEnabled === undefined
         ? true
         : Boolean(schedulerState.managedIpDeleteEnabled);
+      this.managedUidWarningAutoBanSuspended = Boolean(schedulerState.managedUidWarningAutoBanSuspended);
       this.totalAttackDetected = schedulerState.totalAttackDetected || 0;
       this.totalAttackReleased = schedulerState.totalAttackReleased || 0;
       this.logs = Array.isArray(schedulerState.logs) ? schedulerState.logs : [];
@@ -781,6 +842,7 @@ class Scheduler {
       managedPostStarted: this.managedPostStarted,
       managedIpStarted: this.managedIpStarted,
       managedIpDeleteEnabled: this.managedIpDeleteEnabled,
+      managedUidWarningAutoBanSuspended: this.managedUidWarningAutoBanSuspended,
       totalAttackDetected: this.totalAttackDetected,
       totalAttackReleased: this.totalAttackReleased,
       logs: this.logs.slice(0, 20),
