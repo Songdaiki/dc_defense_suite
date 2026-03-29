@@ -17,6 +17,7 @@ import {
 import { Scheduler as PostScheduler } from '../features/post/scheduler.js';
 import { Scheduler as SemiPostScheduler } from '../features/semi-post/scheduler.js';
 import { Scheduler as IpScheduler } from '../features/ip/scheduler.js';
+import { Scheduler as UidWarningAutoBanScheduler } from '../features/uid-warning-autoban/scheduler.js';
 import { PHASE as MONITOR_PHASE, Scheduler as MonitorScheduler } from '../features/monitor/scheduler.js';
 import {
   getDcSessionBrokerStatus,
@@ -48,6 +49,7 @@ const hanRefreshIpBanScheduler = new HanRefreshIpBanScheduler();
 const postScheduler = new PostScheduler();
 const semiPostScheduler = new SemiPostScheduler();
 const ipScheduler = new IpScheduler();
+const uidWarningAutoBanScheduler = new UidWarningAutoBanScheduler();
 const monitorScheduler = new MonitorScheduler({
   postScheduler,
   ipScheduler,
@@ -62,6 +64,7 @@ const schedulers = {
   post: postScheduler,
   semiPost: semiPostScheduler,
   ip: ipScheduler,
+  uidWarningAutoBan: uidWarningAutoBanScheduler,
   monitor: monitorScheduler,
 };
 
@@ -171,6 +174,7 @@ async function resumeAllSchedulers() {
     await loadSchedulerStateIfIdle(schedulers.post);
     await loadSchedulerStateIfIdle(schedulers.semiPost);
     await loadSchedulerStateIfIdle(schedulers.ip);
+    await loadSchedulerStateIfIdle(schedulers.uidWarningAutoBan);
     await loadSchedulerStateIfIdle(schedulers.monitor);
 
     const commentMonitorOwnsChild = schedulers.commentMonitor.isRunning;
@@ -211,6 +215,8 @@ async function resumeAllSchedulers() {
     await resumeStandaloneScheduler(schedulers.conceptMonitor, '🔁 저장된 개념글 방어 상태 복원');
     await resumeStandaloneScheduler(schedulers.conceptPatrol, '🔁 저장된 개념글순회 상태 복원');
     await resumeStandaloneScheduler(schedulers.hanRefreshIpBan, '🔁 저장된 도배기 갱신 차단 자동 상태 복원');
+    await resolveUidWarningAutoBanResumeConflict();
+    await resumeStandaloneScheduler(schedulers.uidWarningAutoBan, '🔁 저장된 분탕자동차단 상태 복원');
     await resumeUidRatioWarningForActiveTab();
 
     if (typeof schedulers.conceptMonitor.syncRecommendCutCoordinator === 'function') {
@@ -262,6 +268,7 @@ function getAllStatuses() {
     post: schedulers.post.getStatus(),
     semiPost: schedulers.semiPost.getStatus(),
     ip: schedulers.ip.getStatus(),
+    uidWarningAutoBan: schedulers.uidWarningAutoBan.getStatus(),
     monitor: schedulers.monitor.getStatus(),
   };
 }
@@ -717,6 +724,30 @@ function resetSchedulerStats(feature, scheduler) {
     return;
   }
 
+  if (feature === 'uidWarningAutoBan') {
+    scheduler.phase = scheduler.isRunning ? 'RUNNING' : 'IDLE';
+    scheduler.currentPage = 1;
+    scheduler.lastPollAt = '';
+    scheduler.nextRunAt = '';
+    scheduler.lastTriggeredUid = '';
+    scheduler.lastTriggeredPostCount = 0;
+    scheduler.lastBurstRecentCount = 0;
+    scheduler.lastPageRowCount = 0;
+    scheduler.lastPageUidCount = 0;
+    scheduler.totalTriggeredUidCount = 0;
+    scheduler.totalBannedPostCount = 0;
+    scheduler.totalFailedPostCount = 0;
+    scheduler.deleteLimitFallbackCount = 0;
+    scheduler.banOnlyFallbackCount = 0;
+    scheduler.lastError = '';
+    scheduler.cycleCount = 0;
+    scheduler.lastDeleteLimitExceededAt = '';
+    scheduler.lastDeleteLimitMessage = '';
+    scheduler.runtimeDeleteEnabled = Boolean(scheduler.config?.delChk);
+    scheduler.recentUidActions = {};
+    return;
+  }
+
   if (feature === 'monitor') {
     scheduler.phase = MONITOR_PHASE.SEEDING;
     scheduler.currentPollPage = 0;
@@ -762,6 +793,7 @@ async function applySharedConfig(config) {
     || schedulers.post.config.galleryId !== galleryId
     || schedulers.semiPost.config.galleryId !== galleryId
     || schedulers.ip.config.galleryId !== galleryId
+    || schedulers.uidWarningAutoBan.config.galleryId !== galleryId
     || schedulers.monitor.config.galleryId !== galleryId
   );
   const headtextChanged = Boolean(headtextId) && (
@@ -779,6 +811,7 @@ async function applySharedConfig(config) {
     schedulers.post.config.galleryId = galleryId;
     schedulers.semiPost.config.galleryId = galleryId;
     schedulers.ip.config.galleryId = galleryId;
+    schedulers.uidWarningAutoBan.config.galleryId = galleryId;
     schedulers.monitor.config.galleryId = galleryId;
   }
 
@@ -798,6 +831,7 @@ async function applySharedConfig(config) {
     resetPostSchedulerState(`ℹ️ 공통 설정 변경으로 게시글 분류 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetSemiPostSchedulerState(`ℹ️ 공통 설정 변경으로 반고닉 분류 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetIpSchedulerState(`ℹ️ 공통 설정 변경으로 IP 차단 상태를 초기화했습니다. (갤러리: ${galleryId})`);
+    resetUidWarningAutoBanSchedulerState(`ℹ️ 공통 설정 변경으로 분탕자동차단 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetMonitorSchedulerState(`ℹ️ 공통 설정 변경으로 감시 자동화 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     await resetConceptRecommendCutCoordinator({ galleryId });
     return;
@@ -884,6 +918,10 @@ function getBusyFeatures() {
     busyFeatures.push('IP 차단');
   }
 
+  if (isSchedulerBusy(schedulers.uidWarningAutoBan)) {
+    busyFeatures.push('분탕자동차단');
+  }
+
   if (isSchedulerBusy(schedulers.monitor)) {
     busyFeatures.push('감시 자동화');
   }
@@ -940,9 +978,25 @@ function getMonitorManualLockMessage(feature, action) {
     return '감시 자동화를 시작하기 전에 반고닉 분류를 먼저 정지하세요.';
   }
 
+  if (feature === 'uidWarningAutoBan'
+    && action === 'start'
+    && (isSchedulerBusy(schedulers.monitor) || isSchedulerBusy(schedulers.ip) || schedulers.ip.isReleaseRunning)) {
+    return '분탕자동차단을 시작하기 전에 감시 자동화 / IP 차단을 먼저 정지하세요.';
+  }
+
+  if (feature === 'monitor'
+    && action === 'start'
+    && isSchedulerBusy(schedulers.uidWarningAutoBan)) {
+    return '감시 자동화를 시작하기 전에 분탕자동차단을 먼저 정지하세요.';
+  }
+
   const baseLockedActions = new Set(['start', 'stop', 'updateConfig', 'resetStats', 'releaseTrackedBans']);
   if (schedulers.monitor.isRunning && ['post', 'semiPost', 'ip'].includes(feature) && baseLockedActions.has(action)) {
     return '감시 자동화 실행 중에는 게시글 분류 / 반고닉 분류 / IP 차단을 수동으로 조작할 수 없습니다.';
+  }
+
+  if (schedulers.monitor.isRunning && feature === 'uidWarningAutoBan' && baseLockedActions.has(action)) {
+    return '감시 자동화 실행 중에는 분탕자동차단을 수동으로 조작할 수 없습니다.';
   }
 
   if (schedulers.monitor.isRunning
@@ -958,6 +1012,19 @@ function getMonitorManualLockMessage(feature, action) {
   const commentMonitorLockedActions = new Set(['start', 'stop', 'updateConfig', 'resetStats']);
   if (schedulers.commentMonitor.isRunning && feature === 'comment' && commentMonitorLockedActions.has(action)) {
     return '댓글 감시 자동화 실행 중에는 댓글 방어를 수동으로 조작할 수 없습니다.';
+  }
+
+  const ipLockedActions = new Set(['start', 'stop', 'updateConfig', 'resetStats']);
+  if ((schedulers.ip.isRunning || schedulers.ip.isReleaseRunning)
+    && feature === 'uidWarningAutoBan'
+    && ipLockedActions.has(action)) {
+    return 'IP 차단 실행 중에는 분탕자동차단을 수동으로 조작할 수 없습니다.';
+  }
+
+  if (isSchedulerBusy(schedulers.uidWarningAutoBan)
+    && feature === 'ip'
+    && baseLockedActions.has(action)) {
+    return '분탕자동차단 실행 중에는 IP 차단을 수동으로 조작할 수 없습니다.';
   }
 
   return '';
@@ -1002,6 +1069,18 @@ async function stopDormantSemiPostScheduler() {
   }
 
   await schedulers.semiPost.stop();
+}
+
+async function resolveUidWarningAutoBanResumeConflict() {
+  if (!schedulers.uidWarningAutoBan.isRunning) {
+    return;
+  }
+
+  if (isSchedulerBusy(schedulers.monitor) || isSchedulerBusy(schedulers.ip) || schedulers.ip.isReleaseRunning) {
+    await schedulers.uidWarningAutoBan.stop();
+    schedulers.uidWarningAutoBan.log('ℹ️ 감시 자동화 / IP 차단과 충돌해 분탕자동차단 자동 복원을 취소했습니다.');
+    await schedulers.uidWarningAutoBan.saveState();
+  }
 }
 
 async function stopDormantCommentMonitorChildScheduler() {
@@ -1278,6 +1357,32 @@ function resetIpSchedulerState(message) {
   scheduler.lastDeleteLimitMessage = '';
   scheduler.config.cutoffPostNo = 0;
   scheduler.config.delChk = false;
+  scheduler.logs = [];
+  scheduler.log(message);
+}
+
+function resetUidWarningAutoBanSchedulerState(message) {
+  const scheduler = schedulers.uidWarningAutoBan;
+  scheduler.phase = 'IDLE';
+  scheduler.currentPage = 1;
+  scheduler.lastPollAt = '';
+  scheduler.nextRunAt = '';
+  scheduler.lastTriggeredUid = '';
+  scheduler.lastTriggeredPostCount = 0;
+  scheduler.lastBurstRecentCount = 0;
+  scheduler.lastPageRowCount = 0;
+  scheduler.lastPageUidCount = 0;
+  scheduler.totalTriggeredUidCount = 0;
+  scheduler.totalBannedPostCount = 0;
+  scheduler.totalFailedPostCount = 0;
+  scheduler.deleteLimitFallbackCount = 0;
+  scheduler.banOnlyFallbackCount = 0;
+  scheduler.lastError = '';
+  scheduler.cycleCount = 0;
+  scheduler.runtimeDeleteEnabled = Boolean(scheduler.config?.delChk);
+  scheduler.lastDeleteLimitExceededAt = '';
+  scheduler.lastDeleteLimitMessage = '';
+  scheduler.recentUidActions = {};
   scheduler.logs = [];
   scheduler.log(message);
 }

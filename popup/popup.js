@@ -21,6 +21,7 @@ let latestConceptMonitorStatus = null;
 let latestConceptPatrolStatus = null;
 let latestSessionFallbackStatus = null;
 let latestUidRatioWarningStatus = null;
+let latestUidWarningAutoBanStatus = null;
 
 const SESSION_FALLBACK_DOM = {
   keepaliveToggle: document.getElementById('sessionFallbackKeepaliveToggle'),
@@ -210,6 +211,26 @@ const FEATURE_DOM = {
     uidRatioWarningLastAppliedAt: document.getElementById('uidRatioWarningLastAppliedAt'),
     uidRatioWarningMetaText: document.getElementById('uidRatioWarningMetaText'),
   },
+  uidWarningAutoBan: {
+    toggleBtn: document.getElementById('uidWarningAutoBanToggleBtn'),
+    toggleLabel: document.getElementById('uidWarningAutoBanToggleLabel'),
+    statusText: document.getElementById('uidWarningAutoBanStatusText'),
+    deleteModeText: document.getElementById('uidWarningAutoBanDeleteModeText'),
+    lastPollAt: document.getElementById('uidWarningAutoBanLastPollAt'),
+    nextRunAt: document.getElementById('uidWarningAutoBanNextRunAt'),
+    lastPageUidCount: document.getElementById('uidWarningAutoBanLastPageUidCount'),
+    lastTriggeredUid: document.getElementById('uidWarningAutoBanLastTriggeredUid'),
+    lastTriggeredPostCount: document.getElementById('uidWarningAutoBanLastTriggeredPostCount'),
+    lastBurstRecentCount: document.getElementById('uidWarningAutoBanLastBurstRecentCount'),
+    totalTriggeredUidCount: document.getElementById('uidWarningAutoBanTotalTriggeredUidCount'),
+    totalBannedPostCount: document.getElementById('uidWarningAutoBanTotalBannedPostCount'),
+    totalFailedPostCount: document.getElementById('uidWarningAutoBanTotalFailedPostCount'),
+    deleteLimitFallbackCount: document.getElementById('uidWarningAutoBanDeleteLimitFallbackCount'),
+    banOnlyFallbackCount: document.getElementById('uidWarningAutoBanBanOnlyFallbackCount'),
+    metaText: document.getElementById('uidWarningAutoBanMetaText'),
+    logList: document.getElementById('uidWarningAutoBanLogList'),
+    resetBtn: document.getElementById('uidWarningAutoBanResetBtn'),
+  },
   ip: {
     toggleBtn: document.getElementById('ipToggleBtn'),
     toggleLabel: document.getElementById('ipToggleLabel'),
@@ -294,6 +315,7 @@ function bindFeatureEvents() {
   bindPostEvents();
   bindSemiPostEvents();
   bindUidRatioWarningEvents();
+  bindUidWarningAutoBanEvents();
   bindIpEvents();
   bindMonitorEvents();
   bindConceptPatrolEvents();
@@ -1275,6 +1297,49 @@ function bindUidRatioWarningEvents() {
   });
 }
 
+function bindUidWarningAutoBanEvents() {
+  const dom = FEATURE_DOM.uidWarningAutoBan;
+
+  dom.toggleBtn.addEventListener('change', async () => {
+    const action = dom.toggleBtn.checked ? 'start' : 'stop';
+    const response = await sendFeatureMessage('uidWarningAutoBan', { action });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.resetBtn.addEventListener('click', async () => {
+    if (!confirm('분탕자동차단 통계와 로그를 초기화하시겠습니까?')) {
+      return;
+    }
+
+    const response = await sendFeatureMessage('uidWarningAutoBan', { action: 'resetStats' });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+}
+
 function bindMonitorEvents() {
   const dom = FEATURE_DOM.monitor;
 
@@ -1371,8 +1436,9 @@ function applyStatuses(statuses) {
   updateCommentUI(statuses.comment);
   updatePostUI(statuses.post);
   updateSemiPostUI(statuses.semiPost);
+  updateUidWarningAutoBanUI(statuses.uidWarningAutoBan);
   updateIpUI(statuses.ip);
-  applyAutomationLocks(statuses.monitor, statuses.commentMonitor);
+  applyAutomationLocks(statuses.monitor, statuses.commentMonitor, statuses.ip, statuses.uidWarningAutoBan);
 }
 
 function updateSessionFallbackUI(status) {
@@ -1793,6 +1859,43 @@ function updateUidRatioWarningUI(status) {
   setDisabled(dom.uidRatioWarningToggleBtn, false);
 }
 
+function updateUidWarningAutoBanUI(status) {
+  const dom = FEATURE_DOM.uidWarningAutoBan;
+  if (!dom?.toggleBtn) {
+    return;
+  }
+
+  const nextStatus = status || buildDefaultUidWarningAutoBanStatus();
+  latestUidWarningAutoBanStatus = nextStatus;
+
+  updateToggle(dom, nextStatus.isRunning);
+  updateStatusText(
+    dom.statusText,
+    getUidWarningAutoBanStatusLabel(nextStatus),
+    getUidWarningAutoBanStatusClassName(nextStatus),
+  );
+  updateStatusText(
+    dom.deleteModeText,
+    nextStatus.runtimeDeleteEnabled === false ? '차단만 유지' : '차단 + 삭제',
+    nextStatus.runtimeDeleteEnabled === false ? 'status-warn' : 'status-on',
+  );
+  dom.lastPollAt.textContent = formatTimestamp(nextStatus.lastPollAt);
+  dom.nextRunAt.textContent = formatTimestamp(nextStatus.nextRunAt);
+  dom.lastPageUidCount.textContent = `${nextStatus.lastPageUidCount ?? 0}명`;
+  dom.lastTriggeredUid.textContent = nextStatus.lastTriggeredUid || '-';
+  dom.lastTriggeredPostCount.textContent = `${nextStatus.lastTriggeredPostCount ?? 0}개`;
+  dom.lastBurstRecentCount.textContent = `${nextStatus.lastBurstRecentCount ?? 0}개`;
+  dom.totalTriggeredUidCount.textContent = `${nextStatus.totalTriggeredUidCount ?? 0}명`;
+  dom.totalBannedPostCount.textContent = `${nextStatus.totalBannedPostCount ?? 0}개`;
+  dom.totalFailedPostCount.textContent = `${nextStatus.totalFailedPostCount ?? 0}개`;
+  dom.deleteLimitFallbackCount.textContent = `${nextStatus.deleteLimitFallbackCount ?? 0}회`;
+  dom.banOnlyFallbackCount.textContent = `${nextStatus.banOnlyFallbackCount ?? 0}회`;
+  dom.metaText.textContent = buildUidWarningAutoBanMetaText(nextStatus);
+  updateLogList(dom.logList, nextStatus.logs);
+  setDisabled(dom.toggleBtn, false);
+  setDisabled(dom.resetBtn, false);
+}
+
 function updateMonitorUI(status) {
   if (!status) {
     return;
@@ -1826,13 +1929,16 @@ function updateMonitorUI(status) {
   updateLogList(dom.logList, status.logs);
 }
 
-function applyAutomationLocks(monitorStatus, commentMonitorStatus) {
+function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uidWarningAutoBanStatus) {
   const postIpLocked = Boolean(monitorStatus?.isRunning);
   const commentLocked = Boolean(commentMonitorStatus?.isRunning);
+  const ipLocked = Boolean(ipStatus?.isRunning || ipStatus?.isReleaseRunning);
+  const uidWarningAutoBanLocked = Boolean(uidWarningAutoBanStatus?.isRunning);
   const commentMonitorDom = FEATURE_DOM.commentMonitor;
   const commentDom = FEATURE_DOM.comment;
   const postDom = FEATURE_DOM.post;
   const semiPostDom = FEATURE_DOM.semiPost;
+  const uidWarningAutoBanDom = FEATURE_DOM.uidWarningAutoBan;
   const ipDom = FEATURE_DOM.ip;
 
   setDisabled(commentMonitorDom.resetBtn, commentLocked);
@@ -1847,16 +1953,18 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus) {
   setDisabled(semiPostDom.toggleBtn, postIpLocked);
   setDisabled(semiPostDom.saveConfigBtn, postIpLocked);
   setDisabled(semiPostDom.resetBtn, postIpLocked);
-  setDisabled(ipDom.toggleBtn, postIpLocked);
-  setDisabled(ipDom.includeExistingTargetsOnStartInput, postIpLocked);
-  setDisabled(ipDom.saveConfigBtn, postIpLocked);
-  setDisabled(ipDom.resetBtn, postIpLocked);
-  setDisabled(ipDom.releaseBtn, postIpLocked || ipDom.releaseBtn.disabled);
+  setDisabled(ipDom.toggleBtn, postIpLocked || uidWarningAutoBanLocked);
+  setDisabled(ipDom.includeExistingTargetsOnStartInput, postIpLocked || uidWarningAutoBanLocked);
+  setDisabled(ipDom.saveConfigBtn, postIpLocked || uidWarningAutoBanLocked);
+  setDisabled(ipDom.resetBtn, postIpLocked || uidWarningAutoBanLocked);
+  setDisabled(ipDom.releaseBtn, postIpLocked || uidWarningAutoBanLocked || ipDom.releaseBtn.disabled);
+  setDisabled(uidWarningAutoBanDom.toggleBtn, postIpLocked || ipLocked);
+  setDisabled(uidWarningAutoBanDom.resetBtn, postIpLocked || ipLocked);
 
   getFeatureConfigInputs('comment').forEach((input) => setDisabled(input, commentLocked));
   getFeatureConfigInputs('post').forEach((input) => setDisabled(input, postIpLocked));
   getFeatureConfigInputs('semiPost').forEach((input) => setDisabled(input, postIpLocked));
-  getFeatureConfigInputs('ip').forEach((input) => setDisabled(input, postIpLocked));
+  getFeatureConfigInputs('ip').forEach((input) => setDisabled(input, postIpLocked || uidWarningAutoBanLocked));
 }
 
 function buildDefaultUidRatioWarningStatus() {
@@ -1949,6 +2057,83 @@ function buildUidRatioWarningMetaText(status = {}) {
   return `현재 페이지 식별코드 ${status.matchedUidCount}명 중 ${status.warnedUidCount}명에 경고를 붙였습니다.`;
 }
 
+function buildDefaultUidWarningAutoBanStatus() {
+  return {
+    isRunning: false,
+    phase: 'IDLE',
+    currentPage: 1,
+    lastPollAt: '',
+    nextRunAt: '',
+    lastTriggeredUid: '',
+    lastTriggeredPostCount: 0,
+    lastBurstRecentCount: 0,
+    lastPageUidCount: 0,
+    totalTriggeredUidCount: 0,
+    totalBannedPostCount: 0,
+    totalFailedPostCount: 0,
+    deleteLimitFallbackCount: 0,
+    banOnlyFallbackCount: 0,
+    lastError: '',
+    runtimeDeleteEnabled: true,
+    lastDeleteLimitExceededAt: '',
+    lastDeleteLimitMessage: '',
+    logs: [],
+  };
+}
+
+function getUidWarningAutoBanStatusLabel(status = {}) {
+  if (status.isRunning && status.runtimeDeleteEnabled === false) {
+    return '🟠 차단만 유지 중';
+  }
+
+  if (status.isRunning) {
+    return '🟢 실행 중';
+  }
+
+  if (status.lastError) {
+    return '🔴 정지 (최근 오류)';
+  }
+
+  return '🔴 정지';
+}
+
+function getUidWarningAutoBanStatusClassName(status = {}) {
+  if (status.isRunning && status.runtimeDeleteEnabled === false) {
+    return 'status-warn';
+  }
+
+  if (status.isRunning) {
+    return 'status-on';
+  }
+
+  if (status.lastError) {
+    return 'status-warn';
+  }
+
+  return 'status-off';
+}
+
+function buildUidWarningAutoBanMetaText(status = {}) {
+  if (!status.isRunning) {
+    return '1분마다 1페이지를 확인해 5분 안에 3글 이상 + 글비중 90% uid를 6시간 차단/삭제합니다.';
+  }
+
+  if (status.lastError) {
+    return status.lastError;
+  }
+
+  if (status.runtimeDeleteEnabled === false) {
+    const detail = status.lastDeleteLimitMessage ? ` (${status.lastDeleteLimitMessage})` : '';
+    return `삭제 한도 보호 상태라 새 글이 와도 당분간 차단만 수행합니다${detail}`;
+  }
+
+  if (status.lastTriggeredUid) {
+    return `최근 제재 uid ${status.lastTriggeredUid} / page1 글 ${status.lastTriggeredPostCount ?? 0}개`;
+  }
+
+  return '현재는 page1 burst uid가 없어 대기 중입니다.';
+}
+
 function updateToggle(dom, isRunning) {
   dom.toggleBtn.checked = Boolean(isRunning);
   dom.toggleLabel.textContent = isRunning ? 'ON' : 'OFF';
@@ -1984,6 +2169,7 @@ function syncSharedConfigInputs(statuses) {
     || statuses.post?.config?.galleryId
     || statuses.semiPost?.config?.galleryId
     || statuses.ip?.config?.galleryId
+    || statuses.uidWarningAutoBan?.config?.galleryId
     || statuses.monitor?.config?.galleryId
     || 'thesingularity';
   const headtextId = statuses.post?.config?.headtextId

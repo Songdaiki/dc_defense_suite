@@ -502,6 +502,58 @@ body {
   color: #efb8ad;
 }
 
+.manual-autoban-card {
+  margin-top: 12px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 182, 118, 0.16), transparent 44%),
+    linear-gradient(180deg, rgba(123, 56, 30, 0.24), rgba(33, 19, 15, 0.97));
+  border-color: rgba(255, 163, 103, 0.34);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 173, 116, 0.06),
+    0 10px 24px rgba(18, 8, 4, 0.18);
+}
+
+.manual-autoban-card .manual-utility-header h3 {
+  color: #ffe8d1;
+}
+
+.manual-autoban-card .manual-utility-header p,
+.manual-autoban-card .manual-utility-meta {
+  color: #f3d8c0;
+}
+
+.manual-autoban-card .toggle-section {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(58, 27, 15, 0.44);
+  border: 1px solid rgba(255, 167, 110, 0.18);
+}
+
+.manual-autoban-card .slider {
+  background: rgba(97, 61, 42, 0.95);
+}
+
+.manual-autoban-card .toggle-switch input:checked + .slider {
+  background: linear-gradient(180deg, #ffbd7b, #ff8a66);
+}
+
+.manual-autoban-card .toggle-label.off {
+  color: #f3caa6;
+}
+
+.manual-autoban-card .toggle-label.on {
+  color: #ffe2ca;
+}
+
+.manual-autoban-card .status-item {
+  background: rgba(25, 16, 13, 0.82);
+  border-color: rgba(255, 176, 128, 0.12);
+}
+
+.manual-autoban-card .status-label {
+  color: #f1c8a9;
+}
+
 .status-item {
   background: #151d29;
   border: 1px solid rgba(255, 255, 255, 0.06);

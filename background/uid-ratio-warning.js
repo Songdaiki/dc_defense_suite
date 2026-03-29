@@ -1,6 +1,4 @@
-import { fetchUserActivityStats } from '../features/semi-post/api.js';
 import {
-  UID_RATIO_WARNING_CACHE_TTL_MS,
   UID_RATIO_WARNING_ENABLED_STORAGE_KEY,
   UID_RATIO_WARNING_STATE_STORAGE_KEY,
   UID_RATIO_WARNING_THRESHOLD_PERCENT,
@@ -8,14 +6,11 @@ import {
   clearUidRatioWarningBadgesFromPage,
   collectUidWriterEntriesFromPage,
   createDefaultUidRatioWarningStatus,
-  getUidStatsCacheKey,
   isSupportedUidRatioWarningUrl,
-  isUidStatsCacheFresh,
   normalizeUidRatioWarningStateEntry,
   normalizeUidWriterEntries,
 } from '../features/semi-post/uid-warning.js';
-
-const uidStatsCache = new Map();
+import { getOrFetchUidStats } from './uid-stats-cache.js';
 let uidRatioWarningState = createDefaultUidRatioWarningStatus();
 let uidRatioWarningStateLoaded = false;
 let uidRatioWarningResumePromise = null;
@@ -579,22 +574,6 @@ function resolveGalleryIdFromUrl(url) {
   } catch {
     return '';
   }
-}
-
-async function getOrFetchUidStats(galleryId, uid) {
-  const cacheKey = getUidStatsCacheKey(galleryId, uid);
-  const cached = uidStatsCache.get(cacheKey);
-  const now = Date.now();
-  if (isUidStatsCacheFresh(cached, now)) {
-    return cached.stats;
-  }
-
-  const stats = await fetchUserActivityStats({ galleryId }, uid);
-  uidStatsCache.set(cacheKey, {
-    stats,
-    expiresAt: now + UID_RATIO_WARNING_CACHE_TTL_MS,
-  });
-  return stats;
 }
 
 function getNextGeneration() {
