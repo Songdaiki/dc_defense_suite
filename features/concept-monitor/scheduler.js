@@ -284,9 +284,15 @@ class Scheduler {
     }
 
     if (totalIncrease <= releaseThreshold) {
-      this.autoCutReleaseHitCount = Math.min(releaseConsecutiveCount, this.autoCutReleaseHitCount + 1);
       this.autoCutAttackHitCount = 0;
+      if (this.autoCutState !== AUTO_CUT_STATE.DEFENDING) {
+        this.autoCutReleaseHitCount = 0;
+        return this.autoCutState;
+      }
+
+      this.autoCutReleaseHitCount = Math.min(releaseConsecutiveCount, this.autoCutReleaseHitCount + 1);
       if (this.autoCutReleaseHitCount >= releaseConsecutiveCount) {
+        this.autoCutReleaseHitCount = 0;
         return AUTO_CUT_STATE.NORMAL;
       }
       return this.autoCutState;
