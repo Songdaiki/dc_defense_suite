@@ -263,8 +263,14 @@ class Scheduler {
   }
 
   evaluateAutoCutState(totalIncrease) {
-    const attackThreshold = Math.max(0, Number(this.config.autoCutAttackRecommendThreshold) || DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD);
-    const releaseThreshold = Math.max(0, Number(this.config.autoCutReleaseRecommendThreshold) || DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD);
+    const attackThreshold = normalizeNonNegativeNumber(
+      this.config.autoCutAttackRecommendThreshold,
+      DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD,
+    );
+    const releaseThreshold = normalizeNonNegativeNumber(
+      this.config.autoCutReleaseRecommendThreshold,
+      DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD,
+    );
     const attackConsecutiveCount = Math.max(1, Number(this.config.autoCutAttackConsecutiveCount) || DEFAULT_AUTO_CUT_ATTACK_CONSECUTIVE_COUNT);
     const releaseConsecutiveCount = Math.max(1, Number(this.config.autoCutReleaseConsecutiveCount) || DEFAULT_AUTO_CUT_RELEASE_CONSECUTIVE_COUNT);
 
@@ -292,8 +298,14 @@ class Scheduler {
   }
 
   logAutoCutCycle(metrics, previousState, nextState) {
-    const attackThreshold = Math.max(0, Number(this.config.autoCutAttackRecommendThreshold) || DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD);
-    const releaseThreshold = Math.max(0, Number(this.config.autoCutReleaseRecommendThreshold) || DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD);
+    const attackThreshold = normalizeNonNegativeNumber(
+      this.config.autoCutAttackRecommendThreshold,
+      DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD,
+    );
+    const releaseThreshold = normalizeNonNegativeNumber(
+      this.config.autoCutReleaseRecommendThreshold,
+      DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD,
+    );
     const attackConsecutiveCount = Math.max(1, Number(this.config.autoCutAttackConsecutiveCount) || DEFAULT_AUTO_CUT_ATTACK_CONSECUTIVE_COUNT);
     const releaseConsecutiveCount = Math.max(1, Number(this.config.autoCutReleaseConsecutiveCount) || DEFAULT_AUTO_CUT_RELEASE_CONSECUTIVE_COUNT);
     const stateSummary = previousState === nextState
@@ -446,9 +458,15 @@ class Scheduler {
         testMode: schedulerState.config?.testMode === true,
         autoCutEnabled: Boolean(schedulerState.config?.autoCutEnabled),
         autoCutPollIntervalMs: Math.max(1000, Number(schedulerState.config?.autoCutPollIntervalMs) || DEFAULT_AUTO_CUT_POLL_INTERVAL_MS),
-        autoCutAttackRecommendThreshold: Math.max(0, Number(schedulerState.config?.autoCutAttackRecommendThreshold) || DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD),
+        autoCutAttackRecommendThreshold: normalizeNonNegativeNumber(
+          schedulerState.config?.autoCutAttackRecommendThreshold,
+          DEFAULT_AUTO_CUT_ATTACK_RECOMMEND_THRESHOLD,
+        ),
         autoCutAttackConsecutiveCount: Math.max(1, Number(schedulerState.config?.autoCutAttackConsecutiveCount) || DEFAULT_AUTO_CUT_ATTACK_CONSECUTIVE_COUNT),
-        autoCutReleaseRecommendThreshold: Math.max(0, Number(schedulerState.config?.autoCutReleaseRecommendThreshold) || DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD),
+        autoCutReleaseRecommendThreshold: normalizeNonNegativeNumber(
+          schedulerState.config?.autoCutReleaseRecommendThreshold,
+          DEFAULT_AUTO_CUT_RELEASE_RECOMMEND_THRESHOLD,
+        ),
         autoCutReleaseConsecutiveCount: Math.max(1, Number(schedulerState.config?.autoCutReleaseConsecutiveCount) || DEFAULT_AUTO_CUT_RELEASE_CONSECUTIVE_COUNT),
       };
       this.applyRecommendCutCoordinatorStatus(getConceptRecommendCutCoordinatorStatus());
@@ -639,6 +657,15 @@ function normalizeRecommendSnapshot(snapshot) {
 
 function normalizeRecommendCut(value) {
   return Number(value) === DEFENDING_RECOMMEND_CUT ? DEFENDING_RECOMMEND_CUT : NORMAL_RECOMMEND_CUT;
+}
+
+function normalizeNonNegativeNumber(value, fallback) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+
+  return Math.max(0, numericValue);
 }
 
 function parseTimestamp(value) {
