@@ -194,8 +194,8 @@ class Scheduler {
       }
 
       const representativeNick = String(recentRows[0]?.nick || groupedEntry.rows[0]?.nick || '').trim();
-      if (representativeNick !== 'ㅇㅇ') {
-        this.log(`ℹ️ ${groupedEntry.uid} 스킵 - 닉네임 필터 미달 (최신 닉네임: ${representativeNick || '없음'})`);
+      if (!isTwoConsonantNick(representativeNick)) {
+        this.log(`ℹ️ ${groupedEntry.uid} 스킵 - 자음 2글자 닉네임 필터 미달 (최신 닉네임: ${representativeNick || '없음'})`);
         continue;
       }
 
@@ -617,6 +617,10 @@ function normalizePhase(value) {
 function formatPostRatio(value) {
   const numericValue = Number(value) || 0;
   return numericValue.toFixed(2).replace(/\.00$/, '');
+}
+
+function isTwoConsonantNick(value) {
+  return /^[ㄱ-ㅎ]{2}$/.test(String(value || '').trim());
 }
 
 async function delayWhileRunning(scheduler, ms) {
