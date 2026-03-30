@@ -4,6 +4,7 @@ function parseUidWarningAutoBanRows(html) {
   let match;
 
   while ((match = rowRegex.exec(html)) !== null) {
+    const rowTagHtml = match[0];
     const postNo = Number(match[1]);
     if (!Number.isFinite(postNo) || postNo <= 0) {
       continue;
@@ -39,6 +40,8 @@ function parseUidWarningAutoBanRows(html) {
     const title = extractBoardTitle(rowHtml);
     const currentHead = extractCurrentHead(rowHtml);
     const writerToken = uid;
+    const contentType = decodeHtml(extractAttribute(rowTagHtml, 'data-type'));
+    const isPicturePost = contentType === 'icon_pic';
 
     results.push({
       no: postNo,
@@ -52,6 +55,8 @@ function parseUidWarningAutoBanRows(html) {
       writerToken,
       writerKey: makeWriterKey(nick, writerToken),
       writerDisplay: `${nick}(${writerToken})`,
+      contentType,
+      isPicturePost,
       isFluid: false,
       hasUid: true,
       ip: '',

@@ -178,21 +178,28 @@ class Scheduler {
         break;
       }
 
+      const countableRows = groupedEntry.rows.filter((row) => row?.isPicturePost !== true);
       const recentRows = getRecentRowsWithinWindow(
-        groupedEntry.rows,
+        countableRows,
         getRecentWindowMs(this.config),
         getRecentPostThreshold(this.config),
       );
       if (recentRows.length < getRecentPostThreshold(this.config)) {
         if (groupedEntry.rows.length >= getRecentPostThreshold(this.config)) {
           this.log(
-            `ℹ️ ${groupedEntry.uid} 스킵 - page1 5분 burst 글수 ${recentRows.length}개라 기준 ${getRecentPostThreshold(this.config)}개 미달`,
+            `ℹ️ ${groupedEntry.uid} 스킵 - page1 5분 텍스트 burst 글수 ${recentRows.length}개라 기준 ${getRecentPostThreshold(this.config)}개 미달`,
           );
         }
         continue;
       }
 
-      const newestPostNo = getNewestPostNo(groupedEntry.rows);
+      const representativeNick = String(recentRows[0]?.nick || groupedEntry.rows[0]?.nick || '').trim();
+      if (representativeNick !== 'ㅇㅇ') {
+        this.log(`ℹ️ ${groupedEntry.uid} 스킵 - 닉네임 필터 미달 (최신 닉네임: ${representativeNick || '없음'})`);
+        continue;
+      }
+
+      const newestPostNo = getNewestPostNo(countableRows);
       const actionKey = buildUidActionKey(this.config.galleryId, groupedEntry.uid);
       if (shouldSkipRecentUidAction(this.recentUidActions[actionKey], newestPostNo, nowMs, getRetryCooldownMs(this.config))) {
         this.log(`ℹ️ ${groupedEntry.uid} 스킵 - 새 글번호가 없어 같은 burst 재시도를 건너뜀`);
@@ -267,7 +274,7 @@ class Scheduler {
       this.lastBurstRecentCount = recentRows.length;
       this.totalTriggeredUidCount += 1;
       this.log(
-        `🚨 ${groupedEntry.uid} page1 5분 burst ${recentRows.length}글 / 글비중 ${formatPostRatio(effectivePostRatio)}% / 갤로그 게시글·댓글 비공개 -> page1 ${targetPosts.length}개 제재 시작`,
+        `🚨 ${groupedEntry.uid} page1 5분 텍스트 burst ${recentRows.length}글 / 글비중 ${formatPostRatio(effectivePostRatio)}% / 갤로그 게시글·댓글 비공개 -> page1 ${targetPosts.length}개 제재 시작`,
       );
 
       const result = await this.executeBan({
