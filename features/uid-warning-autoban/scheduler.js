@@ -182,16 +182,12 @@ class Scheduler {
         getRecentWindowMs(this.config),
       );
       if (recentRows.length < getRecentPostThreshold(this.config)) {
-        this.debugLog(
-          `🐞 ${groupedEntry.uid} 최근 5분 글수 ${recentRows.length}개라 기준 ${getRecentPostThreshold(this.config)}개 미달`,
-        );
         continue;
       }
 
       const newestPostNo = getNewestPostNo(groupedEntry.rows);
       const actionKey = buildUidActionKey(this.config.galleryId, groupedEntry.uid);
       if (shouldSkipRecentUidAction(this.recentUidActions[actionKey], newestPostNo, nowMs, getRetryCooldownMs(this.config))) {
-        this.debugLog(`🐞 ${groupedEntry.uid}는 새 글번호가 없어 같은 burst 재시도를 건너뜀`);
         continue;
       }
 
@@ -220,9 +216,6 @@ class Scheduler {
 
       statsSuccessCount += 1;
       if (effectivePostRatio < getPostRatioThresholdPercent(this.config)) {
-        this.debugLog(
-          `🐞 ${groupedEntry.uid} 글비중 ${formatPostRatio(effectivePostRatio)}%라 기준 ${getPostRatioThresholdPercent(this.config)}% 미달`,
-        );
         continue;
       }
 
@@ -244,17 +237,11 @@ class Scheduler {
 
       gallogSuccessCount += 1;
       if (gallogPrivacy.fullyPrivate !== true) {
-        const privacySummary = [
-          gallogPrivacy.postingPrivate ? '게시글 비공개' : '게시글 공개',
-          gallogPrivacy.commentPrivate ? '댓글 비공개' : '댓글 공개',
-        ].join(' / ');
-        this.debugLog(`🐞 ${groupedEntry.uid} 갤로그 필터 미달 - ${privacySummary}`);
         continue;
       }
 
       const targetPosts = createUidBanTargetPosts(groupedEntry.rows);
       if (targetPosts.length === 0) {
-        this.debugLog(`🐞 ${groupedEntry.uid}는 page1 대상 글번호를 만들지 못해 건너뜀`);
         continue;
       }
 
@@ -341,16 +328,6 @@ class Scheduler {
     if (this.logs.length > 100) {
       this.logs = this.logs.slice(0, 100);
     }
-  }
-
-  debugLog(message) {
-    if (this.isDebugLoggingEnabled()) {
-      this.log(message);
-    }
-  }
-
-  isDebugLoggingEnabled() {
-    return this.config?.debugLoggingEnabled === true;
   }
 
   async saveState() {
@@ -489,9 +466,6 @@ function normalizeConfig(config = {}) {
     recentPostThreshold: Math.max(1, Number(config.recentPostThreshold) || DEFAULT_CONFIG.recentPostThreshold),
     postRatioThresholdPercent: clampPercent(config.postRatioThresholdPercent, DEFAULT_CONFIG.postRatioThresholdPercent),
     retryCooldownMs: Math.max(1000, Number(config.retryCooldownMs) || DEFAULT_CONFIG.retryCooldownMs),
-    debugLoggingEnabled: config.debugLoggingEnabled === undefined
-      ? Boolean(DEFAULT_CONFIG.debugLoggingEnabled)
-      : Boolean(config.debugLoggingEnabled),
     avoidHour: String(config.avoidHour || DEFAULT_CONFIG.avoidHour).trim() || DEFAULT_CONFIG.avoidHour,
     avoidReason: String(config.avoidReason || DEFAULT_CONFIG.avoidReason).trim() || DEFAULT_CONFIG.avoidReason,
     avoidReasonText: String(config.avoidReasonText || DEFAULT_CONFIG.avoidReasonText).trim() || DEFAULT_CONFIG.avoidReasonText,

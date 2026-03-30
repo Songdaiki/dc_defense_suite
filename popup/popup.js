@@ -214,7 +214,6 @@ const FEATURE_DOM = {
   uidWarningAutoBan: {
     toggleBtn: document.getElementById('uidWarningAutoBanToggleBtn'),
     toggleLabel: document.getElementById('uidWarningAutoBanToggleLabel'),
-    debugLoggingToggleInput: document.getElementById('uidWarningAutoBanDebugLoggingToggle'),
     statusText: document.getElementById('uidWarningAutoBanStatusText'),
     deleteModeText: document.getElementById('uidWarningAutoBanDeleteModeText'),
     lastPollAt: document.getElementById('uidWarningAutoBanLastPollAt'),
@@ -693,28 +692,6 @@ function bindHanRefreshIpBanEvents() {
 
     DIRTY_FEATURES.hanRefreshIpBan = false;
     flashSaved(dom.saveConfigBtn);
-    if (response.statuses) {
-      applyStatuses(response.statuses);
-    } else {
-      await refreshAllStatuses();
-    }
-  });
-
-  dom.debugLoggingToggleInput.addEventListener('change', async () => {
-    const response = await sendFeatureMessage('uidWarningAutoBan', {
-      action: 'updateConfig',
-      config: {
-        debugLoggingEnabled: dom.debugLoggingToggleInput.checked,
-      },
-    });
-    if (!response?.success) {
-      if (response?.message) {
-        alert(response.message);
-      }
-      await refreshAllStatuses();
-      return;
-    }
-
     if (response.statuses) {
       applyStatuses(response.statuses);
     } else {
@@ -1915,10 +1892,8 @@ function updateUidWarningAutoBanUI(status) {
   dom.banOnlyFallbackCount.textContent = `${nextStatus.banOnlyFallbackCount ?? 0}회`;
   dom.metaText.textContent = buildUidWarningAutoBanMetaText(nextStatus);
   updateLogList(dom.logList, nextStatus.logs);
-  syncConfigInput(dom.debugLoggingToggleInput, nextStatus.config?.debugLoggingEnabled === true);
   setDisabled(dom.toggleBtn, false);
   setDisabled(dom.resetBtn, false);
-  setDisabled(dom.debugLoggingToggleInput, false);
 }
 
 function updateMonitorUI(status) {
@@ -1988,7 +1963,6 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uid
   setDisabled(ipDom.releaseBtn, postIpLocked || uidWarningAutoBanLocked || ipDom.releaseBtn.disabled);
   setDisabled(uidWarningAutoBanDom.toggleBtn, monitorUidWarningAutoBanLocked || ipLocked);
   setDisabled(uidWarningAutoBanDom.resetBtn, monitorUidWarningAutoBanLocked || ipLocked);
-  setDisabled(uidWarningAutoBanDom.debugLoggingToggleInput, monitorUidWarningAutoBanLocked || ipLocked);
 
   getFeatureConfigInputs('comment').forEach((input) => setDisabled(input, commentLocked));
   getFeatureConfigInputs('post').forEach((input) => setDisabled(input, postIpLocked));
@@ -2107,9 +2081,6 @@ function buildDefaultUidWarningAutoBanStatus() {
     lastDeleteLimitExceededAt: '',
     lastDeleteLimitMessage: '',
     logs: [],
-    config: {
-      debugLoggingEnabled: false,
-    },
   };
 }
 

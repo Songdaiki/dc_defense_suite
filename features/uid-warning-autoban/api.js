@@ -10,7 +10,6 @@ const DEFAULT_CONFIG = {
   recentPostThreshold: 2,
   postRatioThresholdPercent: 90,
   retryCooldownMs: 60000,
-  debugLoggingEnabled: false,
   avoidHour: '6',
   avoidReason: '0',
   avoidReasonText: '매일 오는 gdp틀딱 (자동차단)',
