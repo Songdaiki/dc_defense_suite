@@ -87,17 +87,44 @@ function groupRowsByUid(rows = []) {
   }));
 }
 
-function getRecentRowsWithinWindow(rows = [], nowMs, windowMs) {
-  const normalizedNowMs = Number(nowMs) || 0;
-  const normalizedWindowMs = Math.max(0, Number(windowMs) || 0);
-  return (Array.isArray(rows) ? rows : []).filter((row) => {
+function getRecentRowsWithinWindow(rows = [], windowMs, threshold = 1) {
+  const normalizedRows = (Array.isArray(rows) ? rows : []).filter((row) => {
     const createdAtMs = Number(row?.createdAtMs) || 0;
-    if (createdAtMs <= 0 || createdAtMs > normalizedNowMs) {
-      return false;
+    return createdAtMs > 0;
+  });
+  const normalizedWindowMs = Math.max(0, Number(windowMs) || 0);
+  const normalizedThreshold = Math.max(1, Number(threshold) || 1);
+  let bestRows = [];
+
+  for (let startIndex = 0; startIndex < normalizedRows.length; startIndex += 1) {
+    const anchorRow = normalizedRows[startIndex];
+    const anchorCreatedAtMs = Number(anchorRow?.createdAtMs) || 0;
+    const burstRows = [];
+
+    for (let rowIndex = startIndex; rowIndex < normalizedRows.length; rowIndex += 1) {
+      const currentRow = normalizedRows[rowIndex];
+      const currentCreatedAtMs = Number(currentRow?.createdAtMs) || 0;
+      if (currentCreatedAtMs <= 0) {
+        continue;
+      }
+
+      if (anchorCreatedAtMs - currentCreatedAtMs > normalizedWindowMs) {
+        break;
+      }
+
+      burstRows.push(currentRow);
     }
 
-    return normalizedNowMs - createdAtMs <= normalizedWindowMs;
-  });
+    if (burstRows.length > bestRows.length) {
+      bestRows = burstRows;
+    }
+
+    if (burstRows.length >= normalizedThreshold) {
+      return burstRows;
+    }
+  }
+
+  return bestRows;
 }
 
 function getNewestPostNo(rows = []) {
