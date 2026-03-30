@@ -989,12 +989,6 @@ function getMonitorManualLockMessage(feature, action) {
     return '분탕자동차단을 시작하기 전에 감시 자동화 / IP 차단을 먼저 정지하세요.';
   }
 
-  if (feature === 'monitor'
-    && action === 'start'
-    && isSchedulerBusy(schedulers.uidWarningAutoBan)) {
-    return '감시 자동화를 시작하기 전에 분탕자동차단을 먼저 정지하세요.';
-  }
-
   const baseLockedActions = new Set(['start', 'stop', 'updateConfig', 'resetStats', 'releaseTrackedBans']);
   if (schedulers.monitor.isRunning && ['post', 'semiPost', 'ip'].includes(feature) && baseLockedActions.has(action)) {
     return '감시 자동화 실행 중에는 게시글 분류 / 반고닉 분류 / IP 차단을 수동으로 조작할 수 없습니다.';

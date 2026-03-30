@@ -12,6 +12,7 @@ import {
 } from './parser.js';
 import { executeBanWithDeleteFallback } from '../ip/ban-executor.js';
 import { getOrFetchUidStats } from '../../background/uid-stats-cache.js';
+import { getOrFetchUidGallogPrivacy } from '../../background/uid-gallog-privacy-cache.js';
 
 const STORAGE_KEY = 'uidWarningAutoBanSchedulerState';
 const PHASE = {
@@ -26,6 +27,7 @@ class Scheduler {
     this.fetchListHtml = dependencies.fetchListHtml || fetchUidWarningAutoBanListHTML;
     this.parseRows = dependencies.parseRows || parseUidWarningAutoBanRows;
     this.fetchUidStats = dependencies.fetchUidStats || getOrFetchUidStats;
+    this.fetchUidGallogPrivacy = dependencies.fetchUidGallogPrivacy || getOrFetchUidGallogPrivacy;
     this.executeBan = dependencies.executeBan || executeBanWithDeleteFallback;
     this.delayFn = dependencies.delayFn || delay;
 
@@ -165,6 +167,9 @@ class Scheduler {
     let statsCandidateCount = 0;
     let statsFailureCount = 0;
     let statsSuccessCount = 0;
+    let gallogCandidateCount = 0;
+    let gallogFailureCount = 0;
+    let gallogSuccessCount = 0;
 
     for (const groupedEntry of groupedRows) {
       if (!this.isRunning) {
@@ -190,14 +195,48 @@ class Scheduler {
       let stats;
       try {
         stats = await this.fetchUidStats(this.config.galleryId, groupedEntry.uid);
-        statsSuccessCount += 1;
       } catch (error) {
         statsFailureCount += 1;
         this.log(`⚠️ ${groupedEntry.uid} 활동 통계 조회 실패 - ${error.message}`);
         continue;
       }
 
-      if (Number(stats?.postRatio) < getPostRatioThresholdPercent(this.config)) {
+      if (stats?.success !== true) {
+        statsFailureCount += 1;
+        this.log(`⚠️ ${groupedEntry.uid} 활동 통계 조회 실패 - ${stats?.message || '응답 형식 오류'}`);
+        continue;
+      }
+
+      const effectivePostRatio = Number(stats?.effectivePostRatio ?? stats?.postRatio);
+      if (!Number.isFinite(effectivePostRatio)) {
+        statsFailureCount += 1;
+        this.log(`⚠️ ${groupedEntry.uid} 활동 통계 비율 값이 비정상이라 이번 cycle에서 제외합니다.`);
+        continue;
+      }
+
+      statsSuccessCount += 1;
+      if (effectivePostRatio < getPostRatioThresholdPercent(this.config)) {
+        continue;
+      }
+
+      gallogCandidateCount += 1;
+      let gallogPrivacy;
+      try {
+        gallogPrivacy = await this.fetchUidGallogPrivacy(this.config, groupedEntry.uid);
+      } catch (error) {
+        gallogFailureCount += 1;
+        this.log(`⚠️ ${groupedEntry.uid} 갤로그 비공개 확인 실패 - ${error.message}`);
+        continue;
+      }
+
+      if (gallogPrivacy?.success !== true) {
+        gallogFailureCount += 1;
+        this.log(`⚠️ ${groupedEntry.uid} 갤로그 비공개 확인 실패 - ${gallogPrivacy?.message || '응답 형식 오류'}`);
+        continue;
+      }
+
+      gallogSuccessCount += 1;
+      if (gallogPrivacy.fullyPrivate !== true) {
         continue;
       }
 
@@ -211,7 +250,7 @@ class Scheduler {
       this.lastBurstRecentCount = recentRows.length;
       this.totalTriggeredUidCount += 1;
       this.log(
-        `🚨 ${groupedEntry.uid} 최근 5분 ${recentRows.length}글 / 글비중 ${formatPostRatio(stats?.postRatio)}% -> page1 ${targetPosts.length}개 제재 시작`,
+        `🚨 ${groupedEntry.uid} 최근 5분 ${recentRows.length}글 / 글비중 ${formatPostRatio(effectivePostRatio)}% / 갤로그 게시글·댓글 비공개 -> page1 ${targetPosts.length}개 제재 시작`,
       );
 
       const result = await this.executeBan({
@@ -258,6 +297,8 @@ class Scheduler {
 
     if (statsCandidateCount > 0 && statsSuccessCount === 0 && statsFailureCount > 0) {
       this.lastError = '식별코드 활동 통계 조회에 실패해 이번 사이클을 건너뛰었습니다.';
+    } else if (gallogCandidateCount > 0 && gallogSuccessCount === 0 && gallogFailureCount > 0) {
+      this.lastError = '갤로그 공개/비공개 확인에 실패해 이번 사이클을 건너뛰었습니다.';
     }
 
     pruneRecentUidActions(this.recentUidActions);

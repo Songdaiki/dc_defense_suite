@@ -4,9 +4,10 @@ const DEFAULT_CONFIG = {
   galleryId: 'thesingularity',
   galleryType: 'M',
   baseUrl: 'https://gall.dcinside.com',
+  gallogBaseUrl: 'https://gallog.dcinside.com',
   pollIntervalMs: 60000,
   recentWindowMs: 5 * 60 * 1000,
-  recentPostThreshold: 3,
+  recentPostThreshold: 2,
   postRatioThresholdPercent: 90,
   retryCooldownMs: 60000,
   avoidHour: '6',
@@ -31,6 +32,24 @@ async function fetchUidWarningAutoBanListHTML(config = {}, page = 1) {
     url.searchParams.set('page', String(page));
 
     const response = await dcFetchWithRetry(url.toString());
+    return response.text();
+  });
+}
+
+async function fetchGallogHomeHtml(config = {}, uid = '') {
+  return withDcRequestLease({ feature: 'uidWarningAutoBan', kind: 'fetchGallogHomeHtml' }, async () => {
+    const resolved = resolveConfig(config);
+    const normalizedUid = String(uid || '').trim();
+    if (!normalizedUid) {
+      throw new Error('식별코드(uid) 없음');
+    }
+
+    const url = new URL(`/${encodeURIComponent(normalizedUid)}`, resolved.gallogBaseUrl);
+    const response = await dcFetchWithRetry(url.toString(), {
+      headers: {
+        Referer: `${resolved.baseUrl}/mgallery/board/lists/?id=${resolved.galleryId}`,
+      },
+    });
     return response.text();
   });
 }
@@ -82,6 +101,7 @@ async function delay(ms) {
 export {
   DEFAULT_CONFIG,
   delay,
+  fetchGallogHomeHtml,
   fetchUidWarningAutoBanListHTML,
   resolveConfig,
 };

@@ -136,6 +136,33 @@ function createUidBanTargetPosts(rows = []) {
   return deduped;
 }
 
+function parseGallogPrivacy(html) {
+  const normalizedHtml = String(html || '');
+  const postingState = extractGallogPrivacyState(normalizedHtml, 'posting');
+  const commentState = extractGallogPrivacyState(normalizedHtml, 'comment');
+
+  if (!postingState.found || !commentState.found) {
+    return {
+      success: false,
+      message: '갤로그 공개/비공개 상태를 파싱하지 못했습니다.',
+      postingPublic: false,
+      commentPublic: false,
+      postingPrivate: false,
+      commentPrivate: false,
+      fullyPrivate: false,
+    };
+  }
+
+  return {
+    success: true,
+    postingPublic: postingState.isPublic,
+    commentPublic: commentState.isPublic,
+    postingPrivate: postingState.isPrivate,
+    commentPrivate: commentState.isPrivate,
+    fullyPrivate: postingState.isPrivate && commentState.isPrivate,
+  };
+}
+
 function shouldSkipBoardRow(rowHtml) {
   const numberCellMatch = rowHtml.match(/<td[^>]*class="gall_num[^"]*"[^>]*>([\s\S]*?)<\/td>/i);
   const numberText = decodeHtml(stripTags(numberCellMatch ? numberCellMatch[1] : ''));
@@ -179,6 +206,32 @@ function extractCurrentHead(rowHtml) {
 function extractGallDateTitle(rowHtml) {
   const match = rowHtml.match(/<td[^>]*class="gall_date[^"]*"[^>]*title="([^"]+)"[^>]*>/i);
   return match ? match[1] : '';
+}
+
+function extractGallogPrivacyState(html, pathSegment) {
+  const regex = new RegExp(
+    `<h2[^>]*class="tit"[^>]*onclick="location\\.href='\\/[^']*\\/${pathSegment}';"[^>]*>[\\s\\S]*?<\\/h2>\\s*<span class="([^"]+)">\\s*([^<]+?)\\s*<\\/span>`,
+    'i',
+  );
+  const match = html.match(regex);
+  if (!match) {
+    return {
+      found: false,
+      isPublic: false,
+      isPrivate: false,
+    };
+  }
+
+  const className = String(match[1] || '').trim().toLowerCase();
+  const text = decodeHtml(match[2]).replace(/\s+/g, ' ').trim();
+  const isPublic = className.includes('bluebox') && text.includes('공개');
+  const isPrivate = className.includes('greybox') && text.includes('비공개');
+
+  return {
+    found: true,
+    isPublic,
+    isPrivate,
+  };
 }
 
 function parseGallTimestampKst(value) {
@@ -237,6 +290,7 @@ export {
   getNewestPostNo,
   getRecentRowsWithinWindow,
   groupRowsByUid,
+  parseGallogPrivacy,
   parseGallTimestampKst,
   parseUidWarningAutoBanRows,
 };

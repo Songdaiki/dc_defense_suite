@@ -2118,7 +2118,7 @@ function getUidWarningAutoBanStatusClassName(status = {}) {
 
 function buildUidWarningAutoBanMetaText(status = {}) {
   if (!status.isRunning) {
-    return '1분마다 1페이지를 확인해 5분 안에 3글 이상 + 글비중 90% uid를 6시간 차단/삭제합니다.';
+    return '1분마다 1페이지를 확인해 5분 안에 2글 이상 + 글비중 90% + 갤로그 글/댓글 비공개 uid를 6시간 차단/삭제합니다.';
   }
 
   if (status.lastError) {

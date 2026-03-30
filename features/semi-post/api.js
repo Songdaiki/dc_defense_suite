@@ -107,7 +107,10 @@ async function fetchUserActivityStats(config = {}, uid) {
             uid: normalizedUid,
             postCount: parsed.postCount,
             commentCount: parsed.commentCount,
+            effectiveCommentCount: parsed.effectiveCommentCount,
             totalActivityCount: parsed.totalActivityCount,
+            effectiveTotalActivityCount: parsed.effectiveTotalActivityCount,
+            effectivePostRatio: parsed.effectivePostRatio,
             postRatio: parsed.postRatio,
         };
     });
@@ -134,18 +137,31 @@ function parseActivityStatsResponse(responseText) {
         };
     }
 
+    const effectiveCommentCount = getEffectiveCommentCount(commentCount);
     const totalActivityCount = postCount + commentCount;
+    const effectiveTotalActivityCount = postCount + effectiveCommentCount;
     const postRatio = totalActivityCount > 0
         ? Number(((postCount / totalActivityCount) * 100).toFixed(2))
+        : 0;
+    const effectivePostRatio = effectiveTotalActivityCount > 0
+        ? Number(((postCount / effectiveTotalActivityCount) * 100).toFixed(2))
         : 0;
 
     return {
         success: true,
         postCount,
         commentCount,
+        effectiveCommentCount,
         totalActivityCount,
+        effectiveTotalActivityCount,
+        effectivePostRatio,
         postRatio,
     };
+}
+
+function getEffectiveCommentCount(commentCount) {
+    const normalizedCommentCount = Number(commentCount) || 0;
+    return Math.max(0, normalizedCommentCount - 2);
 }
 
 function summarizeResponseText(responseText) {

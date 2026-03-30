@@ -356,7 +356,8 @@ async function applyUidRatioWarningToTab(tab, options = {}) {
         continue;
       }
 
-      if (Number(stats.postRatio) >= UID_RATIO_WARNING_THRESHOLD_PERCENT) {
+      const effectivePostRatio = Number(stats.effectivePostRatio ?? stats.postRatio);
+      if (effectivePostRatio >= UID_RATIO_WARNING_THRESHOLD_PERCENT) {
         warnedUids.push(entry.uid);
       }
     }

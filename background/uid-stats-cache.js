@@ -16,10 +16,12 @@ async function getOrFetchUidStats(galleryId, uid) {
   }
 
   const stats = await fetchUserActivityStats({ galleryId }, uid);
-  uidStatsCache.set(cacheKey, {
-    stats,
-    expiresAt: now + UID_RATIO_WARNING_CACHE_TTL_MS,
-  });
+  if (stats?.success === true) {
+    uidStatsCache.set(cacheKey, {
+      stats,
+      expiresAt: now + UID_RATIO_WARNING_CACHE_TTL_MS,
+    });
+  }
   return stats;
 }
 

@@ -13,6 +13,7 @@
   ],
   "host_permissions": [
     "https://gall.dcinside.com/*",
+    "https://gallog.dcinside.com/*",
     "https://*.dcinside.co.kr/*",
     "https://sign.dcinside.com/*"
   ],

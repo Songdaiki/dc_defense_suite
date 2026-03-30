@@ -9,19 +9,24 @@
 v1 목표는 아래처럼 단순하게 고정한다.
 
 1. **게시판 1페이지를 1분마다 폴링**
-2. 같은 `uid`가 **최근 5분 안에 글을 3개 이상** 올렸고
-3. 그 `uid`의 전체 활동 통계에서 **글 비중(`postRatio`)이 90% 이상**이면
-4. **현재 page 1에 보이는 그 uid 글 전부**를
+2. 같은 `uid`가 **최근 5분 안에 글을 2개 이상** 올렸고
+3. 그 `uid`의 전체 활동 통계에서 **글 비중(`effectivePostRatio`)이 90% 이상**이고
+4. 그 `uid`의 갤로그가 **게시글 비공개 + 댓글 비공개**이면
+5. **현재 page 1에 보이는 그 uid 글 전부**를
    - `6시간 차단`
    - `삭제(del_chk=1)`
    로 처리한다
-5. 삭제 한도 초과가 나면 기존 **계정 전환 fallback**을 재사용한다
+6. 삭제 한도 초과가 나면 기존 **계정 전환 fallback**을 재사용한다
 
 즉 한 줄로 말하면:
 
-- `분탕경고`가 붙을 정도의 `uid`
-- 그것도 **page 1에서 5분 내 3글 이상**
-- 이 조건이면 **page 1에 보이는 그 uid 글을 한 번에 6시간 차단 + 삭제**
+- `분탕경고` 기준으로도 위험한 `uid`
+- 그것도 **page 1에서 5분 내 2글 이상**
+- 그리고
+  - **글 비중 90% 이상**
+  - **갤로그 게시글/댓글이 둘 다 비공개**
+  를 둘 다 만족하면
+- **page 1에 보이는 그 uid 글을 한 번에 6시간 차단 + 삭제**
 
 
 ## 사용자 기준 기대 동작
@@ -33,15 +38,30 @@ v1 목표는 아래처럼 단순하게 고정한다.
    - 11:14
    - 11:12
    에 글을 올림
-2. 11:16 기준으로 보면 최근 5분 안에 이미 3글 이상이다
+2. 11:16 기준으로 보면 최근 5분 안에 이미 2글 이상이다
 3. 이 `uid`의 전체 활동 통계를 조회했더니
    - 게시물 55
    - 댓글 5
    - 글 비중 91.67%
-4. 그러면 1분 poll 시점에
+4. 갤로그를 확인했더니
+   - 게시글 `비공개`
+   - 댓글 `비공개`
+5. 그러면 1분 poll 시점에
    - page 1에 현재 보이는 `scatter6268` 글들을 전부 모아
    - `6시간 차단 + 삭제`
    한다
+
+비공개 갤로그 예시:
+
+1. `decided5206`가 page 1에서 최근 5분 안에 2글 이상 올림
+2. 갤로그를 확인했더니
+   - 게시글 `비공개`
+   - 댓글 `비공개`
+3. 그런데 글 비중이 70%면 아직 trigger 아님
+4. 즉 **5분 2글**을 기본 전제로 두고,
+   - `글 비중 90% 이상`
+   - `갤로그 게시글/댓글 비공개`
+   를 **둘 다 만족해야** 자동 제재한다
 
 중요:
 
@@ -90,7 +110,50 @@ v1 목표는 아래처럼 단순하게 고정한다.
 - 11:14:08
 - 11:12:40
 
-즉 “최근 5분 내 3글 이상”은 page 1 한 번 fetch한 HTML만으로도 판정 가능하다.
+즉 “최근 5분 내 2글 이상”은 page 1 한 번 fetch한 HTML만으로도 판정 가능하다.
+
+
+## 갤로그 비공개 필터 근거
+
+`[html.md](./html.md)`와 `[html(분탕).md](./html(분탕).md)`를 비교하면,
+갤로그 공개/비공개 상태를 마크업으로 안정적으로 구분할 수 있다.
+
+### 1. 일반 갤로그
+
+- 게시글 섹션: `<span class="bluebox">공개</span>`
+- 댓글 섹션: `<span class="bluebox">공개</span>`
+
+실제 예시:
+
+- [html.md](./html.md#L288)
+- [html.md](./html.md#L330)
+
+### 2. 분탕성 비공개 갤로그
+
+- 게시글 섹션: `<span class="greybox">비공개</span>`
+- 댓글 섹션: `<span class="greybox">비공개</span>`
+
+실제 예시:
+
+- [html(분탕).md](./html(분탕).md#L288)
+- [html(분탕).md](./html(분탕).md#L308)
+
+중요:
+
+- `게시글이 없습니다`, `댓글이 없습니다` 텍스트만 보면 안 된다
+- 공개 상태인데 진짜 글/댓글이 0개여도 empty 텍스트는 나올 수 있다
+- 따라서 **핵심 판별은 `bluebox/greybox`와 `공개/비공개` 라벨**이다
+
+문서 기준 비공개 분탕 필터는 아래처럼 정의한다.
+
+1. 갤로그 홈 HTML fetch
+2. 게시글 섹션 상태 확인
+3. 댓글 섹션 상태 확인
+4. 둘 다 `greybox 비공개`면 `gallogPrivate = true`
+
+즉 한 줄로:
+
+- **게시글 비공개 + 댓글 비공개** 조합이면 “분탕용 비공개 갤로그” 신호로 본다
 
 
 ## 이번 문서의 범위
@@ -125,10 +188,15 @@ v1 목표는 아래처럼 단순하게 고정한다.
 이 기능은:
 
 - 현재 탭에서 `data-uid`를 수집하고
-- `postRatio >= 90`이면
+- `effectivePostRatio >= 90`이면
 - 빨간 `- 분탕주의` 배지를 붙인다
 
 즉 **시각 경고용**이다.
+
+중요:
+
+- 현재 수동 `분탕경고`는 이미 **댓글 2개 차감 보정**이 들어간 `effectivePostRatio`를 사용한다
+- 따라서 새 `분탕자동차단`도 같은 기준을 유지해야, 화면 경고와 자동 제재 기준이 서로 어긋나지 않는다
 
 ### 2. 새 기능은 별도 자동 제재 기능이어야 한다
 
@@ -201,10 +269,70 @@ v1 목표는 아래처럼 단순하게 고정한다.
 
 - `postCount`
 - `commentCount`
+- `effectiveCommentCount`
 - `totalActivityCount`
+- `effectiveTotalActivityCount`
+- `effectivePostRatio`
 - `postRatio`
 
 즉 **글 비중 90% 판정**은 새로 만들 필요가 없다.
+
+
+## 1-1. 갤로그 HTML fetch / 비공개 파서
+
+현재 구현 기준 갤로그 비공개 필터는 아래 helper 조합으로 처리한다.
+
+- `features/uid-warning-autoban/api.js`
+  - `fetchGallogHomeHtml(uid)`
+- `features/uid-warning-autoban/parser.js`
+  - `parseGallogPrivacy(html)`
+
+권장 구현 메모:
+
+- `fetchGallogHomeHtml(uid)`도 기존 list/stats fetch처럼 `withDcRequestLease(...)`를 타는 쪽이 안전하다
+- `403/429` backoff 규칙도 기존 fetch helper와 같은 성격으로 맞추는 것이 좋다
+
+권장 반환 shape:
+
+```js
+{
+  success: true,
+  postingPublic: true,
+  commentPublic: true,
+  postingPrivate: false,
+  commentPrivate: false,
+  fullyPrivate: false,
+}
+```
+
+`fullyPrivate` 판정 기준:
+
+- 게시글 `greybox 비공개`
+- 댓글 `greybox 비공개`
+
+둘 다 만족할 때만 `true`
+
+예시:
+
+- `author5184` -> `fullyPrivate: false`
+- `decided5206` -> `fullyPrivate: true`
+
+
+## 1-2. `gallog.dcinside.com` host permission 유지 필요
+
+갤로그 비공개 필터는 `https://gallog.dcinside.com/<uid>` HTML fetch가 전제다.
+
+현재 구현 기준으로는 `manifest.json`에 아래 host permission이 포함돼 있어야 한다.
+
+- `https://gallog.dcinside.com/*`
+
+쉽게 예시로 말하면:
+
+1. `decided5206`가 최근 5분 2글 조건을 만족
+2. 다음 단계로 `https://gallog.dcinside.com/decided5206`를 확인해야 함
+3. 이 host permission이 빠지면 여기서 실제 기능이 멈춤
+
+즉 **갤로그 비공개 필터는 이 권한이 유지돼 있어야 한다.**
 
 
 ## 2. 게시판 목록 HTML fetch
@@ -275,32 +403,59 @@ v1 목표는 아래처럼 단순하게 고정한다.
 
 이 흐름 자체는 이미 존재한다.
 
-## 5. uid 통계 cache는 공용화하는 편이 좋다
+## 5. uid 통계 cache는 공용 helper를 유지한다
 
-현재 수동 `분탕경고`는
+현재 구현 기준 uid 활동 통계는 아래 공용 helper를 탄다.
 
-- [background/uid-ratio-warning.js](../background/uid-ratio-warning.js)
+- [background/uid-stats-cache.js](../background/uid-stats-cache.js)
 
-안에서 module-local `uidStatsCache`를 따로 들고 있다.
+즉 수동 `분탕경고`와 `분탕자동차단`이 같은 uid 통계를 볼 때, 이미 같은 TTL cache를 재사용하는 구조다.
 
-새 자동 제재도 같은 `fetchUserActivityStats()`를 1분마다 칠 예정이라,
 
-- 수동 경고 ON
-- page1 자동 제재 ON
+## 5-1. 갤로그 비공개 판정도 cache를 둔다
 
-이 둘이 같이 켜지면 **같은 uid 통계를 중복 조회**할 수 있다.
+현재 구현 기준 갤로그 비공개 판정은 아래 공용 cache helper를 둔다.
 
-권장 방향:
+- `background/uid-gallog-privacy-cache.js`
 
-1. 현재 수동 `분탕경고`의 uid stats cache를 공용 helper로 추출하거나
-2. 새 자동 제재도 같은 TTL 규칙을 재사용하도록 맞춘다
+이유는 단순하다.
 
-즉 이 기능은 **API 로직은 재사용 가능하지만, cache는 지금 그대로 자동 공유되진 않는다**는 점을 문서에 명시한다.
+1. page 1에서 최근 5분 2글 후보를 잡고
+2. `effectivePostRatio >= 90`를 확인한 다음
+3. 갤로그 비공개 여부까지 봐야 한다
+
+이때 같은 uid가 page 1에 계속 남아 있으면, 매 1분 poll마다 같은 갤로그를 다시 읽지 않게 해야 한다.
+
+권장 cache shape:
+
+```js
+{
+  'decided5206': {
+    fullyPrivate: true,
+    postingPrivate: true,
+    commentPrivate: true,
+    expiresAt: 1774751000000,
+  }
+}
+```
+
+권장 TTL:
+
+- `2분` 또는 `5분`
+
+권장 순서:
+
+1. 최근 5분 2글 후보 uid 추림
+2. uid stats cache 확인 / 필요시 fetch
+3. `effectivePostRatio >= 90` 통과 uid만
+4. gallog privacy cache 확인 / 필요시 fetch
+
+즉 **갤로그 fetch는 ratio 통과 뒤에만**, 그리고 **cache를 둔 상태로** 수행하는 쪽이 안전하다.
 
 
 ## 현재 코드에서 바로 못 쓰는 것
 
-## 1. 현재 `분탕경고`는 “최근 5분 3글” 정보를 모른다
+## 1. 현재 `분탕경고`는 “최근 5분 2글” 정보를 모른다
 
 현재 `fetchUserActivityStats()`는 전체 활동 통계만 돌려준다.
 
@@ -384,14 +539,13 @@ v1 권장안:
 
 ## 1. 새 feature는 `분탕자동차단`으로 분리
 
-권장 신규 모듈:
+현재 코드베이스에는 아래 모듈이 이미 있다.
 
 - `features/uid-warning-autoban/scheduler.js`
 - `features/uid-warning-autoban/parser.js`
-
-필요시:
-
 - `features/ip/ban-executor.js`
+
+즉 이번 작업은 **새 파일을 처음 만드는 것보다, 이미 있는 `분탕자동차단` 구현을 문서 기준으로 보강하는 작업**에 가깝다.
 
 역할:
 
@@ -404,6 +558,7 @@ v1 권장안:
   - page 1 row에서 `postNo/uid/nick/subject/currentHead/timestamp` 파싱
 - `ip/ban-executor.js`
   - 기존 IP 차단 로직에서 delete-limit fallback 포함 실행 경로를 공용화
+  - 이건 이미 추출되어 있고, 새 조건에 맞게 호출부만 유지/보강하면 된다
 
 
 ## 2. `분탕경고` 탭 안에 하단 독립 카드 추가
@@ -423,7 +578,7 @@ UI 예시:
 
 - poll 주기: `60000ms`
 - 최근 글 윈도우: `5분`
-- 최소 글 수: `3`
+- 최소 글 수: `2`
 - 글 비중 기준: `90%`
 - 차단 시간: `6시간`
 - 삭제: `ON` 고정
@@ -470,19 +625,29 @@ UI 예시:
 
 그래서 새 기능도 **공통 설정 변경 시 reset되는 기존 자동 기능 패턴**을 따라야 한다.
 
-추가로 v1은 아래 start/lock 정책까지 같이 두는 것이 안전하다.
+추가로 현재 실제 코드 기준으론 `게시물 자동화(monitor)`와의 공존 정책도 유지해야 한다.
 
-- `monitor` 실행 중에는 `분탕자동차단` start 금지
-- `ip` 실행 중에는 `분탕자동차단` start 금지
-- 반대로 `분탕자동차단` 실행 중이면 `monitor` 시작도 막는 방향 권장
+현재 동작은 blanket lock이 아니라 아래와 같다.
 
-이유:
+1. `monitor`가 **평소 NORMAL**이면 `분탕자동차단`과 공존 가능
+2. `monitor`가 **ATTACKING/RECOVERING**이면 `분탕자동차단` 자동 일시정지
+3. 공격이 끝나면 `분탕자동차단` 자동 복원
+4. `ip` 실행 중일 때만 `분탕자동차단` start/수동조작 금지
 
-- 둘 다 차단/삭제를 수행한다
-- delete-limit fallback ownership이 섞일 수 있다
-- 같은 시점에 서로 다른 자동화가 같은 page 1 / 같은 uid를 동시에 건드리면 추적이 불분명해진다
+쉽게 예시로 말하면:
 
-즉 v1은 **동시 공격형 자동 제재 기능끼리 병행 실행을 허용하지 않는 쪽**이 안전하다.
+1. `게시물 자동화` ON, 지금 평온한 상태
+2. `분탕자동차단`도 ON
+3. 공격 들어옴
+4. `분탕자동차단` 자동 일시정지
+5. 공격 끝남
+6. `분탕자동차단` 자동 복원
+
+즉 이번 구현도 아래 원칙을 따라야 한다.
+
+- `monitor`가 켜져 있다는 이유만으로 새 기능을 막지 않는다
+- **ATTACKING/RECOVERING일 때만** 자동 일시정지
+- `ip` 실행 중일 때는 계속 start/수동조작 금지
 
 
 ## page 1 HTML parser 설계
@@ -573,37 +738,52 @@ UI 예시:
 
 아래를 동시에 만족하면 trigger:
 
-1. 최근 5분 row 수 `>= 3`
-2. `fetchUserActivityStats(uid)` 성공
-3. `postRatio >= 90`
+1. 최근 5분 row 수 `>= 2`
+2. `fetchUserActivityStats(uid)` 성공 + `effectivePostRatio >= 90`
+3. `gallog fullyPrivate === true`
 
 예시:
 
 - 최근 5분 row 4개
-- postRatio 91.67
+- effectivePostRatio 91.67
+- 갤로그 `게시글 비공개 + 댓글 비공개`
 
 -> trigger
 
 예시:
 
 - 최근 5분 row 4개
-- postRatio 70
+- effectivePostRatio 70
+- 갤로그 `게시글 비공개 + 댓글 비공개`
 
 -> trigger 아님
 
 예시:
 
-- postRatio 95
-- 최근 5분 row 2개
+- 최근 5분 row 4개
+- effectivePostRatio 95
+- 갤로그 공개
 
 -> trigger 아님
+
+예시:
+
+- effectivePostRatio 95
+- 최근 5분 row 1개
+
+-> trigger 아님
+
+중요:
+
+- 최근 글 수 기준은 **2글 이상**으로 고정해야 한다
+- 기본값/설명/로그 문구도 이 기준과 같이 움직여야 운영 중 혼선이 없다
 
 
 ## 제재 범위
 
 이번 v1 제재 범위는 **trigger 순간 page 1에 보이는 같은 uid 글 전부**로 한다.
 
-즉 최근 5분 3글을 만족하게 만든 3개만이 아니라,
+즉 최근 5분 2글을 만족하게 만든 2개만이 아니라,
 
 - 그 poll 시점 page 1에서
 - 같은 uid인 row를 전부 모아
@@ -612,7 +792,7 @@ UI 예시:
 예시:
 
 page 1에 `scatter6268` 글이 6개 보이고,
-그 중 최근 5분 글이 3개 이상이면,
+그 중 최근 5분 글이 2개 이상이면,
 
 - 그 6개를 전부 차단/삭제
 
@@ -836,7 +1016,8 @@ recentUidActions = {
 예시 로그:
 
 - `📄 page1 uid snapshot 37개 / uid 25명`
-- `🚨 scatter6268 최근 5분 4글 / 글비중 91.67% -> 제재 시작`
+- `🚨 scatter6268 최근 5분 4글 / 글비중 91.67% / 갤로그 게시글·댓글 비공개 -> 제재 시작`
+- `🚨 decided5206 최근 5분 2글 / 글비중 93.10% / 갤로그 게시글·댓글 비공개 -> 제재 시작`
 - `⛔ scatter6268 page1 글 6개 차단/삭제 완료`
 - `🔁 삭제 한도 계정 전환 성공 - 부계정으로 같은 run 이어감`
 - `🧯 삭제 한도 초과로 2개는 차단만 수행`
@@ -848,7 +1029,7 @@ recentUidActions = {
 
 - 제목: `분탕자동차단`
 - 설명:
-  - `1분마다 1페이지를 확인해, 5분 안에 3글 이상 + 글비중 90% uid를 6시간 차단/삭제합니다`
+  - `1분마다 1페이지를 확인해, 5분 안에 2글 이상 + 글비중 90% + 갤로그 게시글·댓글 비공개 uid를 6시간 차단/삭제합니다`
 
 상태 항목 예시:
 
@@ -878,52 +1059,64 @@ recentUidActions = {
 흐름으로 넣는 편이 맞다.
 
 
+## 구현 정렬 포인트
+
+실제 코드와 문서를 맞출 때 꼭 같이 봐야 할 포인트는 아래다.
+
+1. `분탕자동차단` 기본값/문구/로그를 모두 **5분 2글 기준**으로 맞춘다
+2. `gallog fullyPrivate` 판정을 **필수 필터**로 넣는다
+3. 수동 `분탕경고`와 같은 `effectivePostRatio` 기준을 유지한다
+4. `게시물 자동화`와는 **공격 시 자동 일시정지/복원** 정책을 유지한다
+
+즉 이번 작업은 “새 기능을 처음부터 추가”라기보다,
+**이미 있는 `분탕자동차단` 구현을 문서 기준으로 보강/정렬하는 작업**으로 보는 게 정확하다.
+
+
 ## 실제 구현 순서 권장
 
-## 1단계: page 1 parser 추가
+## 1단계: page 1 parser 보강
 
-새 parser 추가:
+현재 parser:
 
 - `features/uid-warning-autoban/parser.js`
 
-기능:
+보강 내용:
 
-- page 1 HTML -> uid row 목록
-- timestamp/title/postNo 추출
-- 공지/설문/비uid row 제외
+- page 1 HTML -> uid row 목록 파싱 유지
+- timestamp/title/postNo 추출 유지
+- 공지/설문/비uid row 제외 유지
+- 필요시 gallog 관련 보조 키를 scheduler가 쓰기 좋게 정리
 
-## 2단계: scheduler 골격 추가
+## 2단계: scheduler 조건 보강
 
-새 scheduler:
+현재 scheduler:
 
 - `features/uid-warning-autoban/scheduler.js`
 
-기능:
+보강 내용:
 
-- 1분 loop
-- page 1 fetch
-- uid group
-- 최근 5분 3글 이상 판정
-- `postRatio >= 90` 체크
+- 1분 loop 유지
+- page 1 fetch 유지
+- uid group 유지
+- 최근 5분 **2글 이상**으로 기준 변경
+- `effectivePostRatio >= 90` + `gallog fullyPrivate` 체크 추가
 
-## 3단계: 공용 ban executor 추출
+## 3단계: 공용 ban executor는 재사용 유지
 
-기존:
-
-- `features/ip/scheduler.js` 내부 `processBanCandidates()`
-
-여기서 delete-limit fallback 포함 실행부를 분리해:
+현재 공용 executor:
 
 - `features/ip/ban-executor.js`
 
-로 추출
+이건 이미 추출되어 있고, 기존 IP scheduler도 사용 중이다.
 
-그리고:
+따라서 이번 작업에선:
 
 - 기존 IP scheduler
-- 새 page1 auto-ban
+- `분탕자동차단`
 
-둘 다 그 helper를 쓰게 만든다.
+둘 다 **같은 helper를 계속 쓰도록 유지**하는 것이 맞다.
+
+즉 여기서 또 새 executor를 만들거나, 기존 delete-limit semantics를 건드리는 건 피하는 쪽이 안전하다.
 
 ## 4단계: popup/background wiring
 
@@ -955,23 +1148,27 @@ recentUidActions = {
 
 v1에서 반드시 정리해야 하는 케이스:
 
-1. page 1에 같은 uid가 3글 있지만 6분 전에 쓴 글이면 trigger 아님
-2. page 1에 같은 uid가 2글만 있으면 trigger 아님
-3. 5분 내 3글이지만 `postRatio < 90`이면 trigger 아님
-4. page 1에 같은 uid 글이 6개면 6개 전부 제재
-5. 공지/설문 row는 무시
-6. 유동(`data-ip`)만 있는 row는 무시
-7. timestamp title 없는 row는 무시
-8. `fetchUserActivityStats()` 403/429는 기존 backoff를 그대로 탐
-9. uid stats 전체 실패 시 그 cycle은 스킵
-10. delete-limit 발생 시 계정전환 후 같은 run 재시도
-11. 계정전환 실패 시 ban-only 최종 보루
-12. 같은 uid가 같은 page1 rows로 1분 뒤 다시 보이더라도 중복 제재 방지
-13. 새 postNo가 추가되면 같은 uid라도 다시 제재 가능
-14. page 1만 보기 때문에 page 2로 밀린 글은 v1 범위 밖
-15. polling 중 OFF하면 다음 cycle부터 중단
-16. 브라우저 재시작 후 ON 상태 복원
-17. delete-limit loop guard 발동 후에는 다음 minute poll에서도 다시 계정전환을 반복하지 않고 ban-only hold 유지
+1. page 1에 같은 uid가 2글 있지만 6분 전에 쓴 글이면 trigger 아님
+2. page 1에 같은 uid가 1글만 있으면 trigger 아님
+3. 5분 내 2글이지만 `effectivePostRatio < 90`이면 갤로그가 비공개여도 trigger 아님
+4. 5분 내 2글이고 `effectivePostRatio >= 90`이어도 갤로그가 공개면 trigger 아님
+5. page 1에 같은 uid 글이 6개면 6개 전부 제재
+6. 공지/설문 row는 무시
+7. 유동(`data-ip`)만 있는 row는 무시
+8. timestamp title 없는 row는 무시
+9. `fetchUserActivityStats()` 403/429는 기존 backoff를 그대로 탐
+10. uid stats 실패면 갤로그 비공개여도 trigger 아님
+11. delete-limit 발생 시 계정전환 후 같은 run 재시도
+12. 계정전환 실패 시 ban-only 최종 보루
+13. 같은 uid가 같은 page1 rows로 1분 뒤 다시 보이더라도 중복 제재 방지
+14. 새 postNo가 추가되면 같은 uid라도 다시 제재 가능
+15. page 1만 보기 때문에 page 2로 밀린 글은 v1 범위 밖
+16. polling 중 OFF하면 다음 cycle부터 중단
+17. 브라우저 재시작 후 ON 상태 복원
+18. delete-limit loop guard 발동 후에는 다음 minute poll에서도 다시 계정전환을 반복하지 않고 ban-only hold 유지
+19. 갤로그 fetch 실패면 trigger 아님
+20. uid stats와 갤로그 둘 중 하나라도 실패하면 그 uid는 그 cycle 스킵
+21. 갤로그 비공개 판정은 `empty 텍스트`가 아니라 `greybox 비공개`로 본다
 
 
 ## 이 설계가 기존 플로우를 덜 깨는 이유
@@ -995,7 +1192,7 @@ v1에서 반드시 정리해야 하는 케이스:
 2. 수동 경고 기능은 그대로 유지
 3. 새 `분탕자동차단` 하단 카드 추가
 4. 1분마다 page 1만 fetch
-5. uid별 최근 5분 3글 + 글비중 90% 판정
+5. uid별 최근 5분 2글 + `effectivePostRatio 90%` + `갤로그 게시글/댓글 비공개` 판정
 6. 현재 page 1에 보이는 그 uid 글 전부 6시간 차단 + 삭제
 7. delete-limit는 기존 broker fallback 재사용
 8. 같은 uid 반복 제재는 cooldown/dedupe로 억제
@@ -1003,5 +1200,6 @@ v1에서 반드시 정리해야 하는 케이스:
 한 줄로 정리하면:
 
 - **“위에는 가시 경고를 그대로 두고, 아래 `분탕자동차단`이 page 1 분탕 uid를 1분 안에 잡아 차단/삭제하는 구조”**
+- **이때 분탕 판단은 `글 비중 90%`와 `갤로그 게시글/댓글 비공개`를 둘 다 만족해야 한다**
 
 이게 이번 v1의 정확한 목표다.
