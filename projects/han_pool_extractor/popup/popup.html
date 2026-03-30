@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=460">
+  <title>한자 풀 추출기</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>한자 풀 추출기</h1>
+      <p>관리기록 차단 페이지의 게시글 제목만 읽어서 반복 한자 풀을 뽑습니다.</p>
+    </header>
+
+    <section class="controls">
+      <div class="field-grid">
+        <label class="field">
+          <span>시작 페이지</span>
+          <input type="number" id="startPage" min="1" value="1">
+        </label>
+        <label class="field">
+          <span>끝 페이지</span>
+          <input type="number" id="endPage" min="1" value="400">
+        </label>
+        <label class="field">
+          <span>최소 반복 횟수</span>
+          <input type="number" id="minRepeatCount" min="2" value="2">
+        </label>
+      </div>
+
+      <p class="hint">
+        실행 전 현재 활성 탭이 <code>관리기록 차단 페이지</code>여야 합니다. 페이지마다 500ms 텀을 두며, 실행 중에는 이 팝업을 열어 두는 편이 안전합니다. 실행에 쓴 페이지 범위와 최소 반복 횟수는 저장되며, 최소 반복 횟수를 바꾸면 이미 모은 결과도 바로 다시 계산합니다.
+      </p>
+
+      <div class="button-row">
+        <button id="startButton" class="primary">실행</button>
+        <button id="stopButton">중지</button>
+        <button id="copyButton">결과 복사</button>
+        <button id="clearButton">초기화</button>
+      </div>
+    </section>
+
+    <section class="stats">
+      <div class="stat-item">
+        <span class="stat-label">상태</span>
+        <strong id="statusText">대기</strong>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">현재 페이지</span>
+        <strong id="currentPageText">-</strong>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">완료 페이지</span>
+        <strong id="pagesProcessedText">0</strong>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">제목 수</span>
+        <strong id="titleCountText">0</strong>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">전체 한자 수</span>
+        <strong id="totalHanCountText">0</strong>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">중복 한자 종류 수</span>
+        <strong id="repeatedHanCountText">0</strong>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>진행 로그</h2>
+      </div>
+      <textarea id="logArea" class="log-area" readonly spellcheck="false"></textarea>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>최종 결과</h2>
+      </div>
+      <textarea id="resultArea" class="result-area" readonly spellcheck="false"></textarea>
+    </section>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

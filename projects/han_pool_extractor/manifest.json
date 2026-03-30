@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Han Pool Extractor",
+  "version": "1.0.0",
+  "description": "관리기록 게시글 제목에서 반복되는 한자/CJK 글자 풀을 추출합니다.",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://gall.dcinside.com/*"
+  ],
+  "background": {
+    "service_worker": "background/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup/popup.html"
+  }
+}
