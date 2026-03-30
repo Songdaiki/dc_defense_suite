@@ -380,7 +380,7 @@ class Scheduler {
           lastDeleteLimitMessage: this.lastDeleteLimitMessage,
           recentUidActions: this.recentUidActions,
           logs: this.logs.slice(0, 50),
-          config: this.config,
+          config: buildPersistedConfig(this.config),
         },
       });
     } catch (error) {
@@ -421,7 +421,7 @@ class Scheduler {
       this.logs = Array.isArray(schedulerState.logs) ? schedulerState.logs : [];
       this.config = normalizeConfig({
         ...this.config,
-        ...(schedulerState.config || {}),
+        ...readPersistedConfig(schedulerState.config),
       });
       pruneRecentUidActions(this.recentUidActions);
     } catch (error) {
@@ -496,6 +496,18 @@ function normalizeConfig(config = {}) {
     delChk: config.delChk === undefined ? Boolean(DEFAULT_CONFIG.delChk) : Boolean(config.delChk),
     avoidTypeChk: config.avoidTypeChk === undefined ? Boolean(DEFAULT_CONFIG.avoidTypeChk) : Boolean(config.avoidTypeChk),
   };
+}
+
+function buildPersistedConfig(config = {}) {
+  return {
+    galleryId: String(config.galleryId || DEFAULT_CONFIG.galleryId).trim() || DEFAULT_CONFIG.galleryId,
+    galleryType: String(config.galleryType || DEFAULT_CONFIG.galleryType).trim() || DEFAULT_CONFIG.galleryType,
+    baseUrl: String(config.baseUrl || DEFAULT_CONFIG.baseUrl).trim() || DEFAULT_CONFIG.baseUrl,
+  };
+}
+
+function readPersistedConfig(raw = {}) {
+  return buildPersistedConfig(raw);
 }
 
 function normalizeAvoidReasonText(value) {
