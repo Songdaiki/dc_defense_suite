@@ -380,7 +380,7 @@ v1 목표는 아래처럼 단순하게 고정한다.
 - `avoidHour: '6'`
 - `delChk: true`
 - `avoidTypeChk: true`
-- `avoidReasonText: '깡계분탕(요격)'`
+- `avoidReasonText: '깡계분탕'`
 
 `avoidReason` 숫자값은 기존 운영 기본값을 유지해도 되지만,
 최소한 `avoidReasonText`는 새 기능 의미에 맞게 바꾸는 것이 안전하다.

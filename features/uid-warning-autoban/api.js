@@ -1,7 +1,8 @@
 import { withDcRequestLease } from '../../background/dc-session-broker.js';
 
 const LEGACY_AVOID_REASON_TEXT = '매일 오는 gdp틀딱 (자동차단)';
-const DEFAULT_AVOID_REASON_TEXT = '깡계분탕(요격)';
+const PREVIOUS_DEFAULT_AVOID_REASON_TEXT = '깡계분탕(요격)';
+const DEFAULT_AVOID_REASON_TEXT = '깡계분탕';
 
 const DEFAULT_CONFIG = {
   galleryId: 'thesingularity',
@@ -105,6 +106,7 @@ export {
   DEFAULT_CONFIG,
   DEFAULT_AVOID_REASON_TEXT,
   LEGACY_AVOID_REASON_TEXT,
+  PREVIOUS_DEFAULT_AVOID_REASON_TEXT,
   delay,
   fetchGallogHomeHtml,
   fetchUidWarningAutoBanListHTML,

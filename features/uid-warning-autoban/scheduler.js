@@ -2,6 +2,7 @@ import {
   DEFAULT_CONFIG,
   DEFAULT_AVOID_REASON_TEXT,
   LEGACY_AVOID_REASON_TEXT,
+  PREVIOUS_DEFAULT_AVOID_REASON_TEXT,
   delay,
   fetchUidWarningAutoBanListHTML,
 } from './api.js';
@@ -512,7 +513,11 @@ function readPersistedConfig(raw = {}) {
 
 function normalizeAvoidReasonText(value) {
   const normalized = String(value || '').trim();
-  if (!normalized || normalized === LEGACY_AVOID_REASON_TEXT) {
+  if (
+    !normalized
+    || normalized === LEGACY_AVOID_REASON_TEXT
+    || normalized === PREVIOUS_DEFAULT_AVOID_REASON_TEXT
+  ) {
     return DEFAULT_AVOID_REASON_TEXT;
   }
 
