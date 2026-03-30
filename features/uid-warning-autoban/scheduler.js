@@ -1,5 +1,7 @@
 import {
   DEFAULT_CONFIG,
+  DEFAULT_AVOID_REASON_TEXT,
+  LEGACY_AVOID_REASON_TEXT,
   delay,
   fetchUidWarningAutoBanListHTML,
 } from './api.js';
@@ -483,10 +485,19 @@ function normalizeConfig(config = {}) {
     retryCooldownMs: Math.max(1000, Number(config.retryCooldownMs) || DEFAULT_CONFIG.retryCooldownMs),
     avoidHour: String(config.avoidHour || DEFAULT_CONFIG.avoidHour).trim() || DEFAULT_CONFIG.avoidHour,
     avoidReason: String(config.avoidReason || DEFAULT_CONFIG.avoidReason).trim() || DEFAULT_CONFIG.avoidReason,
-    avoidReasonText: String(config.avoidReasonText || DEFAULT_CONFIG.avoidReasonText).trim() || DEFAULT_CONFIG.avoidReasonText,
+    avoidReasonText: normalizeAvoidReasonText(config.avoidReasonText),
     delChk: config.delChk === undefined ? Boolean(DEFAULT_CONFIG.delChk) : Boolean(config.delChk),
     avoidTypeChk: config.avoidTypeChk === undefined ? Boolean(DEFAULT_CONFIG.avoidTypeChk) : Boolean(config.avoidTypeChk),
   };
+}
+
+function normalizeAvoidReasonText(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized || normalized === LEGACY_AVOID_REASON_TEXT) {
+    return DEFAULT_AVOID_REASON_TEXT;
+  }
+
+  return normalized;
 }
 
 function buildUidActionKey(galleryId, uid) {
