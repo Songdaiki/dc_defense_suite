@@ -4,11 +4,13 @@ import { Worker } from 'node:worker_threads';
 
 const DEFAULT_IDLE_MS = 0;
 const DEFAULT_MAX_JOBS_PER_WORKER = 0;
+const DEFAULT_COMPRESSION_IDLE_MS = 5000;
 
 export function createGeminiWorkerManager(options = {}) {
   const workerScriptUrl = options.workerScriptUrl || new URL('./gemini_worker.mjs', import.meta.url);
   const idleMs = normalizeNonNegativeInt(options.idleMs, DEFAULT_IDLE_MS);
   const maxJobsPerWorker = normalizeNonNegativeInt(options.maxJobsPerWorker, DEFAULT_MAX_JOBS_PER_WORKER);
+  const compressionIdleMs = normalizeNonNegativeInt(options.compressionIdleMs, DEFAULT_COMPRESSION_IDLE_MS);
 
   let worker = null;
   let workerReadyPromise = null;
@@ -19,9 +21,12 @@ export function createGeminiWorkerManager(options = {}) {
   let queue = [];
   let jobsProcessedInWorker = 0;
   let idleTimer = null;
+  let compressionTimer = null;
+  let pendingCompressionTask = null;
 
   async function runExclusive(taskFn) {
     return new Promise((resolve, reject) => {
+      clearCompressionTimer();
       queue.push({ taskFn, resolve, reject });
       void processQueue();
     });
@@ -50,7 +55,7 @@ export function createGeminiWorkerManager(options = {}) {
       if (queue.length > 0) {
         void processQueue();
       } else {
-        scheduleIdleTermination();
+        scheduleIdleCompression();
       }
     }
   }
@@ -61,6 +66,10 @@ export function createGeminiWorkerManager(options = {}) {
 
   async function warmRuntime(taskInput) {
     return runWorkerJob('warm', taskInput);
+  }
+
+  async function compressRuntime(taskInput) {
+    return runWorkerJob('compress', taskInput);
   }
 
   async function runWorkerJob(jobType, taskInput) {
@@ -118,6 +127,20 @@ export function createGeminiWorkerManager(options = {}) {
 
       const result = await promptEntry.promise;
       jobsProcessedInWorker += 1;
+      if (jobType === 'run' && result?.maintenance?.compressionRequested === true) {
+        pendingCompressionTask = {
+          packageRoot,
+          runtimeFingerprint,
+          cwd: String(taskInput.cwd || process.cwd()),
+          runtimeConfig: {
+            args: Array.isArray(runtimeConfig.args) ? runtimeConfig.args.map((entry) => String(entry || '')) : [],
+            timeoutMs: Math.min(timeoutMs, 30000),
+            compressAfterJobs: normalizeNonNegativeInt(runtimeConfig.compressAfterJobs, 0),
+            countTowardCompression: false,
+          },
+          promptId: String(taskInput.promptId || ''),
+        };
+      }
       return result;
     } finally {
       clearActivePromptEntry(taskId);
@@ -228,6 +251,7 @@ export function createGeminiWorkerManager(options = {}) {
         failureType: String(message.failureType || ''),
         rawText: String(message.rawText || buildRawTextFromPromptEntry(activePromptEntry)),
         compression: normalizeCompressionResult(message.compression),
+        maintenance: normalizeMaintenanceResult(message.maintenance),
       });
     }
   }
@@ -274,6 +298,8 @@ export function createGeminiWorkerManager(options = {}) {
 
   async function terminateWorker() {
     clearIdleTimer();
+    clearCompressionTimer();
+    pendingCompressionTask = null;
     if (!worker) {
       workerReadyPromise = null;
       activePackageRoot = '';
@@ -305,6 +331,53 @@ export function createGeminiWorkerManager(options = {}) {
     }
   }
 
+  function scheduleIdleCompression() {
+    clearCompressionTimer();
+    if (!pendingCompressionTask) {
+      scheduleIdleTermination();
+      return;
+    }
+
+    if (compressionIdleMs <= 0 || !worker || activeExclusiveEntry || queue.length > 0) {
+      return;
+    }
+
+    compressionTimer = setTimeout(() => {
+      compressionTimer = null;
+      if (!pendingCompressionTask || !worker || activeExclusiveEntry || queue.length > 0) {
+        scheduleIdleTermination();
+        return;
+      }
+
+      const taskInput = pendingCompressionTask;
+      pendingCompressionTask = null;
+      queue.push({
+        taskFn: async () => {
+          const result = await compressRuntime(taskInput);
+          const compression = normalizeCompressionResult(result?.compression);
+          if (result?.success === false) {
+            console.warn('[CLI Helper] idle compression failed:', String(result?.message || 'unknown'));
+          } else if (compression?.attempted === true && compression.successful !== true) {
+            console.warn(
+              '[CLI Helper] idle compression failed:',
+              compression.compressionStatus,
+              compression.message || '',
+            );
+          }
+          return result;
+        },
+        resolve: () => {},
+        reject: (error) => {
+          console.warn('[CLI Helper] idle compression queue failed:', error?.message || String(error));
+        },
+      });
+      void processQueue();
+    }, compressionIdleMs);
+    if (typeof compressionTimer.unref === 'function') {
+      compressionTimer.unref();
+    }
+  }
+
   function clearIdleTimer() {
     if (!idleTimer) {
       return;
@@ -312,6 +385,15 @@ export function createGeminiWorkerManager(options = {}) {
 
     clearTimeout(idleTimer);
     idleTimer = null;
+  }
+
+  function clearCompressionTimer() {
+    if (!compressionTimer) {
+      return;
+    }
+
+    clearTimeout(compressionTimer);
+    compressionTimer = null;
   }
 
   function createActivePromptEntry(jobId, timeoutMs) {
@@ -380,6 +462,7 @@ export function createGeminiWorkerManager(options = {}) {
       activePackageRoot,
       activeRuntimeFingerprint,
       jobsProcessedInWorker,
+      hasPendingCompression: Boolean(pendingCompressionTask),
     };
   }
 
@@ -431,5 +514,17 @@ function normalizeCompressionResult(compression) {
     successful: compression.successful === true,
     shouldRecycleRuntime: compression.shouldRecycleRuntime === true,
     message: String(compression.message || ''),
+  };
+}
+
+function normalizeMaintenanceResult(maintenance) {
+  if (!maintenance || typeof maintenance !== 'object') {
+    return null;
+  }
+
+  return {
+    compressionRequested: maintenance.compressionRequested === true,
+    jobsSinceCompression: Number(maintenance.jobsSinceCompression || 0),
+    compressAfterJobs: Number(maintenance.compressAfterJobs || 0),
   };
 }

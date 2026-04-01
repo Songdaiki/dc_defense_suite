@@ -62,6 +62,16 @@ parentPort.on('message', async (message) => {
     return;
   }
 
+  if (message.type === 'compress') {
+    const result = await compressRuntime(message.job || {});
+    parentPort.postMessage({
+      type: 'result',
+      jobId: String(message.job?.jobId || ''),
+      ...result,
+    });
+    return;
+  }
+
   if (message.type === 'shutdown') {
     await disposeWorkerRuntime();
     process.exit(0);
@@ -438,24 +448,28 @@ async function warmRuntime(job) {
   }
 }
 
-async function maybeCompressContext(runtime, job, promptId) {
+function notePromptCompletion(runtime, job) {
   const shouldCountTowardCompression = job?.runtimeConfig?.countTowardCompression !== false;
-  if (!shouldCountTowardCompression) {
-    return null;
-  }
-
   const compressAfterJobs = normalizeNonNegativeInt(job?.runtimeConfig?.compressAfterJobs, 0);
   runtime.promptCount += 1;
-  if (compressAfterJobs <= 0) {
-    return null;
+  if (!shouldCountTowardCompression || compressAfterJobs <= 0) {
+    return {
+      compressionRequested: false,
+      jobsSinceCompression: runtime.jobsSinceCompression,
+      compressAfterJobs,
+    };
   }
 
   runtime.jobsSinceCompression += 1;
-  if (runtime.jobsSinceCompression < compressAfterJobs) {
-    return null;
-  }
-  runtime.jobsSinceCompression = 0;
+  return {
+    compressionRequested: runtime.jobsSinceCompression >= compressAfterJobs,
+    jobsSinceCompression: runtime.jobsSinceCompression,
+    compressAfterJobs,
+  };
+}
 
+async function performCompression(runtime, promptId) {
+  runtime.jobsSinceCompression = 0;
   try {
     const compressionInfo = await runtime.config.getGeminiClient().tryCompressChat(
       `${promptId}-compress-${runtime.promptCount}`,
@@ -467,6 +481,45 @@ async function maybeCompressContext(runtime, job, promptId) {
       { compressionStatus: 'FAILED' },
       error instanceof Error ? error.message : String(error),
     );
+  }
+}
+
+async function compressRuntime(job) {
+  try {
+    const runtime = await ensureWorkerRuntime(job);
+    const compressAfterJobs = normalizeNonNegativeInt(job?.runtimeConfig?.compressAfterJobs, 0);
+    if (compressAfterJobs <= 0 || runtime.jobsSinceCompression < compressAfterJobs) {
+      return {
+        success: true,
+        rawText: '',
+        message: '',
+        failureType: '',
+        compression: null,
+      };
+    }
+
+    const promptId = String(job.promptId || `idle-compress-${Date.now()}`);
+    const compression = await performCompression(runtime, promptId);
+    if (compression?.shouldRecycleRuntime) {
+      await disposeWorkerRuntime();
+    }
+
+    return {
+      success: true,
+      rawText: '',
+      message: '',
+      failureType: '',
+      compression,
+    };
+  } catch (error) {
+    await disposeWorkerRuntime();
+    return {
+      success: false,
+      rawText: '',
+      message: formatThrownValue(error),
+      failureType: 'runtime_error',
+      compression: null,
+    };
   }
 }
 
@@ -496,17 +549,15 @@ async function executeJob(job) {
       resumedSessionData: undefined,
     });
 
-    const compression = await maybeCompressContext(runtime, job, promptId);
-    if (compression?.shouldRecycleRuntime) {
-      await disposeWorkerRuntime();
-    }
+    const maintenance = notePromptCompletion(runtime, job);
 
     return {
       success: true,
       rawText: getCombinedCaptureText(capture),
       message: '',
       failureType: '',
-      compression,
+      compression: null,
+      maintenance,
     };
   } catch (error) {
     await disposeWorkerRuntime();

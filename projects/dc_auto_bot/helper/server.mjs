@@ -35,7 +35,6 @@ const COMMAND_CHECK_CACHE_MS = 5000;
 const COMMAND_CHECK_TIMEOUT_MS = 2000;
 const FORCE_ALLOW_AUTHOR_NICK = '상냥한에옹';
 const VALID_DECISIONS = new Set(['allow', 'deny', 'review']);
-const IMAGE_ANALYSIS_TIMEOUT_FAILURE_TYPE = 'image_analysis_timeout';
 const VALID_POLICY_IDS = new Set([
   'NONE',
   'P1',
@@ -118,6 +117,8 @@ function buildGeminiCliPrompt(input) {
     ? `read_many_files(paths=[${imageFileRefs.map((fileRef) => `"${fileRef}"`).join(', ')}], useDefaultExcludes=false, respect_git_ignore=false)`
     : '없음';
 
+  const imageAnalysisText = String(input.imageAnalysis || '').trim();
+
   return [
     '다음 게시물이 디시 운영 규정 P1~P15 중 어디에 해당하는지 판정해라.',
     '반드시 JSON object 하나만 출력하고 설명문, 코드펜스, 마크다운을 붙이지 마라.',
@@ -191,8 +192,12 @@ function buildGeminiCliPrompt(input) {
     `제목:\n${title || '없음'}`,
     '',
     `본문:\n${bodyText || '없음'}`,
-    '',
-    `첨부 이미지 판독 결과:\n${String(input.imageAnalysis || '').trim() || '없음'}`,
+    ...(imageAnalysisText
+      ? [
+        '',
+        `첨부 이미지 판독 결과:\n${imageAnalysisText}`,
+      ]
+      : []),
     '',
     `첨부 이미지 파일 (멀티모달 입력, 있으면 반드시 확인):\n${imageFileSection}`,
     '',
@@ -539,6 +544,7 @@ function getGeminiWorkerManager() {
       workerScriptUrl: new URL('./gemini_worker.mjs', import.meta.url),
       idleMs: DEFAULT_GEMINI_WORKER_IDLE_MS,
       maxJobsPerWorker: DEFAULT_GEMINI_WORKER_MAX_JOBS,
+      compressionIdleMs: 5000,
     });
   }
 
@@ -1158,47 +1164,14 @@ function createHelperServer(runtimeConfig = buildRuntimeConfig(), dependencies =
       const preparedInputs = await prepareJudgeImageInputs(sanitized.payload, runtimeConfig);
       let cliResult = null;
       try {
-        const executionResult = await getGeminiWorkerManager().runExclusive(async (executionContext) => {
-          const imageAnalysisResult = await runImageAnalysis(
-            preparedInputs.imageFileRefs,
-            runtimeConfig,
-            judgeStartedAtMs,
-            executionContext,
-          );
-          if (imageAnalysisResult.timedOut) {
-            return {
-              imageAnalysisResult,
-              cliResult: null,
-            };
-          }
-
-          const nextCliResult = await runGeminiCli(
-            buildGeminiCliPrompt({
-              ...sanitized.payload,
-              imageFileRefs: preparedInputs.imageFileRefs,
-              imageAnalysis: imageAnalysisResult.text,
-            }),
-            withRemainingJudgeBudget(runtimeConfig, judgeStartedAtMs),
-            executionContext,
-          );
-
-          return {
-            imageAnalysisResult,
-            cliResult: nextCliResult,
-          };
-        });
-
-        if (executionResult.imageAnalysisResult?.timedOut) {
-          writeJson(response, 200, {
-            success: false,
-            failure_type: IMAGE_ANALYSIS_TIMEOUT_FAILURE_TYPE,
-            message: 'Gemini 이미지 분석 시간 초과',
-            rawText: executionResult.imageAnalysisResult.rawText || '',
-          }, request);
-          return;
-        }
-
-        cliResult = executionResult.cliResult;
+        cliResult = await getGeminiWorkerManager().runExclusive((executionContext) => runGeminiCli(
+          buildGeminiCliPrompt({
+            ...sanitized.payload,
+            imageFileRefs: preparedInputs.imageFileRefs,
+          }),
+          withRemainingJudgeBudget(runtimeConfig, judgeStartedAtMs),
+          executionContext,
+        ));
       } finally {
         await cleanupPreparedJudgeImageInputs(preparedInputs);
       }
