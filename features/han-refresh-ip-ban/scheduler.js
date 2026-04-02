@@ -207,6 +207,8 @@ class Scheduler {
       seenAvoidNos,
       maxAllowedBlockDataNum: this.currentCycleBaselineMaxBlockDataNum,
     });
+    const hanTitleMatchCount = actionableRows.filter((row) => row.matchKind === 'han_title').length;
+    const dobaeReasonMatchCount = actionableRows.filter((row) => row.matchKind === 'dobae_reason').length;
     const avoidNos = actionableRows.map((row) => row.avoidNo);
 
     this.currentCycleScannedRows += rows.length;
@@ -218,7 +220,7 @@ class Scheduler {
     }
 
     if (avoidNos.length === 0) {
-      this.log(`📄 ${page}페이지: 검사 ${rows.length}줄, 대상 0줄`);
+      this.log(`📄 ${page}페이지: 검사 ${rows.length}줄, 대상 0줄 (한자 0 / 도배사유 0)`);
       await this.saveState();
       return;
     }
@@ -239,9 +241,13 @@ class Scheduler {
     this.currentCycleBanFailureCount += failureCount;
 
     if (failureCount <= 0) {
-      this.log(`✅ ${page}페이지: 검사 ${rows.length}줄, 대상 ${avoidNos.length}줄, 재차단 ${successCount}건`);
+      this.log(
+        `✅ ${page}페이지: 검사 ${rows.length}줄, 대상 ${avoidNos.length}줄 (한자 ${hanTitleMatchCount} / 도배사유 ${dobaeReasonMatchCount}), 재차단 ${successCount}건`,
+      );
     } else {
-      this.log(`⚠️ ${page}페이지: 검사 ${rows.length}줄, 대상 ${avoidNos.length}줄, 성공 ${successCount}건 / 실패 ${failureCount}건`);
+      this.log(
+        `⚠️ ${page}페이지: 검사 ${rows.length}줄, 대상 ${avoidNos.length}줄 (한자 ${hanTitleMatchCount} / 도배사유 ${dobaeReasonMatchCount}), 성공 ${successCount}건 / 실패 ${failureCount}건`,
+      );
       if (result.message) {
         this.log(`⚠️ ${page}페이지 상세: ${result.message}`);
       }

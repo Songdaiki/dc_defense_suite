@@ -6,6 +6,10 @@ const PAGE_ANCHOR_REGEX = /<a[^>]*href="([^"]*?[?&](?:p|page)=\d+[^"]*)"[^>]*>\s
 const CURRENT_PAGE_REGEX = /<(?:em|strong|b|span)[^>]*>\s*1\s*<\/(?:em|strong|b|span)>/i;
 const PAGING_BOX_REGEX = /<div[^>]*class="[^"]*(?:\bbottom_paging_box\b[^"]*\biconpaging\b|\biconpaging\b[^"]*\bbottom_paging_box\b)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
 const MIN_HAN_CHAR_COUNT = 2;
+const MATCH_KIND = {
+  HAN_TITLE: 'han_title',
+  DOBAE_REASON: 'dobae_reason',
+};
 
 function parseDetectedMaxPage(html, fallbackMaxPage = 400) {
   const normalizedFallback = Math.max(1, Number(fallbackMaxPage) || 400);
@@ -79,11 +83,12 @@ function extractActionableManagementRows(html, options = {}) {
       continue;
     }
 
-    if (getHanScriptCharCount(row.title || '') < MIN_HAN_CHAR_COUNT) {
+    if (!isIpLikeWriterToken(row.writerToken)) {
       continue;
     }
 
-    if (!isIpLikeWriterToken(row.writerToken)) {
+    const matchKind = getActionableMatchKind(row);
+    if (!matchKind) {
       continue;
     }
 
@@ -106,6 +111,7 @@ function extractActionableManagementRows(html, options = {}) {
     actionableRows.push({
       ...row,
       avoidNo,
+      matchKind,
     });
   }
 
@@ -151,6 +157,30 @@ function isPostBlockRow(row) {
 
 function isIpLikeWriterToken(value) {
   return /^\d+\.\d+$/.test(normalizeWriterToken(value));
+}
+
+function getActionableMatchKind(row) {
+  if (getHanScriptCharCount(row?.title || '') >= MIN_HAN_CHAR_COUNT) {
+    return MATCH_KIND.HAN_TITLE;
+  }
+
+  if (hasDobaeReason(row?.reason || '')) {
+    return MATCH_KIND.DOBAE_REASON;
+  }
+
+  return '';
+}
+
+function hasDobaeReason(value) {
+  const normalized = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized.includes('도배');
 }
 
 function toAvoidNo(blockDataNum) {
@@ -200,9 +230,11 @@ export {
   extractActionableManagementRows,
   extractMaxBlockDataNum,
   extractPageNumberFromHref,
+  hasDobaeReason,
   isIpLikeWriterToken,
   isLikelyManagementBlockHtml,
   isPostBlockRow,
+  MATCH_KIND,
   parseDetectedMaxPage,
   toAvoidNo,
 };
