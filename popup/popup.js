@@ -270,6 +270,7 @@ const FEATURE_DOM = {
     logList: document.getElementById('monitorLogList'),
     pollIntervalMsInput: document.getElementById('monitorPollIntervalMs'),
     pagesInput: document.getElementById('monitorPages'),
+    initialSweepPagesInput: document.getElementById('monitorInitialSweepPages'),
     attackNewPostThresholdInput: document.getElementById('monitorAttackNewPostThreshold'),
     attackFluidRatioThresholdInput: document.getElementById('monitorAttackFluidRatioThreshold'),
     attackConsecutiveCountInput: document.getElementById('monitorAttackConsecutiveCount'),
@@ -1366,6 +1367,7 @@ function bindMonitorEvents() {
     const config = {
       pollIntervalMs: Math.max(1000, parseOptionalInt(dom.pollIntervalMsInput.value, 30000)),
       monitorPages: Math.max(1, parseOptionalInt(dom.pagesInput.value, 1)),
+      initialSweepPages: Math.max(1, parseOptionalInt(dom.initialSweepPagesInput.value, parseOptionalInt(dom.pagesInput.value, 1))),
       attackNewPostThreshold: Math.max(1, parseOptionalInt(dom.attackNewPostThresholdInput.value, 50)),
       attackFluidRatioThreshold: clampPercent(dom.attackFluidRatioThresholdInput.value, 85, 1),
       attackConsecutiveCount: Math.max(1, parseOptionalInt(dom.attackConsecutiveCountInput.value, 2)),
@@ -1919,6 +1921,7 @@ function updateMonitorUI(status) {
   syncFeatureConfigInputs('monitor', [
     [dom.pollIntervalMsInput, status.config?.pollIntervalMs ?? 20000],
     [dom.pagesInput, status.config?.monitorPages ?? 2],
+    [dom.initialSweepPagesInput, getMonitorInitialSweepPagesValue(status.config)],
     [dom.attackNewPostThresholdInput, status.config?.attackNewPostThreshold ?? 15],
     [dom.attackFluidRatioThresholdInput, status.config?.attackFluidRatioThreshold ?? 88],
     [dom.attackConsecutiveCountInput, status.config?.attackConsecutiveCount ?? 2],
@@ -2303,6 +2306,7 @@ function getFeatureConfigInputs(feature) {
     return [
       dom.pollIntervalMsInput,
       dom.pagesInput,
+      dom.initialSweepPagesInput,
       dom.attackNewPostThresholdInput,
       dom.attackFluidRatioThresholdInput,
       dom.attackConsecutiveCountInput,
@@ -2313,6 +2317,20 @@ function getFeatureConfigInputs(feature) {
   }
 
   return [];
+}
+
+function getMonitorInitialSweepPagesValue(config = {}) {
+  const explicitInitialSweepPages = Number(config?.initialSweepPages);
+  if (Number.isFinite(explicitInitialSweepPages) && explicitInitialSweepPages > 0) {
+    return explicitInitialSweepPages;
+  }
+
+  const monitorPages = Number(config?.monitorPages);
+  if (Number.isFinite(monitorPages) && monitorPages > 0) {
+    return monitorPages;
+  }
+
+  return 2;
 }
 
 function setActiveTab(feature) {

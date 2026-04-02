@@ -212,15 +212,21 @@ class Scheduler {
   }
 
   async pollBoardSnapshot() {
+    return this.fetchBoardSnapshotPages(this.config.monitorPages, { trackProgress: true });
+  }
+
+  async fetchBoardSnapshotPages(pagesInput, { trackProgress = false } = {}) {
     const postMap = new Map();
-    const pages = Math.max(1, Number(this.config.monitorPages) || 1);
+    const pages = Math.max(1, Number(pagesInput) || 1);
 
     for (let page = 1; page <= pages; page += 1) {
       if (!this.isRunning) {
         break;
       }
 
-      this.currentPollPage = page;
+      if (trackProgress) {
+        this.currentPollPage = page;
+      }
       const html = await fetchPostListHTML({ galleryId: this.config.galleryId }, page);
       const posts = parseBoardPosts(html).map((post) => ({
         ...post,
@@ -302,8 +308,14 @@ class Scheduler {
     }
 
     const attackModeDecision = this.decideAttackMode(metrics);
-    const initialSweepAllFluidPosts = buildAllFluidSnapshotPosts(attackSnapshot);
-    const initialSweepTargetPosts = buildInitialSweepPosts(attackSnapshot, attackModeDecision.attackMode);
+    const initialSweepPages = getNormalizedInitialSweepPages(this.config, attackModeDecision.attackMode);
+    const initialSweepSnapshot = await this.resolveInitialSweepSnapshot(currentSnapshot, attackModeDecision.attackMode);
+    const initialSweepAllFluidPosts = buildAllFluidSnapshotPosts(initialSweepSnapshot);
+    const initialSweepTargetPosts = buildInitialSweepPosts(
+      initialSweepSnapshot,
+      attackModeDecision.attackMode,
+      initialSweepPages,
+    );
 
     this.phase = PHASE.ATTACKING;
     this.attackSessionId = `attack_${Date.now()}`;
@@ -326,10 +338,10 @@ class Scheduler {
     }
     if (this.attackMode === ATTACK_MODE.CJK_NARROW) {
       this.log(
-        `🧹 initial sweep 대상 ${formatInitialSweepSnapshotScope(this.config.monitorPages)} 유동 ${initialSweepAllFluidPosts.length}개 -> 한자/CJK 필터 후 ${initialSweepTargetPosts.length}개`,
+        `🧹 initial sweep 대상 ${formatInitialSweepSnapshotScope(initialSweepPages)} 유동 ${initialSweepAllFluidPosts.length}개 -> 한자/CJK 필터 후 ${initialSweepTargetPosts.length}개`,
       );
     } else {
-      this.log(`🧹 initial sweep 대상 1페이지 유동 ${initialSweepTargetPosts.length}개`);
+      this.log(`🧹 initial sweep 대상 ${formatInitialSweepSnapshotScope(initialSweepPages)} 유동 ${initialSweepTargetPosts.length}개`);
     }
     await this.suspendUidWarningAutoBanForAttack();
     await this.ensureManagedDefensesStarted();
@@ -343,6 +355,25 @@ class Scheduler {
     this.log('⚠️ 공격 cutoff snapshot 추출 실패, 1000ms 후 1회 재시도');
     await delay(1000);
     return await this.pollBoardSnapshot();
+  }
+
+  async resolveInitialSweepSnapshot(currentSnapshot, attackMode = ATTACK_MODE.DEFAULT) {
+    const initialSweepPages = getNormalizedInitialSweepPages(this.config, attackMode);
+    const currentSnapshotPages = getSnapshotMaxSourcePage(currentSnapshot);
+
+    if (getMaxPostNo(currentSnapshot) > 0 && initialSweepPages <= currentSnapshotPages) {
+      return filterSnapshotByMaxSourcePage(currentSnapshot, initialSweepPages);
+    }
+
+    this.log(`⚠️ initial sweep snapshot ${initialSweepPages}페이지 재수집`);
+    const initialSweepSnapshot = await this.fetchBoardSnapshotPages(initialSweepPages, { trackProgress: false });
+    if (getMaxPostNo(initialSweepSnapshot) > 0) {
+      return initialSweepSnapshot;
+    }
+
+    this.log('⚠️ initial sweep snapshot 추출 실패, 1000ms 후 1회 재시도');
+    await delay(1000);
+    return await this.fetchBoardSnapshotPages(initialSweepPages, { trackProgress: false });
   }
 
   decideAttackMode(metrics) {
@@ -944,15 +975,16 @@ function buildAllFluidSnapshotPosts(snapshot) {
   );
 }
 
-function buildInitialSweepPosts(snapshot, attackMode = ATTACK_MODE.DEFAULT) {
+function buildInitialSweepPosts(snapshot, attackMode = ATTACK_MODE.DEFAULT, initialSweepPages = 1) {
   const normalizedAttackMode = normalizeAttackMode(attackMode);
-  const allFluidPosts = buildAllFluidSnapshotPosts(snapshot);
+  const limitedSnapshot = filterSnapshotByMaxSourcePage(snapshot, initialSweepPages);
+  const allFluidPosts = buildAllFluidSnapshotPosts(limitedSnapshot);
 
   if (normalizedAttackMode === ATTACK_MODE.CJK_NARROW) {
     return allFluidPosts.filter((post) => isEligibleForAttackMode(post, normalizedAttackMode));
   }
 
-  return allFluidPosts.filter((post) => Number(post?.sourcePage) === 1);
+  return allFluidPosts;
 }
 
 function isEligibleForAttackMode(post, attackMode) {
@@ -1009,6 +1041,36 @@ function formatInitialSweepSnapshotScope(monitorPages) {
   return normalizedPages === 1
     ? '1페이지'
     : `1~${normalizedPages}페이지`;
+}
+
+function getSnapshotMaxSourcePage(snapshot) {
+  return dedupePostsByNo(snapshot).reduce(
+    (maxPage, post) => Math.max(maxPage, Number(post?.sourcePage) || 0),
+    0,
+  );
+}
+
+function filterSnapshotByMaxSourcePage(snapshot, maxSourcePage = 1) {
+  const normalizedMaxSourcePage = Math.max(1, Number(maxSourcePage) || 1);
+  return dedupePostsByNo(snapshot).filter((post) => (Number(post?.sourcePage) || 1) <= normalizedMaxSourcePage);
+}
+
+function getNormalizedInitialSweepPages(config = {}, attackMode = ATTACK_MODE.DEFAULT) {
+  const monitorPages = Number(config?.monitorPages);
+  const normalizedMonitorPages = Number.isFinite(monitorPages) && monitorPages > 0
+    ? Math.max(1, monitorPages)
+    : 1;
+
+  if (normalizeAttackMode(attackMode) !== ATTACK_MODE.CJK_NARROW) {
+    return normalizedMonitorPages;
+  }
+
+  const initialSweepPages = Number(config?.initialSweepPages);
+  if (Number.isFinite(initialSweepPages) && initialSweepPages > 0) {
+    return Math.max(1, initialSweepPages);
+  }
+
+  return normalizedMonitorPages;
 }
 
 function dedupePostNos(postNos) {

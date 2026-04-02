@@ -946,6 +946,12 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
     return '감시 페이지 수는 자동 감시를 정지한 뒤 변경하세요.';
   }
 
+  if (feature === 'monitor'
+    && config.initialSweepPages !== undefined
+    && Number(config.initialSweepPages) !== Number(scheduler.config.initialSweepPages)) {
+    return 'initial sweep 페이지 수는 자동 감시를 정지한 뒤 변경하세요.';
+  }
+
   if (feature === 'commentMonitor'
     && config.monitorPages !== undefined
     && Number(config.monitorPages) !== Number(scheduler.config.monitorPages)) {
