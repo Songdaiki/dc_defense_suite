@@ -1,5 +1,30 @@
+const IMMEDIATE_TITLE_KEEP_REGEX = /[^가-힣a-z]/g;
+const INVISIBLE_CHARACTER_REGEX = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
+const IMMEDIATE_TITLE_CONFUSABLE_CHAR_MAP = new Map([
+  ['Ꭺ', 'a'],
+  ['Α', 'a'],
+  ['А', 'a'],
+  ['ᗅ', 'a'],
+  ['ꓮ', 'a'],
+  ['Ꭵ', 'v'],
+  ['Ꮩ', 'v'],
+  ['Ⅴ', 'v'],
+  ['Ѵ', 'v'],
+  ['ⴸ', 'v'],
+  ['ꓦ', 'v'],
+]);
+
 function parseUidWarningAutoBanRows(html) {
+  return parsePage1BoardRows(html, { requireUid: true });
+}
+
+function parseImmediateTitleBanRows(html) {
+  return parsePage1BoardRows(html, { requireUid: false });
+}
+
+function parsePage1BoardRows(html, options = {}) {
   const results = [];
+  const requireUid = options.requireUid === true;
   const rowRegex = /<tr[^>]*class="ub-content[^"]*"[^>]*data-no="(\d+)"[^>]*>([\s\S]*?)<\/tr>/g;
   let match;
 
@@ -22,9 +47,11 @@ function parseUidWarningAutoBanRows(html) {
 
     const writerTag = writerTagMatch[0];
     const uid = decodeHtml(extractAttribute(writerTag, 'data-uid'));
-    if (!uid) {
+    if (requireUid && !uid) {
       continue;
     }
+
+    const ip = decodeHtml(extractAttribute(writerTag, 'data-ip'));
 
     const createdAtText = decodeHtml(extractGallDateTitle(rowHtml));
     if (!createdAtText) {
@@ -39,9 +66,11 @@ function parseUidWarningAutoBanRows(html) {
     const nick = decodeHtml(extractAttribute(writerTag, 'data-nick') || 'ㅇㅇ');
     const title = extractBoardTitle(rowHtml);
     const currentHead = extractCurrentHead(rowHtml);
-    const writerToken = uid;
+    const writerToken = uid || ip;
     const contentType = decodeHtml(extractAttribute(rowTagHtml, 'data-type'));
     const isPicturePost = contentType === 'icon_pic';
+    const hasUid = Boolean(uid);
+    const isFluid = Boolean(ip);
 
     results.push({
       no: postNo,
@@ -53,13 +82,13 @@ function parseUidWarningAutoBanRows(html) {
       createdAtText,
       createdAtMs,
       writerToken,
-      writerKey: makeWriterKey(nick, writerToken),
-      writerDisplay: `${nick}(${writerToken})`,
+      writerKey: makeWriterKey(nick, writerToken || ip || uid),
+      writerDisplay: buildWriterDisplay(nick, writerToken),
       contentType,
       isPicturePost,
-      isFluid: false,
-      hasUid: true,
-      ip: '',
+      isFluid,
+      hasUid,
+      ip,
     });
   }
 
@@ -168,6 +197,78 @@ function createUidBanTargetPosts(rows = []) {
   return deduped;
 }
 
+function createImmediateTitleBanTargetPosts(rows = []) {
+  const deduped = [];
+  const seen = new Set();
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const postNo = Number(row?.no) || 0;
+    if (postNo <= 0 || seen.has(postNo)) {
+      continue;
+    }
+
+    seen.add(postNo);
+    deduped.push({
+      no: postNo,
+      nick: String(row?.nick || '').trim(),
+      ip: String(row?.ip || '').trim(),
+      uid: String(row?.uid || '').trim(),
+      subject: String(row?.title || row?.subject || '').trim(),
+      currentHead: String(row?.currentHead || '').trim(),
+      isFluid: Boolean(row?.isFluid),
+      hasUid: Boolean(row?.hasUid),
+      writerToken: String(row?.writerToken || row?.uid || row?.ip || '').trim(),
+      writerKey: String(row?.writerKey || '').trim(),
+      writerDisplay: String(row?.writerDisplay || '').trim(),
+    });
+  }
+
+  return deduped;
+}
+
+function normalizeImmediateTitleBanRules(rules = []) {
+  const normalizedRules = [];
+  const seenNormalizedTitles = new Set();
+
+  for (const rule of Array.isArray(rules) ? rules : []) {
+    const rawTitle = typeof rule === 'string'
+      ? String(rule || '').trim()
+      : String(rule?.rawTitle || '').trim();
+    if (!rawTitle) {
+      continue;
+    }
+
+    const normalizedTitle = normalizeImmediateTitleValue(rawTitle);
+    if (!normalizedTitle || seenNormalizedTitles.has(normalizedTitle)) {
+      continue;
+    }
+
+    seenNormalizedTitles.add(normalizedTitle);
+    normalizedRules.push({
+      rawTitle,
+      normalizedTitle,
+    });
+  }
+
+  return normalizedRules;
+}
+
+function normalizeImmediateTitleValue(value) {
+  const normalizedSource = String(value || '')
+    .normalize('NFKC')
+    .replace(INVISIBLE_CHARACTER_REGEX, '');
+  let folded = '';
+
+  for (const char of normalizedSource) {
+    folded += IMMEDIATE_TITLE_CONFUSABLE_CHAR_MAP.get(char) || char;
+  }
+
+  return folded
+    .toLowerCase()
+    .replace(IMMEDIATE_TITLE_KEEP_REGEX, '')
+    .trim();
+}
+
 function parseGallogPrivacy(html) {
   const normalizedHtml = String(html || '');
   const postingState = extractGallogPrivacyState(normalizedHtml, 'posting');
@@ -266,6 +367,12 @@ function extractGallogPrivacyState(html, pathSegment) {
   };
 }
 
+function buildWriterDisplay(nick, writerToken) {
+  const normalizedNick = String(nick || '').trim() || 'ㅇㅇ';
+  const normalizedWriterToken = String(writerToken || '').trim();
+  return normalizedWriterToken ? `${normalizedNick}(${normalizedWriterToken})` : normalizedNick;
+}
+
 function parseGallTimestampKst(value) {
   const match = String(value || '').trim().match(
     /^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/,
@@ -318,10 +425,14 @@ function decodeHtml(value) {
 }
 
 export {
+  createImmediateTitleBanTargetPosts,
   createUidBanTargetPosts,
   getNewestPostNo,
   getRecentRowsWithinWindow,
   groupRowsByUid,
+  normalizeImmediateTitleBanRules,
+  normalizeImmediateTitleValue,
+  parseImmediateTitleBanRows,
   parseGallogPrivacy,
   parseGallTimestampKst,
   parseUidWarningAutoBanRows,

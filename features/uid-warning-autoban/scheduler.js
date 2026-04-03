@@ -7,10 +7,14 @@ import {
   fetchUidWarningAutoBanListHTML,
 } from './api.js';
 import {
+  createImmediateTitleBanTargetPosts,
   createUidBanTargetPosts,
   getNewestPostNo,
   getRecentRowsWithinWindow,
   groupRowsByUid,
+  normalizeImmediateTitleBanRules,
+  normalizeImmediateTitleValue,
+  parseImmediateTitleBanRows,
   parseUidWarningAutoBanRows,
 } from './parser.js';
 import { executeBanWithDeleteFallback } from '../ip/ban-executor.js';
@@ -29,6 +33,7 @@ class Scheduler {
   constructor(dependencies = {}) {
     this.fetchListHtml = dependencies.fetchListHtml || fetchUidWarningAutoBanListHTML;
     this.parseRows = dependencies.parseRows || parseUidWarningAutoBanRows;
+    this.parseImmediateRows = dependencies.parseImmediateRows || parseImmediateTitleBanRows;
     this.fetchUidStats = dependencies.fetchUidStats || getOrFetchUidStats;
     this.fetchUidGallogPrivacy = dependencies.fetchUidGallogPrivacy || getOrFetchUidGallogPrivacy;
     this.executeBan = dependencies.executeBan || executeBanWithDeleteFallback;
@@ -43,9 +48,12 @@ class Scheduler {
     this.lastTriggeredUid = '';
     this.lastTriggeredPostCount = 0;
     this.lastBurstRecentCount = 0;
+    this.lastImmediateTitleBanCount = 0;
+    this.lastImmediateTitleBanMatchedTitle = '';
     this.lastPageRowCount = 0;
     this.lastPageUidCount = 0;
     this.totalTriggeredUidCount = 0;
+    this.totalImmediateTitleBanPostCount = 0;
     this.totalBannedPostCount = 0;
     this.totalFailedPostCount = 0;
     this.deleteLimitFallbackCount = 0;
@@ -57,6 +65,7 @@ class Scheduler {
     this.lastDeleteLimitExceededAt = '';
     this.lastDeleteLimitMessage = '';
     this.recentUidActions = {};
+    this.recentImmediatePostActions = {};
 
     this.config = normalizeConfig({
       galleryId: DEFAULT_CONFIG.galleryId,
@@ -132,7 +141,7 @@ class Scheduler {
         this.phase = PHASE.WAITING;
         this.currentPage = 1;
         this.log(
-          `✅ 사이클 #${this.cycleCount} 완료 - page1 글 ${this.lastPageRowCount}개 / uid ${this.lastPageUidCount}명 / 누적 제재 ${this.totalTriggeredUidCount}명`,
+          `✅ 사이클 #${this.cycleCount} 완료 - page1 글 ${this.lastPageRowCount}개 / uid ${this.lastPageUidCount}명 / 누적 uid 제재 ${this.totalTriggeredUidCount}명 / 제목 직차단 ${this.totalImmediateTitleBanPostCount}개`,
         );
         await this.saveState();
       } catch (error) {
@@ -157,15 +166,21 @@ class Scheduler {
   async runCycle() {
     this.currentPage = 1;
     this.lastError = '';
+    this.lastImmediateTitleBanCount = 0;
+    this.lastImmediateTitleBanMatchedTitle = '';
     pruneRecentUidActions(this.recentUidActions);
+    pruneRecentImmediatePostActions(this.recentImmediatePostActions);
     const nowMs = Date.now();
     const html = await this.fetchListHtml(this.config, 1);
-    const rows = this.parseRows(html);
-    const groupedRows = groupRowsByUid(rows);
-    this.lastPageRowCount = rows.length;
-    this.lastPageUidCount = groupedRows.length;
-    this.log(`📄 page1 uid snapshot ${rows.length}개 / uid ${groupedRows.length}명`);
+    const allRows = this.parseImmediateRows(html);
+    const pageUidRows = allRows.filter((row) => row?.hasUid === true);
+    this.lastPageRowCount = allRows.length;
+    this.lastPageUidCount = groupRowsByUid(pageUidRows).length;
+    this.log(`📄 page1 snapshot ${allRows.length}개 / uid ${this.lastPageUidCount}명`);
     await this.saveState();
+    const processedImmediatePostNos = await this.handleImmediateTitleBanRows(allRows, nowMs);
+    const rows = pageUidRows.filter((row) => !processedImmediatePostNos.has(Number(row?.no) || 0));
+    const groupedRows = groupRowsByUid(rows);
 
     let statsCandidateCount = 0;
     let statsFailureCount = 0;
@@ -327,6 +342,121 @@ class Scheduler {
     }
 
     pruneRecentUidActions(this.recentUidActions);
+    pruneRecentImmediatePostActions(this.recentImmediatePostActions);
+  }
+
+  async handleImmediateTitleBanRows(rows = [], nowMs = Date.now()) {
+    const processedImmediatePostNos = new Set();
+    const normalizedRules = normalizeImmediateTitleBanRules(this.config.immediateTitleBanRules);
+    if (normalizedRules.length <= 0) {
+      return processedImmediatePostNos;
+    }
+
+    const matchedGroups = new Map();
+
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const postNo = Number(row?.no) || 0;
+      if (postNo <= 0) {
+        continue;
+      }
+
+      const normalizedTitle = normalizeImmediateTitleValue(row?.title || row?.subject || '');
+      const matchedRule = findImmediateTitleMatchedRule(normalizedRules, normalizedTitle);
+      if (!matchedRule) {
+        continue;
+      }
+
+      processedImmediatePostNos.add(postNo);
+
+      const actionKey = buildImmediatePostActionKey(postNo);
+      if (
+        shouldSkipRecentImmediatePostAction(
+          this.recentImmediatePostActions[actionKey],
+          nowMs,
+          getRetryCooldownMs(this.config),
+        )
+      ) {
+        this.log(`ℹ️ 제목 직차단 스킵 - #${postNo} ${matchedRule.rawTitle}는 최근 처리 이력이 있어 건너뜀`);
+        continue;
+      }
+
+      const existingGroup = matchedGroups.get(matchedRule.normalizedTitle);
+      if (existingGroup) {
+        existingGroup.rows.push(row);
+        continue;
+      }
+
+      matchedGroups.set(matchedRule.normalizedTitle, {
+        rule: matchedRule,
+        rows: [row],
+      });
+    }
+
+    const matchedTitles = [];
+    for (const matchedGroup of matchedGroups.values()) {
+      if (!this.isRunning) {
+        break;
+      }
+
+      const targetPosts = createImmediateTitleBanTargetPosts(matchedGroup.rows);
+      if (targetPosts.length <= 0) {
+        this.log(`ℹ️ 제목 직차단 스킵 - ${matchedGroup.rule.rawTitle}는 page1 대상 글번호를 만들지 못함`);
+        continue;
+      }
+
+      matchedTitles.push(matchedGroup.rule.rawTitle);
+      this.lastImmediateTitleBanCount += targetPosts.length;
+      this.log(`🚨 제목 직차단 ${matchedGroup.rule.rawTitle} 포함 매치 -> page1 ${targetPosts.length}개 제재 시작`);
+
+      const result = await this.executeBan({
+        feature: 'uidWarningAutoBan',
+        config: this.config,
+        posts: targetPosts,
+        deleteEnabled: this.runtimeDeleteEnabled,
+        onDeleteLimitFallbackSuccess: (fallbackResult) => {
+          this.log(`🔁 삭제 한도 계정 전환 성공 - ${fallbackResult.activeAccountLabel}로 같은 run을 이어갑니다.`);
+        },
+        onDeleteLimitBanOnlyActivated: (message) => {
+          this.activateDeleteLimitBanOnly(message);
+        },
+      });
+
+      this.totalImmediateTitleBanPostCount += result.successNos.length;
+      this.totalBannedPostCount += result.successNos.length;
+      this.totalFailedPostCount += result.failedNos.length;
+      this.deleteLimitFallbackCount += result.deleteLimitFallbackCount;
+      if (result.banOnlyFallbackUsed) {
+        this.banOnlyFallbackCount += 1;
+      }
+      this.runtimeDeleteEnabled = result.finalDeleteEnabled;
+
+      if (result.successNos.length > 0) {
+        this.log(`⛔ 제목 직차단 ${matchedGroup.rule.rawTitle} 글 ${result.successNos.length}개 차단${result.finalDeleteEnabled ? '/삭제' : ''} 완료`);
+      }
+
+      if (result.banOnlyRetrySuccessCount > 0) {
+        this.log(`🧯 제목 직차단 ${matchedGroup.rule.rawTitle} 글 ${result.banOnlyRetrySuccessCount}개는 차단만 수행`);
+      }
+
+      if (result.failedNos.length > 0) {
+        this.log(`⚠️ 제목 직차단 ${matchedGroup.rule.rawTitle} 제재 실패 ${result.failedNos.length}개 - ${result.failedNos.join(', ')}`);
+      }
+
+      const actionAt = new Date().toISOString();
+      const successNos = new Set(result.successNos.map((postNo) => String(postNo)));
+      for (const targetPost of targetPosts) {
+        this.recentImmediatePostActions[buildImmediatePostActionKey(targetPost.no)] =
+          createRecentImmediatePostActionEntry({
+            success: successNos.has(String(targetPost.no)),
+            nowIso: actionAt,
+          });
+      }
+
+      await this.saveState();
+    }
+
+    this.lastImmediateTitleBanMatchedTitle = summarizeMatchedTitles(matchedTitles);
+    return processedImmediatePostNos;
   }
 
   activateDeleteLimitBanOnly(message = '') {
@@ -367,9 +497,12 @@ class Scheduler {
           lastTriggeredUid: this.lastTriggeredUid,
           lastTriggeredPostCount: this.lastTriggeredPostCount,
           lastBurstRecentCount: this.lastBurstRecentCount,
+          lastImmediateTitleBanCount: this.lastImmediateTitleBanCount,
+          lastImmediateTitleBanMatchedTitle: this.lastImmediateTitleBanMatchedTitle,
           lastPageRowCount: this.lastPageRowCount,
           lastPageUidCount: this.lastPageUidCount,
           totalTriggeredUidCount: this.totalTriggeredUidCount,
+          totalImmediateTitleBanPostCount: this.totalImmediateTitleBanPostCount,
           totalBannedPostCount: this.totalBannedPostCount,
           totalFailedPostCount: this.totalFailedPostCount,
           deleteLimitFallbackCount: this.deleteLimitFallbackCount,
@@ -380,6 +513,7 @@ class Scheduler {
           lastDeleteLimitExceededAt: this.lastDeleteLimitExceededAt,
           lastDeleteLimitMessage: this.lastDeleteLimitMessage,
           recentUidActions: this.recentUidActions,
+          recentImmediatePostActions: this.recentImmediatePostActions,
           logs: this.logs.slice(0, 50),
           config: buildPersistedConfig(this.config),
         },
@@ -404,9 +538,12 @@ class Scheduler {
       this.lastTriggeredUid = String(schedulerState.lastTriggeredUid || '');
       this.lastTriggeredPostCount = Math.max(0, Number(schedulerState.lastTriggeredPostCount) || 0);
       this.lastBurstRecentCount = Math.max(0, Number(schedulerState.lastBurstRecentCount) || 0);
+      this.lastImmediateTitleBanCount = Math.max(0, Number(schedulerState.lastImmediateTitleBanCount) || 0);
+      this.lastImmediateTitleBanMatchedTitle = String(schedulerState.lastImmediateTitleBanMatchedTitle || '');
       this.lastPageRowCount = Math.max(0, Number(schedulerState.lastPageRowCount) || 0);
       this.lastPageUidCount = Math.max(0, Number(schedulerState.lastPageUidCount) || 0);
       this.totalTriggeredUidCount = Math.max(0, Number(schedulerState.totalTriggeredUidCount) || 0);
+      this.totalImmediateTitleBanPostCount = Math.max(0, Number(schedulerState.totalImmediateTitleBanPostCount) || 0);
       this.totalBannedPostCount = Math.max(0, Number(schedulerState.totalBannedPostCount) || 0);
       this.totalFailedPostCount = Math.max(0, Number(schedulerState.totalFailedPostCount) || 0);
       this.deleteLimitFallbackCount = Math.max(0, Number(schedulerState.deleteLimitFallbackCount) || 0);
@@ -419,12 +556,14 @@ class Scheduler {
       this.lastDeleteLimitExceededAt = String(schedulerState.lastDeleteLimitExceededAt || '');
       this.lastDeleteLimitMessage = String(schedulerState.lastDeleteLimitMessage || '');
       this.recentUidActions = normalizeRecentUidActions(schedulerState.recentUidActions);
+      this.recentImmediatePostActions = normalizeRecentImmediatePostActions(schedulerState.recentImmediatePostActions);
       this.logs = Array.isArray(schedulerState.logs) ? schedulerState.logs : [];
       this.config = normalizeConfig({
         ...this.config,
         ...readPersistedConfig(schedulerState.config),
       });
       pruneRecentUidActions(this.recentUidActions);
+      pruneRecentImmediatePostActions(this.recentImmediatePostActions);
     } catch (error) {
       console.error('[UidWarningAutoBanScheduler] 상태 복원 실패:', error.message);
     }
@@ -463,9 +602,12 @@ class Scheduler {
       lastTriggeredUid: this.lastTriggeredUid,
       lastTriggeredPostCount: this.lastTriggeredPostCount,
       lastBurstRecentCount: this.lastBurstRecentCount,
+      lastImmediateTitleBanCount: this.lastImmediateTitleBanCount,
+      lastImmediateTitleBanMatchedTitle: this.lastImmediateTitleBanMatchedTitle,
       lastPageRowCount: this.lastPageRowCount,
       lastPageUidCount: this.lastPageUidCount,
       totalTriggeredUidCount: this.totalTriggeredUidCount,
+      totalImmediateTitleBanPostCount: this.totalImmediateTitleBanPostCount,
       totalBannedPostCount: this.totalBannedPostCount,
       totalFailedPostCount: this.totalFailedPostCount,
       deleteLimitFallbackCount: this.deleteLimitFallbackCount,
@@ -496,6 +638,7 @@ function normalizeConfig(config = {}) {
     avoidReasonText: normalizeAvoidReasonText(config.avoidReasonText),
     delChk: config.delChk === undefined ? Boolean(DEFAULT_CONFIG.delChk) : Boolean(config.delChk),
     avoidTypeChk: config.avoidTypeChk === undefined ? Boolean(DEFAULT_CONFIG.avoidTypeChk) : Boolean(config.avoidTypeChk),
+    immediateTitleBanRules: normalizeImmediateTitleBanRules(config.immediateTitleBanRules),
   };
 }
 
@@ -504,6 +647,7 @@ function buildPersistedConfig(config = {}) {
     galleryId: String(config.galleryId || DEFAULT_CONFIG.galleryId).trim() || DEFAULT_CONFIG.galleryId,
     galleryType: String(config.galleryType || DEFAULT_CONFIG.galleryType).trim() || DEFAULT_CONFIG.galleryType,
     baseUrl: String(config.baseUrl || DEFAULT_CONFIG.baseUrl).trim() || DEFAULT_CONFIG.baseUrl,
+    immediateTitleBanRules: normalizeImmediateTitleBanRules(config.immediateTitleBanRules),
   };
 }
 
@@ -576,7 +720,61 @@ function normalizeRecentUidActions(raw = {}) {
   return result;
 }
 
+function buildImmediatePostActionKey(postNo) {
+  return String(Math.max(0, Number(postNo) || 0));
+}
+
+function createRecentImmediatePostActionEntry({ success, nowIso }) {
+  return {
+    lastActionAt: String(nowIso || ''),
+    success: success === true,
+  };
+}
+
+function shouldSkipRecentImmediatePostAction(entry, nowMs, retryCooldownMs) {
+  if (!entry) {
+    return false;
+  }
+
+  if (entry.success === true) {
+    return true;
+  }
+
+  const lastActionAtMs = parseTimestamp(entry.lastActionAt);
+  if (lastActionAtMs <= 0) {
+    return false;
+  }
+
+  return nowMs - lastActionAtMs < Math.max(1000, Number(retryCooldownMs) || 0);
+}
+
+function normalizeRecentImmediatePostActions(raw = {}) {
+  const result = {};
+  for (const [key, value] of Object.entries(raw || {})) {
+    const normalizedKey = buildImmediatePostActionKey(key);
+    if (normalizedKey === '0') {
+      continue;
+    }
+
+    result[normalizedKey] = createRecentImmediatePostActionEntry({
+      success: value?.success,
+      nowIso: value?.lastActionAt,
+    });
+  }
+  return result;
+}
+
 function pruneRecentUidActions(entries = {}) {
+  const nowMs = Date.now();
+  for (const [key, value] of Object.entries(entries || {})) {
+    const actionAtMs = parseTimestamp(value?.lastActionAt);
+    if (actionAtMs <= 0 || nowMs - actionAtMs > UID_ACTION_RETENTION_MS) {
+      delete entries[key];
+    }
+  }
+}
+
+function pruneRecentImmediatePostActions(entries = {}) {
   const nowMs = Date.now();
   for (const [key, value] of Object.entries(entries || {})) {
     const actionAtMs = parseTimestamp(value?.lastActionAt);
@@ -622,6 +820,44 @@ function normalizePhase(value) {
 function formatPostRatio(value) {
   const numericValue = Number(value) || 0;
   return numericValue.toFixed(2).replace(/\.00$/, '');
+}
+
+function summarizeMatchedTitles(titles = []) {
+  const normalizedTitles = [...new Set(
+    (Array.isArray(titles) ? titles : [])
+      .map((title) => String(title || '').trim())
+      .filter(Boolean),
+  )];
+  if (normalizedTitles.length <= 0) {
+    return '';
+  }
+
+  if (normalizedTitles.length === 1) {
+    return normalizedTitles[0];
+  }
+
+  return `${normalizedTitles[0]} 외 ${normalizedTitles.length - 1}개`;
+}
+
+function findImmediateTitleMatchedRule(rules = [], normalizedTitle = '') {
+  const title = String(normalizedTitle || '').trim();
+  if (!title) {
+    return null;
+  }
+
+  let matchedRule = null;
+  for (const rule of Array.isArray(rules) ? rules : []) {
+    const normalizedRule = String(rule?.normalizedTitle || '').trim();
+    if (!normalizedRule || !title.includes(normalizedRule)) {
+      continue;
+    }
+
+    if (!matchedRule || normalizedRule.length > String(matchedRule.normalizedTitle || '').length) {
+      matchedRule = rule;
+    }
+  }
+
+  return matchedRule;
 }
 
 function isTwoConsonantNick(value) {

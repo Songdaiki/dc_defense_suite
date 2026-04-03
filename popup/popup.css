@@ -604,6 +604,83 @@ body {
   font-weight: 700;
 }
 
+.uid-warning-title-ban-section {
+  margin-bottom: 12px;
+}
+
+.uid-warning-title-rule-input-row {
+  align-items: center;
+}
+
+.uid-warning-title-rule-input-row input {
+  width: 180px;
+  text-align: left;
+}
+
+.uid-warning-title-rule-action-row {
+  margin-bottom: 0;
+}
+
+.uid-warning-title-rule-help {
+  margin-bottom: 8px;
+}
+
+.manual-rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.manual-rule-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.manual-rule-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.manual-rule-raw {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.manual-rule-normalized {
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.manual-rule-remove-btn {
+  width: auto;
+  min-width: 54px;
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  background: rgba(255, 123, 133, 0.14);
+  color: #ffd5d9;
+  border: 1px solid rgba(255, 123, 133, 0.22);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.manual-rule-remove-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .settings-grid {
   display: flex;
   flex-direction: column;

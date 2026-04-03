@@ -13,6 +13,7 @@ const DIRTY_FEATURES = {
   semiPost: false,
   ip: false,
   monitor: false,
+  uidWarningAutoBan: false,
 };
 let sharedConfigDirty = false;
 let sessionFallbackDirty = false;
@@ -223,12 +224,21 @@ const FEATURE_DOM = {
     lastTriggeredPostCount: document.getElementById('uidWarningAutoBanLastTriggeredPostCount'),
     lastBurstRecentCount: document.getElementById('uidWarningAutoBanLastBurstRecentCount'),
     totalTriggeredUidCount: document.getElementById('uidWarningAutoBanTotalTriggeredUidCount'),
+    immediateTitleRuleCount: document.getElementById('uidWarningAutoBanImmediateTitleRuleCount'),
+    lastImmediateTitleBanMatchedTitle: document.getElementById('uidWarningAutoBanLastImmediateTitleBanMatchedTitle'),
+    lastImmediateTitleBanCount: document.getElementById('uidWarningAutoBanLastImmediateTitleBanCount'),
+    totalImmediateTitleBanPostCount: document.getElementById('uidWarningAutoBanTotalImmediateTitleBanPostCount'),
     totalBannedPostCount: document.getElementById('uidWarningAutoBanTotalBannedPostCount'),
     totalFailedPostCount: document.getElementById('uidWarningAutoBanTotalFailedPostCount'),
     deleteLimitFallbackCount: document.getElementById('uidWarningAutoBanDeleteLimitFallbackCount'),
     banOnlyFallbackCount: document.getElementById('uidWarningAutoBanBanOnlyFallbackCount'),
     metaText: document.getElementById('uidWarningAutoBanMetaText'),
     logList: document.getElementById('uidWarningAutoBanLogList'),
+    immediateTitleRuleInput: document.getElementById('uidWarningAutoBanImmediateTitleRuleInput'),
+    immediateTitleRulesValueInput: document.getElementById('uidWarningAutoBanImmediateTitleRulesValue'),
+    immediateTitleRuleList: document.getElementById('uidWarningAutoBanImmediateTitleRuleList'),
+    addImmediateTitleRuleBtn: document.getElementById('uidWarningAutoBanAddImmediateTitleRuleBtn'),
+    saveConfigBtn: document.getElementById('uidWarningAutoBanSaveConfigBtn'),
     resetBtn: document.getElementById('uidWarningAutoBanResetBtn'),
   },
   ip: {
@@ -309,6 +319,7 @@ function bindFeatureEvents() {
   bindConfigDirtyTracking('semiPost');
   bindConfigDirtyTracking('ip');
   bindConfigDirtyTracking('monitor');
+  bindConfigDirtyTracking('uidWarningAutoBan');
   bindConceptMonitorEvents();
   bindHanRefreshIpBanEvents();
   bindCommentMonitorEvents();
@@ -1339,6 +1350,65 @@ function bindUidWarningAutoBanEvents() {
       await refreshAllStatuses();
     }
   });
+
+  dom.addImmediateTitleRuleBtn.addEventListener('click', () => {
+    const rawTitle = dom.immediateTitleRuleInput.value.trim();
+    if (!rawTitle) {
+      alert('금칙 제목을 입력하세요.');
+      dom.immediateTitleRuleInput.focus();
+      return;
+    }
+
+    const normalizedTitle = normalizeUidWarningAutoBanImmediateTitleRuleValue(rawTitle);
+    if (!normalizedTitle) {
+      alert('한글/영문 기준으로 남는 제목만 추가할 수 있습니다.');
+      dom.immediateTitleRuleInput.focus();
+      return;
+    }
+
+    const rules = parseUidWarningAutoBanImmediateTitleRulesValue(dom.immediateTitleRulesValueInput.value);
+    if (rules.some((rule) => rule.normalizedTitle === normalizedTitle)) {
+      alert('이미 등록된 금칙 제목입니다.');
+      dom.immediateTitleRuleInput.focus();
+      dom.immediateTitleRuleInput.select();
+      return;
+    }
+
+    const nextRules = [
+      ...rules,
+      {
+        rawTitle,
+        normalizedTitle,
+      },
+    ];
+    updateUidWarningAutoBanImmediateTitleRulesEditor(nextRules);
+    dom.immediateTitleRuleInput.value = '';
+    dom.immediateTitleRuleInput.focus();
+  });
+
+  dom.saveConfigBtn.addEventListener('click', async () => {
+    const rules = parseUidWarningAutoBanImmediateTitleRulesValue(dom.immediateTitleRulesValueInput.value);
+    const response = await sendFeatureMessage('uidWarningAutoBan', {
+      action: 'updateConfig',
+      config: {
+        immediateTitleBanRules: rules,
+      },
+    });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    DIRTY_FEATURES.uidWarningAutoBan = false;
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
 }
 
 function bindMonitorEvents() {
@@ -1887,14 +1957,26 @@ function updateUidWarningAutoBanUI(status) {
   dom.lastTriggeredUid.textContent = nextStatus.lastTriggeredUid || '-';
   dom.lastTriggeredPostCount.textContent = `${nextStatus.lastTriggeredPostCount ?? 0}개`;
   dom.lastBurstRecentCount.textContent = `${nextStatus.lastBurstRecentCount ?? 0}개`;
+  dom.immediateTitleRuleCount.textContent = `${(nextStatus.config?.immediateTitleBanRules || []).length}개`;
+  dom.lastImmediateTitleBanMatchedTitle.textContent = nextStatus.lastImmediateTitleBanMatchedTitle || '-';
+  dom.lastImmediateTitleBanCount.textContent = `${nextStatus.lastImmediateTitleBanCount ?? 0}개`;
   dom.totalTriggeredUidCount.textContent = `${nextStatus.totalTriggeredUidCount ?? 0}명`;
+  dom.totalImmediateTitleBanPostCount.textContent = `${nextStatus.totalImmediateTitleBanPostCount ?? 0}개`;
   dom.totalBannedPostCount.textContent = `${nextStatus.totalBannedPostCount ?? 0}개`;
   dom.totalFailedPostCount.textContent = `${nextStatus.totalFailedPostCount ?? 0}개`;
   dom.deleteLimitFallbackCount.textContent = `${nextStatus.deleteLimitFallbackCount ?? 0}회`;
   dom.banOnlyFallbackCount.textContent = `${nextStatus.banOnlyFallbackCount ?? 0}회`;
+  syncFeatureConfigInputs('uidWarningAutoBan', [
+    [dom.immediateTitleRulesValueInput, buildUidWarningAutoBanImmediateTitleRulesValue(nextStatus.config?.immediateTitleBanRules || [])],
+  ]);
+  if (!DIRTY_FEATURES.uidWarningAutoBan) {
+    renderUidWarningAutoBanImmediateTitleRuleList(nextStatus.config?.immediateTitleBanRules || []);
+  }
   dom.metaText.textContent = buildUidWarningAutoBanMetaText(nextStatus);
   updateLogList(dom.logList, nextStatus.logs);
   setDisabled(dom.toggleBtn, false);
+  setDisabled(dom.saveConfigBtn, false);
+  setDisabled(dom.addImmediateTitleRuleBtn, false);
   setDisabled(dom.resetBtn, false);
 }
 
@@ -1965,12 +2047,19 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uid
   setDisabled(ipDom.resetBtn, postIpLocked || uidWarningAutoBanLocked);
   setDisabled(ipDom.releaseBtn, postIpLocked || uidWarningAutoBanLocked || ipDom.releaseBtn.disabled);
   setDisabled(uidWarningAutoBanDom.toggleBtn, monitorUidWarningAutoBanLocked || ipLocked);
+  setDisabled(uidWarningAutoBanDom.immediateTitleRuleInput, monitorUidWarningAutoBanLocked || ipLocked);
+  setDisabled(uidWarningAutoBanDom.addImmediateTitleRuleBtn, monitorUidWarningAutoBanLocked || ipLocked);
+  setDisabled(uidWarningAutoBanDom.saveConfigBtn, monitorUidWarningAutoBanLocked || ipLocked);
   setDisabled(uidWarningAutoBanDom.resetBtn, monitorUidWarningAutoBanLocked || ipLocked);
+  uidWarningAutoBanDom.immediateTitleRuleList
+    ?.querySelectorAll('.manual-rule-remove-btn')
+    .forEach((button) => setDisabled(button, monitorUidWarningAutoBanLocked || ipLocked));
 
   getFeatureConfigInputs('comment').forEach((input) => setDisabled(input, commentLocked));
   getFeatureConfigInputs('post').forEach((input) => setDisabled(input, postIpLocked));
   getFeatureConfigInputs('semiPost').forEach((input) => setDisabled(input, postIpLocked));
   getFeatureConfigInputs('ip').forEach((input) => setDisabled(input, postIpLocked || uidWarningAutoBanLocked));
+  getFeatureConfigInputs('uidWarningAutoBan').forEach((input) => setDisabled(input, monitorUidWarningAutoBanLocked || ipLocked));
 }
 
 function buildDefaultUidRatioWarningStatus() {
@@ -2073,8 +2162,11 @@ function buildDefaultUidWarningAutoBanStatus() {
     lastTriggeredUid: '',
     lastTriggeredPostCount: 0,
     lastBurstRecentCount: 0,
+    lastImmediateTitleBanCount: 0,
+    lastImmediateTitleBanMatchedTitle: '',
     lastPageUidCount: 0,
     totalTriggeredUidCount: 0,
+    totalImmediateTitleBanPostCount: 0,
     totalBannedPostCount: 0,
     totalFailedPostCount: 0,
     deleteLimitFallbackCount: 0,
@@ -2084,6 +2176,9 @@ function buildDefaultUidWarningAutoBanStatus() {
     lastDeleteLimitExceededAt: '',
     lastDeleteLimitMessage: '',
     logs: [],
+    config: {
+      immediateTitleBanRules: [],
+    },
   };
 }
 
@@ -2120,8 +2215,12 @@ function getUidWarningAutoBanStatusClassName(status = {}) {
 }
 
 function buildUidWarningAutoBanMetaText(status = {}) {
+  const immediateTitleRuleCount = Array.isArray(status.config?.immediateTitleBanRules)
+    ? status.config.immediateTitleBanRules.length
+    : 0;
+
   if (!status.isRunning) {
-    return '1분마다 1페이지를 확인해 5분 안에 2글 이상 + 글비중 90% + 갤로그 글/댓글 비공개 uid를 6시간 차단/삭제합니다.';
+    return `1분마다 1페이지를 확인해 제목 직차단 ${immediateTitleRuleCount}개 규칙과 기존 uid 분탕조건을 함께 봅니다.`;
   }
 
   if (status.lastError) {
@@ -2133,8 +2232,16 @@ function buildUidWarningAutoBanMetaText(status = {}) {
     return `삭제 한도 보호 상태라 새 글이 와도 당분간 차단만 수행합니다${detail}`;
   }
 
+  if ((status.lastImmediateTitleBanCount ?? 0) > 0) {
+    return `최근 제목 직차단 ${status.lastImmediateTitleBanMatchedTitle || '규칙'} / page1 글 ${status.lastImmediateTitleBanCount ?? 0}개`;
+  }
+
   if (status.lastTriggeredUid) {
     return `최근 제재 uid ${status.lastTriggeredUid} / page1 글 ${status.lastTriggeredPostCount ?? 0}개`;
+  }
+
+  if (immediateTitleRuleCount > 0) {
+    return `현재는 제목 직차단 ${immediateTitleRuleCount}개 규칙과 page1 burst uid를 함께 감시 중입니다.`;
   }
 
   return '현재는 page1 burst uid가 없어 대기 중입니다.';
@@ -2316,6 +2423,12 @@ function getFeatureConfigInputs(feature) {
     ];
   }
 
+  if (feature === 'uidWarningAutoBan') {
+    return [
+      dom.immediateTitleRulesValueInput,
+    ];
+  }
+
   return [];
 }
 
@@ -2331,6 +2444,120 @@ function getMonitorInitialSweepPagesValue(config = {}) {
   }
 
   return 2;
+}
+
+function parseUidWarningAutoBanImmediateTitleRulesValue(value) {
+  let parsed;
+  try {
+    parsed = JSON.parse(String(value || '[]'));
+  } catch (error) {
+    parsed = [];
+  }
+
+  const normalizedRules = [];
+  const seenNormalizedTitles = new Set();
+  for (const rule of Array.isArray(parsed) ? parsed : []) {
+    const rawTitle = String(rule?.rawTitle || '').trim();
+    if (!rawTitle) {
+      continue;
+    }
+
+    const normalizedTitle = normalizeUidWarningAutoBanImmediateTitleRuleValue(rawTitle);
+    if (!normalizedTitle || seenNormalizedTitles.has(normalizedTitle)) {
+      continue;
+    }
+
+    seenNormalizedTitles.add(normalizedTitle);
+    normalizedRules.push({
+      rawTitle,
+      normalizedTitle,
+    });
+  }
+
+  return normalizedRules;
+}
+
+function buildUidWarningAutoBanImmediateTitleRulesValue(rules = []) {
+  return JSON.stringify(parseUidWarningAutoBanImmediateTitleRulesValue(JSON.stringify(rules)));
+}
+
+function updateUidWarningAutoBanImmediateTitleRulesEditor(rules = []) {
+  const dom = FEATURE_DOM.uidWarningAutoBan;
+  const normalizedRules = parseUidWarningAutoBanImmediateTitleRulesValue(JSON.stringify(rules));
+  dom.immediateTitleRulesValueInput.value = JSON.stringify(normalizedRules);
+  renderUidWarningAutoBanImmediateTitleRuleList(normalizedRules);
+  DIRTY_FEATURES.uidWarningAutoBan = true;
+}
+
+function renderUidWarningAutoBanImmediateTitleRuleList(rules = []) {
+  const dom = FEATURE_DOM.uidWarningAutoBan;
+  const normalizedRules = parseUidWarningAutoBanImmediateTitleRulesValue(JSON.stringify(rules));
+  if (normalizedRules.length <= 0) {
+    dom.immediateTitleRuleList.innerHTML = '<div class="log-empty">등록된 금칙 제목이 없습니다.</div>';
+    return;
+  }
+
+  dom.immediateTitleRuleList.innerHTML = '';
+  for (const rule of normalizedRules) {
+    const item = document.createElement('div');
+    item.className = 'manual-rule-item';
+
+    const meta = document.createElement('div');
+    meta.className = 'manual-rule-meta';
+
+    const rawTitle = document.createElement('span');
+    rawTitle.className = 'manual-rule-raw';
+    rawTitle.textContent = rule.rawTitle;
+
+    const normalizedTitle = document.createElement('span');
+    normalizedTitle.className = 'manual-rule-normalized';
+    normalizedTitle.textContent = `정규화: ${rule.normalizedTitle}`;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'manual-rule-remove-btn';
+    removeBtn.textContent = '삭제';
+    removeBtn.addEventListener('click', () => {
+      const currentRules = parseUidWarningAutoBanImmediateTitleRulesValue(dom.immediateTitleRulesValueInput.value);
+      const nextRules = currentRules.filter((currentRule) => currentRule.normalizedTitle !== rule.normalizedTitle);
+      updateUidWarningAutoBanImmediateTitleRulesEditor(nextRules);
+    });
+
+    meta.appendChild(rawTitle);
+    meta.appendChild(normalizedTitle);
+    item.appendChild(meta);
+    item.appendChild(removeBtn);
+    dom.immediateTitleRuleList.appendChild(item);
+  }
+}
+
+function normalizeUidWarningAutoBanImmediateTitleRuleValue(value) {
+  const confusableMap = new Map([
+    ['Ꭺ', 'a'],
+    ['Α', 'a'],
+    ['А', 'a'],
+    ['ᗅ', 'a'],
+    ['ꓮ', 'a'],
+    ['Ꭵ', 'v'],
+    ['Ꮩ', 'v'],
+    ['Ⅴ', 'v'],
+    ['Ѵ', 'v'],
+    ['ⴸ', 'v'],
+    ['ꓦ', 'v'],
+  ]);
+  const invisibleCharacterRegex = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
+
+  const normalizedSource = String(value || '')
+    .normalize('NFKC')
+    .replace(invisibleCharacterRegex, '');
+  let folded = '';
+  for (const char of normalizedSource) {
+    folded += confusableMap.get(char) || char;
+  }
+
+  return folded
+    .toLowerCase()
+    .replace(/[^가-힣a-z]/g, '')
+    .trim();
 }
 
 function setActiveTab(feature) {

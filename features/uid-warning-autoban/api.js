@@ -19,6 +19,7 @@ const DEFAULT_CONFIG = {
   avoidReasonText: DEFAULT_AVOID_REASON_TEXT,
   delChk: true,
   avoidTypeChk: true,
+  immediateTitleBanRules: [],
 };
 
 function resolveConfig(config = {}) {

@@ -17,7 +17,10 @@ import {
 import { Scheduler as PostScheduler } from '../features/post/scheduler.js';
 import { Scheduler as SemiPostScheduler } from '../features/semi-post/scheduler.js';
 import { Scheduler as IpScheduler } from '../features/ip/scheduler.js';
-import { Scheduler as UidWarningAutoBanScheduler } from '../features/uid-warning-autoban/scheduler.js';
+import {
+  Scheduler as UidWarningAutoBanScheduler,
+  normalizeConfig as normalizeUidWarningAutoBanConfig,
+} from '../features/uid-warning-autoban/scheduler.js';
 import { PHASE as MONITOR_PHASE, Scheduler as MonitorScheduler } from '../features/monitor/scheduler.js';
 import {
   getDcSessionBrokerStatus,
@@ -521,6 +524,13 @@ async function handleMessage(message) {
           });
         }
 
+        if (message.feature === 'uidWarningAutoBan') {
+          message.config = normalizeUidWarningAutoBanConfig({
+            ...scheduler.config,
+            ...message.config,
+          });
+        }
+
         const configUpdateBlockMessage = getConfigUpdateBlockMessage(message.feature, scheduler, message.config);
         if (configUpdateBlockMessage) {
           maybeLogIpIncludeExistingTargetsFailure(scheduler, message, configUpdateBlockMessage);
@@ -733,9 +743,12 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.lastTriggeredUid = '';
     scheduler.lastTriggeredPostCount = 0;
     scheduler.lastBurstRecentCount = 0;
+    scheduler.lastImmediateTitleBanCount = 0;
+    scheduler.lastImmediateTitleBanMatchedTitle = '';
     scheduler.lastPageRowCount = 0;
     scheduler.lastPageUidCount = 0;
     scheduler.totalTriggeredUidCount = 0;
+    scheduler.totalImmediateTitleBanPostCount = 0;
     scheduler.totalBannedPostCount = 0;
     scheduler.totalFailedPostCount = 0;
     scheduler.deleteLimitFallbackCount = 0;
@@ -746,6 +759,7 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.lastDeleteLimitMessage = '';
     scheduler.runtimeDeleteEnabled = Boolean(scheduler.config?.delChk);
     scheduler.recentUidActions = {};
+    scheduler.recentImmediatePostActions = {};
     return;
   }
 
