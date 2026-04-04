@@ -14,6 +14,10 @@ import {
   Scheduler as HanRefreshIpBanScheduler,
   normalizeConfig as normalizeHanRefreshIpBanConfig,
 } from '../features/han-refresh-ip-ban/scheduler.js';
+import {
+  Scheduler as BumpPostScheduler,
+  normalizeConfig as normalizeBumpPostConfig,
+} from '../features/bump-post/scheduler.js';
 import { Scheduler as PostScheduler } from '../features/post/scheduler.js';
 import { Scheduler as SemiPostScheduler } from '../features/semi-post/scheduler.js';
 import { Scheduler as IpScheduler } from '../features/ip/scheduler.js';
@@ -49,6 +53,7 @@ const conceptPatrolScheduler = new ConceptPatrolScheduler({
   conceptMonitorScheduler,
 });
 const hanRefreshIpBanScheduler = new HanRefreshIpBanScheduler();
+const bumpPostScheduler = new BumpPostScheduler();
 const postScheduler = new PostScheduler();
 const semiPostScheduler = new SemiPostScheduler();
 const ipScheduler = new IpScheduler();
@@ -65,6 +70,7 @@ const schedulers = {
   conceptMonitor: conceptMonitorScheduler,
   conceptPatrol: conceptPatrolScheduler,
   hanRefreshIpBan: hanRefreshIpBanScheduler,
+  bumpPost: bumpPostScheduler,
   post: postScheduler,
   semiPost: semiPostScheduler,
   ip: ipScheduler,
@@ -175,6 +181,7 @@ async function resumeAllSchedulers() {
     await loadSchedulerStateIfIdle(schedulers.conceptMonitor);
     await loadSchedulerStateIfIdle(schedulers.conceptPatrol);
     await loadSchedulerStateIfIdle(schedulers.hanRefreshIpBan);
+    await loadSchedulerStateIfIdle(schedulers.bumpPost);
     await loadSchedulerStateIfIdle(schedulers.post);
     await loadSchedulerStateIfIdle(schedulers.semiPost);
     await loadSchedulerStateIfIdle(schedulers.ip);
@@ -219,6 +226,7 @@ async function resumeAllSchedulers() {
     await resumeStandaloneScheduler(schedulers.conceptMonitor, '🔁 저장된 개념글 방어 상태 복원');
     await resumeStandaloneScheduler(schedulers.conceptPatrol, '🔁 저장된 개념글순회 상태 복원');
     await resumeStandaloneScheduler(schedulers.hanRefreshIpBan, '🔁 저장된 도배기 갱신 차단 자동 상태 복원');
+    await resumeStandaloneScheduler(schedulers.bumpPost, '🔁 저장된 끌올 자동 상태 복원');
     await resolveUidWarningAutoBanResumeConflict();
     await resumeStandaloneScheduler(schedulers.uidWarningAutoBan, '🔁 저장된 분탕자동차단 상태 복원');
     await resumeUidRatioWarningForActiveTab();
@@ -269,6 +277,7 @@ function getAllStatuses() {
     conceptMonitor: schedulers.conceptMonitor.getStatus(),
     conceptPatrol: schedulers.conceptPatrol.getStatus(),
     hanRefreshIpBan: schedulers.hanRefreshIpBan.getStatus(),
+    bumpPost: schedulers.bumpPost.getStatus(),
     post: schedulers.post.getStatus(),
     semiPost: schedulers.semiPost.getStatus(),
     ip: schedulers.ip.getStatus(),
@@ -439,11 +448,8 @@ async function handleMessage(message) {
 
   switch (message.action) {
     case 'start':
-      if (message.feature === 'monitor' || message.feature === 'commentMonitor') {
-        const schedulerWithStartGuard = message.feature === 'monitor'
-          ? schedulers.monitor
-          : schedulers.commentMonitor;
-        const guardedStartBlockReason = schedulerWithStartGuard.getStartBlockReason();
+      if (typeof scheduler.getStartBlockReason === 'function') {
+        const guardedStartBlockReason = scheduler.getStartBlockReason();
         if (guardedStartBlockReason) {
           return {
             success: false,
@@ -512,6 +518,26 @@ async function handleMessage(message) {
 
         if (message.feature === 'hanRefreshIpBan') {
           message.config = normalizeHanRefreshIpBanConfig({
+            ...scheduler.config,
+            ...message.config,
+          });
+        }
+
+        if (message.feature === 'bumpPost') {
+          const rawPostNo = message.config.postNo;
+          if (rawPostNo !== undefined) {
+            const trimmedPostNo = String(rawPostNo || '').trim();
+            if (trimmedPostNo && !/^\d+$/.test(trimmedPostNo)) {
+              return {
+                success: false,
+                message: '게시물 번호는 숫자만 입력하세요.',
+                status: scheduler.getStatus(),
+                statuses: getAllStatuses(),
+              };
+            }
+          }
+
+          message.config = normalizeBumpPostConfig({
             ...scheduler.config,
             ...message.config,
           });
@@ -708,6 +734,24 @@ function resetSchedulerStats(feature, scheduler) {
     return;
   }
 
+  if (feature === 'bumpPost') {
+    scheduler.cycleCount = 0;
+    scheduler.logs = [];
+    scheduler.totalBumpedCount = 0;
+    scheduler.totalFailedCount = 0;
+    scheduler.lastBumpedAt = '';
+    scheduler.lastErrorAt = '';
+    scheduler.lastErrorMessage = '';
+    scheduler.lastBumpedPostNo = '';
+    if (!scheduler.isRunning) {
+      scheduler.phase = 'IDLE';
+      scheduler.startedAt = '';
+      scheduler.endsAt = '';
+      scheduler.nextRunAt = '';
+    }
+    return;
+  }
+
   if (feature === 'post') {
     scheduler.totalClassified = 0;
     if (typeof scheduler.cancelPendingRuntimeTransition === 'function') {
@@ -810,6 +854,7 @@ async function applySharedConfig(config) {
     || schedulers.conceptMonitor.config.galleryId !== galleryId
     || schedulers.conceptPatrol.config.galleryId !== galleryId
     || schedulers.hanRefreshIpBan.config.galleryId !== galleryId
+    || schedulers.bumpPost.config.galleryId !== galleryId
     || schedulers.post.config.galleryId !== galleryId
     || schedulers.semiPost.config.galleryId !== galleryId
     || schedulers.ip.config.galleryId !== galleryId
@@ -828,6 +873,7 @@ async function applySharedConfig(config) {
     schedulers.conceptMonitor.config.galleryId = galleryId;
     schedulers.conceptPatrol.config.galleryId = galleryId;
     schedulers.hanRefreshIpBan.config.galleryId = galleryId;
+    schedulers.bumpPost.config.galleryId = galleryId;
     schedulers.post.config.galleryId = galleryId;
     schedulers.semiPost.config.galleryId = galleryId;
     schedulers.ip.config.galleryId = galleryId;
@@ -848,6 +894,7 @@ async function applySharedConfig(config) {
     resetConceptMonitorSchedulerState(`ℹ️ 공통 설정 변경으로 개념글 방어 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetConceptPatrolSchedulerState(`ℹ️ 공통 설정 변경으로 개념글순회 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetHanRefreshIpBanSchedulerState(`ℹ️ 공통 설정 변경으로 도배기 갱신 차단 자동 상태를 초기화했습니다. (갤러리: ${galleryId})`);
+    resetBumpPostSchedulerState(`ℹ️ 공통 설정 변경으로 끌올 자동 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetPostSchedulerState(`ℹ️ 공통 설정 변경으로 게시글 분류 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetSemiPostSchedulerState(`ℹ️ 공통 설정 변경으로 반고닉 분류 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetIpSchedulerState(`ℹ️ 공통 설정 변경으로 IP 차단 상태를 초기화했습니다. (갤러리: ${galleryId})`);
@@ -926,6 +973,10 @@ function getBusyFeatures() {
     busyFeatures.push('도배기 갱신 차단 자동');
   }
 
+  if (isSchedulerBusy(schedulers.bumpPost)) {
+    busyFeatures.push('끌올 자동');
+  }
+
   if (isSchedulerBusy(schedulers.post)) {
     busyFeatures.push('게시글 분류');
   }
@@ -986,6 +1037,18 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
     && config.patrolPages !== undefined
     && Number(config.patrolPages) !== Number(scheduler.config.patrolPages)) {
     return '순회 페이지 수는 개념글순회를 정지한 뒤 변경하세요.';
+  }
+
+  if (feature === 'bumpPost') {
+    const postNoChanged = config.postNo !== undefined
+      && String(config.postNo || '') !== String(scheduler.config.postNo || '');
+    const durationChanged = config.durationMinutes !== undefined
+      && Number(config.durationMinutes) !== Number(scheduler.config.durationMinutes);
+    const intervalChanged = config.intervalMinutes !== undefined
+      && Number(config.intervalMinutes) !== Number(scheduler.config.intervalMinutes);
+    if (postNoChanged || durationChanged || intervalChanged) {
+      return '끌올 자동 설정은 기능을 정지한 뒤 변경하세요.';
+    }
   }
 
   if (feature === 'ip'
@@ -1222,6 +1285,24 @@ function resetHanRefreshIpBanSchedulerState(message) {
   scheduler.cycleCount = 0;
   scheduler.lastRunAt = '';
   scheduler.nextRunAt = '';
+  scheduler.logs = [];
+  scheduler.log(message);
+}
+
+function resetBumpPostSchedulerState(message) {
+  const scheduler = schedulers.bumpPost;
+  scheduler.phase = 'IDLE';
+  scheduler.cycleCount = 0;
+  scheduler.startedAt = '';
+  scheduler.endsAt = '';
+  scheduler.nextRunAt = '';
+  scheduler.lastBumpedAt = '';
+  scheduler.lastErrorAt = '';
+  scheduler.lastErrorMessage = '';
+  scheduler.lastBumpedPostNo = '';
+  scheduler.totalBumpedCount = 0;
+  scheduler.totalFailedCount = 0;
+  scheduler.config.postNo = '';
   scheduler.logs = [];
   scheduler.log(message);
 }

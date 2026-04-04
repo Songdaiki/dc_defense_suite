@@ -27,6 +27,7 @@
       <button class="tab-button" data-tab="semiPost"><span class="tab-label">반고닉<br>분류</span></button>
       <button class="tab-button" data-tab="ip"><span class="tab-label">IP차단<br>삭제</span></button>
       <button class="tab-button tab-warning" data-tab="uidRatioWarning"><span class="tab-label">분탕<br>경고</span></button>
+      <button class="tab-button" data-tab="bumpPost"><span class="tab-label">끌올<br>자동</span></button>
     </nav>
 
     <main class="panels">
@@ -592,6 +593,109 @@
         <button id="commentResetBtn" class="btn btn-secondary">통계 초기화</button>
       </section>
 
+      <section class="panel" data-feature="bumpPost">
+        <div class="feature-header feature-bump-post">
+          <div>
+            <h2>끌올 자동</h2>
+            <p>지정한 글 번호를 설정한 시간 동안 설정한 분 간격으로 자동 끌올합니다</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="bumpPostToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="bumpPostToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="manual-utility-badges">
+          <span class="manual-utility-pill">시작 즉시 1회</span>
+          <span class="manual-utility-pill">완료 시각 기준 예약</span>
+          <span class="manual-utility-pill manual-utility-pill-warn">지속 시간 끝나면 자동 정지</span>
+        </div>
+
+        <div class="status-grid manual-utility-status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="bumpPostStatusText" class="status-value status-off">🔴 정지</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">단계</span>
+            <span id="bumpPostPhaseText" class="status-value">IDLE</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">대상 글번호</span>
+            <span id="bumpPostTargetPostNo" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">시작 시각</span>
+            <span id="bumpPostStartedAt" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">종료 시각</span>
+            <span id="bumpPostEndsAt" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">다음 실행</span>
+            <span id="bumpPostNextRunAt" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">마지막 끌올</span>
+            <span id="bumpPostLastBumpedAt" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 성공 글</span>
+            <span id="bumpPostLastBumpedPostNo" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">성공 횟수</span>
+            <span id="bumpPostTotalBumpedCount" class="status-value">0회</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">실패 횟수</span>
+            <span id="bumpPostTotalFailedCount" class="status-value">0회</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">완료 사이클</span>
+            <span id="bumpPostCycleCount" class="status-value">0회</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 실패</span>
+            <span id="bumpPostLastErrorAt" class="status-value">-</span>
+          </div>
+        </div>
+
+        <p id="bumpPostMetaText" class="manual-utility-meta">게시물 번호와 시간 설정을 저장한 뒤 ON 하면, 시작 즉시 1회 끌올 후 지정한 간격으로 반복하다가 지속 시간이 끝나면 자동 정지합니다.</p>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label for="bumpPostPostNo">게시물 번호</label>
+              <input type="text" id="bumpPostPostNo" inputmode="numeric" placeholder="예: 1087122">
+            </div>
+            <div class="setting-item">
+              <label for="bumpPostDurationMinutes">지속 시간 (분)</label>
+              <input type="number" id="bumpPostDurationMinutes" min="1" max="1440" value="60">
+            </div>
+            <div class="setting-item">
+              <label for="bumpPostIntervalMinutes">끌올 주기 (분)</label>
+              <input type="number" id="bumpPostIntervalMinutes" min="1" max="1440" value="1">
+            </div>
+            <button id="bumpPostSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          </div>
+        </details>
+
+        <div class="action-row">
+          <button id="bumpPostResetBtn" class="btn btn-secondary">통계 초기화</button>
+        </div>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="bumpPostLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+      </section>
+
       <section class="panel" data-feature="post">
         <div class="feature-header feature-post">
           <div>
@@ -889,7 +993,7 @@
           <div class="manual-utility-header">
             <div>
               <h3>분탕자동차단</h3>
-              <p>1분마다 1페이지를 확인해 금칙 제목은 즉시 차단하고, 나머지는 기존 uid 분탕조건으로 6시간 차단/삭제합니다</p>
+              <p>1분마다 1페이지를 확인해 금칙 제목은 즉시 차단하고, 나머지는 글댓총합 20 미만 기준을 포함한 uid 분탕조건으로 6시간 차단/삭제합니다</p>
             </div>
             <div class="toggle-section">
               <label class="toggle-switch">
@@ -993,7 +1097,7 @@
             </div>
           </div>
 
-          <p id="uidWarningAutoBanMetaText" class="manual-utility-meta">1분마다 1페이지를 확인해 금칙 제목 포함 매치는 즉시 차단하고, 나머지는 5분 안에 2글 이상 깡계와 방명록까지 잠긴 저활동 깡계를 함께 6시간 차단/삭제합니다.</p>
+          <p id="uidWarningAutoBanMetaText" class="manual-utility-meta">1분마다 1페이지를 확인해 금칙 제목 포함 매치는 즉시 차단하고, 나머지는 글댓총합 20 미만인 5분 2글 burst 깡계와 방명록까지 잠긴 저활동 깡계를 함께 6시간 차단/삭제합니다.</p>
 
           <details class="settings-section uid-warning-title-ban-section">
             <summary>제목 직차단 금칙어</summary>

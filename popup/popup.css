@@ -10,6 +10,7 @@
   --concept-monitor: #ff9f9f;
   --concept-patrol: #f0c26d;
   --han-refresh-ip-ban: #ff9d72;
+  --bump-post: #7fb4ff;
   --post: #ffb84f;
   --uid-ratio-warning: #ff6b6b;
   --ip: #63d8e6;
@@ -294,6 +295,10 @@ body {
 
 .feature-han-refresh-ip-ban {
   background: linear-gradient(180deg, rgba(255, 157, 114, 0.16), rgba(54, 30, 18, 0.95));
+}
+
+.feature-bump-post {
+  background: linear-gradient(180deg, rgba(127, 180, 255, 0.16), rgba(23, 34, 52, 0.95));
 }
 
 .feature-semi-post {

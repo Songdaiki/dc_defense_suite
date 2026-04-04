@@ -7,6 +7,7 @@ const DIRTY_FEATURES = {
   conceptMonitor: false,
   conceptPatrol: false,
   hanRefreshIpBan: false,
+  bumpPost: false,
   commentMonitor: false,
   comment: false,
   post: false,
@@ -23,6 +24,7 @@ let latestConceptPatrolStatus = null;
 let latestSessionFallbackStatus = null;
 let latestUidRatioWarningStatus = null;
 let latestUidWarningAutoBanStatus = null;
+let latestBumpPostStatus = null;
 
 const SESSION_FALLBACK_DOM = {
   keepaliveToggle: document.getElementById('sessionFallbackKeepaliveToggle'),
@@ -122,6 +124,29 @@ const FEATURE_DOM = {
     fallbackMaxPageInput: document.getElementById('hanRefreshIpBanFallbackMaxPage'),
     saveConfigBtn: document.getElementById('hanRefreshIpBanSaveConfigBtn'),
     resetBtn: document.getElementById('hanRefreshIpBanResetBtn'),
+  },
+  bumpPost: {
+    toggleBtn: document.getElementById('bumpPostToggleBtn'),
+    toggleLabel: document.getElementById('bumpPostToggleLabel'),
+    statusText: document.getElementById('bumpPostStatusText'),
+    phaseText: document.getElementById('bumpPostPhaseText'),
+    targetPostNoText: document.getElementById('bumpPostTargetPostNo'),
+    startedAtText: document.getElementById('bumpPostStartedAt'),
+    endsAtText: document.getElementById('bumpPostEndsAt'),
+    nextRunAtText: document.getElementById('bumpPostNextRunAt'),
+    lastBumpedAtText: document.getElementById('bumpPostLastBumpedAt'),
+    lastBumpedPostNoText: document.getElementById('bumpPostLastBumpedPostNo'),
+    totalBumpedCountText: document.getElementById('bumpPostTotalBumpedCount'),
+    totalFailedCountText: document.getElementById('bumpPostTotalFailedCount'),
+    cycleCountText: document.getElementById('bumpPostCycleCount'),
+    lastErrorAtText: document.getElementById('bumpPostLastErrorAt'),
+    metaText: document.getElementById('bumpPostMetaText'),
+    logList: document.getElementById('bumpPostLogList'),
+    postNoInput: document.getElementById('bumpPostPostNo'),
+    durationMinutesInput: document.getElementById('bumpPostDurationMinutes'),
+    intervalMinutesInput: document.getElementById('bumpPostIntervalMinutes'),
+    saveConfigBtn: document.getElementById('bumpPostSaveConfigBtn'),
+    resetBtn: document.getElementById('bumpPostResetBtn'),
   },
   commentMonitor: {
     toggleBtn: document.getElementById('commentMonitorToggleBtn'),
@@ -317,6 +342,7 @@ function bindFeatureEvents() {
   bindConfigDirtyTracking('conceptMonitor');
   bindConfigDirtyTracking('conceptPatrol');
   bindConfigDirtyTracking('hanRefreshIpBan');
+  bindConfigDirtyTracking('bumpPost');
   bindConfigDirtyTracking('commentMonitor');
   bindConfigDirtyTracking('comment');
   bindConfigDirtyTracking('post');
@@ -326,6 +352,7 @@ function bindFeatureEvents() {
   bindConfigDirtyTracking('uidWarningAutoBan');
   bindConceptMonitorEvents();
   bindHanRefreshIpBanEvents();
+  bindBumpPostEvents();
   bindCommentMonitorEvents();
   bindCommentEvents();
   bindPostEvents();
@@ -721,6 +748,107 @@ function bindHanRefreshIpBanEvents() {
     }
 
     const response = await sendFeatureMessage('hanRefreshIpBan', { action: 'resetStats' });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+}
+
+function bindBumpPostEvents() {
+  const dom = FEATURE_DOM.bumpPost;
+
+  dom.toggleBtn.addEventListener('change', async () => {
+    const action = dom.toggleBtn.checked ? 'start' : 'stop';
+
+    if (action === 'start' && DIRTY_FEATURES.bumpPost) {
+      alert('끌올 자동 설정을 먼저 저장하세요.');
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (action === 'start') {
+      const postNo = normalizeBumpPostPostNoInputValue(dom.postNoInput.value);
+      if (!postNo) {
+        alert('게시물 번호를 입력하세요.');
+        dom.postNoInput.focus();
+        await refreshAllStatuses();
+        return;
+      }
+
+      if (!isValidBumpPostPostNo(postNo)) {
+        alert('게시물 번호는 숫자만 입력하세요.');
+        dom.postNoInput.focus();
+        dom.postNoInput.select();
+        await refreshAllStatuses();
+        return;
+      }
+    }
+
+    const response = await sendFeatureMessage('bumpPost', { action });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.saveConfigBtn.addEventListener('click', async () => {
+    const postNo = normalizeBumpPostPostNoInputValue(dom.postNoInput.value);
+    if (postNo && !isValidBumpPostPostNo(postNo)) {
+      alert('게시물 번호는 숫자만 입력하세요.');
+      dom.postNoInput.focus();
+      dom.postNoInput.select();
+      return;
+    }
+
+    const config = {
+      postNo,
+      durationMinutes: Math.max(1, parseOptionalInt(dom.durationMinutesInput.value, 60)),
+      intervalMinutes: Math.max(1, parseOptionalInt(dom.intervalMinutesInput.value, 1)),
+    };
+
+    const response = await sendFeatureMessage('bumpPost', { action: 'updateConfig', config });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    DIRTY_FEATURES.bumpPost = false;
+    flashSaved(dom.saveConfigBtn);
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.resetBtn.addEventListener('click', async () => {
+    if (!confirm('끌올 자동 통계와 로그를 초기화하시겠습니까?')) {
+      return;
+    }
+
+    const response = await sendFeatureMessage('bumpPost', { action: 'resetStats' });
     if (!response?.success) {
       if (response?.message) {
         alert(response.message);
@@ -1507,6 +1635,7 @@ function applyStatuses(statuses) {
   updateConceptMonitorUI(statuses.conceptMonitor);
   updateConceptPatrolUI(statuses.conceptPatrol);
   updateHanRefreshIpBanUI(statuses.hanRefreshIpBan);
+  updateBumpPostUI(statuses.bumpPost);
   updateCommentMonitorUI(statuses.commentMonitor);
   updateMonitorUI(statuses.monitor);
   updateCommentUI(statuses.comment);
@@ -1749,6 +1878,47 @@ function updateHanRefreshIpBanUI(status) {
     [dom.fallbackMaxPageInput, status.config?.fallbackMaxPage ?? 400],
   ]);
   updateLogList(dom.logList, status.logs);
+}
+
+function updateBumpPostUI(status) {
+  const dom = FEATURE_DOM.bumpPost;
+  if (!dom?.toggleBtn) {
+    return;
+  }
+
+  const nextStatus = status || buildDefaultBumpPostStatus();
+  latestBumpPostStatus = nextStatus;
+
+  updateToggle(dom, nextStatus.isRunning);
+  updateStatusText(
+    dom.statusText,
+    getBumpPostStatusLabel(nextStatus),
+    getBumpPostStatusClassName(nextStatus),
+  );
+  dom.phaseText.textContent = nextStatus.phase || 'IDLE';
+  dom.targetPostNoText.textContent = nextStatus.config?.postNo ? `#${nextStatus.config.postNo}` : '-';
+  dom.startedAtText.textContent = formatTimestamp(nextStatus.startedAt);
+  dom.endsAtText.textContent = formatTimestamp(nextStatus.endsAt);
+  dom.nextRunAtText.textContent = formatTimestamp(nextStatus.nextRunAt);
+  dom.lastBumpedAtText.textContent = formatTimestamp(nextStatus.lastBumpedAt);
+  dom.lastBumpedPostNoText.textContent = nextStatus.lastBumpedPostNo ? `#${nextStatus.lastBumpedPostNo}` : '-';
+  dom.totalBumpedCountText.textContent = `${nextStatus.totalBumpedCount ?? 0}회`;
+  dom.totalFailedCountText.textContent = `${nextStatus.totalFailedCount ?? 0}회`;
+  dom.cycleCountText.textContent = `${nextStatus.cycleCount ?? 0}회`;
+  dom.lastErrorAtText.textContent = formatTimestamp(nextStatus.lastErrorAt);
+  dom.metaText.textContent = buildBumpPostMetaText(nextStatus);
+  syncFeatureConfigInputs('bumpPost', [
+    [dom.postNoInput, nextStatus.config?.postNo ?? ''],
+    [dom.durationMinutesInput, nextStatus.config?.durationMinutes ?? 60],
+    [dom.intervalMinutesInput, nextStatus.config?.intervalMinutes ?? 1],
+  ]);
+  updateLogList(dom.logList, nextStatus.logs);
+
+  const isLocked = Boolean(nextStatus.isRunning);
+  getFeatureConfigInputs('bumpPost').forEach((input) => setDisabled(input, isLocked));
+  setDisabled(dom.saveConfigBtn, isLocked);
+  setDisabled(dom.resetBtn, false);
+  setDisabled(dom.toggleBtn, false);
 }
 
 function updateCommentMonitorUI(status) {
@@ -2070,6 +2240,93 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uid
   getFeatureConfigInputs('uidWarningAutoBan').forEach((input) => setDisabled(input, monitorUidWarningAutoBanLocked || ipLocked));
 }
 
+function buildDefaultBumpPostStatus() {
+  return {
+    isRunning: false,
+    phase: 'IDLE',
+    cycleCount: 0,
+    startedAt: '',
+    endsAt: '',
+    nextRunAt: '',
+    lastBumpedAt: '',
+    lastErrorAt: '',
+    lastErrorMessage: '',
+    lastBumpedPostNo: '',
+    totalBumpedCount: 0,
+    totalFailedCount: 0,
+    logs: [],
+    config: {
+      postNo: '',
+      durationMinutes: 60,
+      intervalMinutes: 1,
+    },
+  };
+}
+
+function getBumpPostStatusLabel(status = {}) {
+  if (status.isRunning && status.phase === 'WAITING') {
+    return '🟡 다음 끌올 대기 중';
+  }
+
+  if (status.isRunning) {
+    return '🟢 실행 중';
+  }
+
+  if (status.lastErrorMessage) {
+    return '🔴 정지 (최근 오류)';
+  }
+
+  return '🔴 정지';
+}
+
+function getBumpPostStatusClassName(status = {}) {
+  if (status.isRunning && status.phase === 'WAITING') {
+    return 'status-warn';
+  }
+
+  if (status.isRunning) {
+    return 'status-on';
+  }
+
+  if (status.lastErrorMessage) {
+    return 'status-warn';
+  }
+
+  return 'status-off';
+}
+
+function buildBumpPostMetaText(status = {}) {
+  const postNo = status.config?.postNo ? `#${status.config.postNo}` : '미지정';
+  const durationMinutes = Number(status.config?.durationMinutes) || 60;
+  const intervalMinutes = Number(status.config?.intervalMinutes) || 1;
+
+  if (status.lastErrorMessage) {
+    return `최근 오류: ${status.lastErrorMessage}`;
+  }
+
+  if (!status.isRunning) {
+    return `${postNo} 글을 ${durationMinutes}분 동안 ${intervalMinutes}분마다 끌올하도록 저장해둘 수 있습니다. ON 하면 즉시 1회 실행 후 예약을 시작합니다.`;
+  }
+
+  if (status.phase === 'WAITING' && status.nextRunAt) {
+    return `${postNo} 글을 ${intervalMinutes}분 주기로 대기 중입니다. 다음 끌올은 ${formatTimestamp(status.nextRunAt)} 입니다.`;
+  }
+
+  if (status.lastBumpedAt) {
+    return `${postNo} 글을 마지막으로 ${formatTimestamp(status.lastBumpedAt)} 에 끌올했고, ${formatTimestamp(status.endsAt)} 까지 자동 반복합니다.`;
+  }
+
+  return `${postNo} 글을 시작 즉시 1회 끌올한 뒤 ${intervalMinutes}분마다 반복하고, ${durationMinutes}분이 지나면 자동 정지합니다.`;
+}
+
+function normalizeBumpPostPostNoInputValue(value) {
+  return String(value || '').trim();
+}
+
+function isValidBumpPostPostNo(value) {
+  return /^\d+$/.test(normalizeBumpPostPostNoInputValue(value));
+}
+
 function buildDefaultUidRatioWarningStatus() {
   return {
     enabled: false,
@@ -2232,7 +2489,7 @@ function buildUidWarningAutoBanMetaText(status = {}) {
     : 0;
 
   if (!status.isRunning) {
-    return `1분마다 1페이지를 확인해 제목 직차단 ${immediateTitleRuleCount}개 규칙, page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 봅니다.`;
+    return `1분마다 1페이지를 확인해 제목 직차단 ${immediateTitleRuleCount}개 규칙, 글댓총합 20 미만인 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 봅니다.`;
   }
 
   if (status.lastError) {
@@ -2257,10 +2514,10 @@ function buildUidWarningAutoBanMetaText(status = {}) {
   }
 
   if (immediateTitleRuleCount > 0) {
-    return `현재는 제목 직차단 ${immediateTitleRuleCount}개 규칙, page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 감시 중입니다.`;
+    return `현재는 제목 직차단 ${immediateTitleRuleCount}개 규칙, 글댓총합 20 미만인 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 감시 중입니다.`;
   }
 
-  return '현재는 제목 직차단 / page1 burst 깡계 / 방명록 잠금 저활동 깡계를 함께 대기 중입니다.';
+  return '현재는 제목 직차단 / 글댓총합 20 미만 page1 burst 깡계 / 방명록 잠금 저활동 깡계를 함께 대기 중입니다.';
 }
 
 function updateToggle(dom, isRunning) {
@@ -2291,6 +2548,7 @@ function syncSharedConfigInputs(statuses) {
   }
 
   const galleryId = statuses.comment?.config?.galleryId
+    || statuses.bumpPost?.config?.galleryId
     || statuses.hanRefreshIpBan?.config?.galleryId
     || statuses.conceptMonitor?.config?.galleryId
     || statuses.conceptPatrol?.config?.galleryId
@@ -2330,6 +2588,14 @@ function getFeatureConfigInputs(feature) {
   const dom = FEATURE_DOM[feature];
   if (!dom) {
     return [];
+  }
+
+  if (feature === 'bumpPost') {
+    return [
+      dom.postNoInput,
+      dom.durationMinutesInput,
+      dom.intervalMinutesInput,
+    ];
   }
 
   if (feature === 'comment') {

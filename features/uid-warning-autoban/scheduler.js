@@ -265,9 +265,16 @@ class Scheduler {
         continue;
       }
 
+      if (isBurstCandidate && totalActivityCount >= SINGLE_SIGHT_TOTAL_ACTIVITY_THRESHOLD) {
+        this.log(
+          `ℹ️ ${groupedEntry.uid} 스킵 - 글댓총합 ${totalActivityCount}라 burst 기준 ${SINGLE_SIGHT_TOTAL_ACTIVITY_THRESHOLD} 미만 조건 불충족`,
+        );
+        continue;
+      }
+
       if (!isBurstCandidate && totalActivityCount >= SINGLE_SIGHT_TOTAL_ACTIVITY_THRESHOLD) {
         this.log(
-          `ℹ️ ${groupedEntry.uid} 스킵 - 글댓총합 ${totalActivityCount}라 단일발견 기준 ${SINGLE_SIGHT_TOTAL_ACTIVITY_THRESHOLD} 미만 초과`,
+          `ℹ️ ${groupedEntry.uid} 스킵 - 글댓총합 ${totalActivityCount}라 단일발견 기준 ${SINGLE_SIGHT_TOTAL_ACTIVITY_THRESHOLD} 미만 조건 불충족`,
         );
         continue;
       }
@@ -306,7 +313,7 @@ class Scheduler {
         this.lastBurstRecentCount = recentRows.length;
         this.totalTriggeredUidCount += 1;
         this.log(
-          `🚨 ${groupedEntry.uid} page1 5분 텍스트 burst ${recentRows.length}글 / 글비중 ${formatPostRatio(effectivePostRatio)}% / 갤로그 게시글·댓글 비공개 -> page1 ${targetPosts.length}개 제재 시작`,
+          `🚨 ${groupedEntry.uid} page1 5분 텍스트 burst ${recentRows.length}글 / 글비중 ${formatPostRatio(effectivePostRatio)}% / 총합 ${totalActivityCount} / 갤로그 게시글·댓글 비공개 -> page1 ${targetPosts.length}개 제재 시작`,
         );
 
         const result = await this.executeBan({
