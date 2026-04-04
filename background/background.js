@@ -743,12 +743,16 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.lastTriggeredUid = '';
     scheduler.lastTriggeredPostCount = 0;
     scheduler.lastBurstRecentCount = 0;
+    scheduler.lastSingleSightTriggeredUid = '';
+    scheduler.lastSingleSightTriggeredPostCount = 0;
     scheduler.lastImmediateTitleBanCount = 0;
     scheduler.lastImmediateTitleBanMatchedTitle = '';
     scheduler.lastPageRowCount = 0;
     scheduler.lastPageUidCount = 0;
     scheduler.totalTriggeredUidCount = 0;
+    scheduler.totalSingleSightTriggeredUidCount = 0;
     scheduler.totalImmediateTitleBanPostCount = 0;
+    scheduler.totalSingleSightBannedPostCount = 0;
     scheduler.totalBannedPostCount = 0;
     scheduler.totalFailedPostCount = 0;
     scheduler.deleteLimitFallbackCount = 0;
@@ -1392,9 +1396,16 @@ function resetUidWarningAutoBanSchedulerState(message) {
   scheduler.lastTriggeredUid = '';
   scheduler.lastTriggeredPostCount = 0;
   scheduler.lastBurstRecentCount = 0;
+  scheduler.lastSingleSightTriggeredUid = '';
+  scheduler.lastSingleSightTriggeredPostCount = 0;
+  scheduler.lastImmediateTitleBanCount = 0;
+  scheduler.lastImmediateTitleBanMatchedTitle = '';
   scheduler.lastPageRowCount = 0;
   scheduler.lastPageUidCount = 0;
   scheduler.totalTriggeredUidCount = 0;
+  scheduler.totalSingleSightTriggeredUidCount = 0;
+  scheduler.totalImmediateTitleBanPostCount = 0;
+  scheduler.totalSingleSightBannedPostCount = 0;
   scheduler.totalBannedPostCount = 0;
   scheduler.totalFailedPostCount = 0;
   scheduler.deleteLimitFallbackCount = 0;
@@ -1405,6 +1416,7 @@ function resetUidWarningAutoBanSchedulerState(message) {
   scheduler.lastDeleteLimitExceededAt = '';
   scheduler.lastDeleteLimitMessage = '';
   scheduler.recentUidActions = {};
+  scheduler.recentImmediatePostActions = {};
   scheduler.logs = [];
   scheduler.log(message);
 }

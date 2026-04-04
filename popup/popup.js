@@ -223,11 +223,15 @@ const FEATURE_DOM = {
     lastTriggeredUid: document.getElementById('uidWarningAutoBanLastTriggeredUid'),
     lastTriggeredPostCount: document.getElementById('uidWarningAutoBanLastTriggeredPostCount'),
     lastBurstRecentCount: document.getElementById('uidWarningAutoBanLastBurstRecentCount'),
+    lastSingleSightTriggeredUid: document.getElementById('uidWarningAutoBanLastSingleSightTriggeredUid'),
+    lastSingleSightTriggeredPostCount: document.getElementById('uidWarningAutoBanLastSingleSightTriggeredPostCount'),
     totalTriggeredUidCount: document.getElementById('uidWarningAutoBanTotalTriggeredUidCount'),
+    totalSingleSightTriggeredUidCount: document.getElementById('uidWarningAutoBanTotalSingleSightTriggeredUidCount'),
     immediateTitleRuleCount: document.getElementById('uidWarningAutoBanImmediateTitleRuleCount'),
     lastImmediateTitleBanMatchedTitle: document.getElementById('uidWarningAutoBanLastImmediateTitleBanMatchedTitle'),
     lastImmediateTitleBanCount: document.getElementById('uidWarningAutoBanLastImmediateTitleBanCount'),
     totalImmediateTitleBanPostCount: document.getElementById('uidWarningAutoBanTotalImmediateTitleBanPostCount'),
+    totalSingleSightBannedPostCount: document.getElementById('uidWarningAutoBanTotalSingleSightBannedPostCount'),
     totalBannedPostCount: document.getElementById('uidWarningAutoBanTotalBannedPostCount'),
     totalFailedPostCount: document.getElementById('uidWarningAutoBanTotalFailedPostCount'),
     deleteLimitFallbackCount: document.getElementById('uidWarningAutoBanDeleteLimitFallbackCount'),
@@ -1957,11 +1961,15 @@ function updateUidWarningAutoBanUI(status) {
   dom.lastTriggeredUid.textContent = nextStatus.lastTriggeredUid || '-';
   dom.lastTriggeredPostCount.textContent = `${nextStatus.lastTriggeredPostCount ?? 0}개`;
   dom.lastBurstRecentCount.textContent = `${nextStatus.lastBurstRecentCount ?? 0}개`;
+  dom.lastSingleSightTriggeredUid.textContent = nextStatus.lastSingleSightTriggeredUid || '-';
+  dom.lastSingleSightTriggeredPostCount.textContent = `${nextStatus.lastSingleSightTriggeredPostCount ?? 0}개`;
   dom.immediateTitleRuleCount.textContent = `${(nextStatus.config?.immediateTitleBanRules || []).length}개`;
   dom.lastImmediateTitleBanMatchedTitle.textContent = nextStatus.lastImmediateTitleBanMatchedTitle || '-';
   dom.lastImmediateTitleBanCount.textContent = `${nextStatus.lastImmediateTitleBanCount ?? 0}개`;
   dom.totalTriggeredUidCount.textContent = `${nextStatus.totalTriggeredUidCount ?? 0}명`;
+  dom.totalSingleSightTriggeredUidCount.textContent = `${nextStatus.totalSingleSightTriggeredUidCount ?? 0}명`;
   dom.totalImmediateTitleBanPostCount.textContent = `${nextStatus.totalImmediateTitleBanPostCount ?? 0}개`;
+  dom.totalSingleSightBannedPostCount.textContent = `${nextStatus.totalSingleSightBannedPostCount ?? 0}개`;
   dom.totalBannedPostCount.textContent = `${nextStatus.totalBannedPostCount ?? 0}개`;
   dom.totalFailedPostCount.textContent = `${nextStatus.totalFailedPostCount ?? 0}개`;
   dom.deleteLimitFallbackCount.textContent = `${nextStatus.deleteLimitFallbackCount ?? 0}회`;
@@ -2162,11 +2170,15 @@ function buildDefaultUidWarningAutoBanStatus() {
     lastTriggeredUid: '',
     lastTriggeredPostCount: 0,
     lastBurstRecentCount: 0,
+    lastSingleSightTriggeredUid: '',
+    lastSingleSightTriggeredPostCount: 0,
     lastImmediateTitleBanCount: 0,
     lastImmediateTitleBanMatchedTitle: '',
     lastPageUidCount: 0,
     totalTriggeredUidCount: 0,
+    totalSingleSightTriggeredUidCount: 0,
     totalImmediateTitleBanPostCount: 0,
+    totalSingleSightBannedPostCount: 0,
     totalBannedPostCount: 0,
     totalFailedPostCount: 0,
     deleteLimitFallbackCount: 0,
@@ -2220,7 +2232,7 @@ function buildUidWarningAutoBanMetaText(status = {}) {
     : 0;
 
   if (!status.isRunning) {
-    return `1분마다 1페이지를 확인해 제목 직차단 ${immediateTitleRuleCount}개 규칙과 기존 uid 분탕조건을 함께 봅니다.`;
+    return `1분마다 1페이지를 확인해 제목 직차단 ${immediateTitleRuleCount}개 규칙, page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 봅니다.`;
   }
 
   if (status.lastError) {
@@ -2236,15 +2248,19 @@ function buildUidWarningAutoBanMetaText(status = {}) {
     return `최근 제목 직차단 ${status.lastImmediateTitleBanMatchedTitle || '규칙'} / page1 글 ${status.lastImmediateTitleBanCount ?? 0}개`;
   }
 
+  if (status.lastSingleSightTriggeredUid) {
+    return `최근 단일깡계 ${status.lastSingleSightTriggeredUid} / page1 글 ${status.lastSingleSightTriggeredPostCount ?? 0}개`;
+  }
+
   if (status.lastTriggeredUid) {
     return `최근 제재 uid ${status.lastTriggeredUid} / page1 글 ${status.lastTriggeredPostCount ?? 0}개`;
   }
 
   if (immediateTitleRuleCount > 0) {
-    return `현재는 제목 직차단 ${immediateTitleRuleCount}개 규칙과 page1 burst uid를 함께 감시 중입니다.`;
+    return `현재는 제목 직차단 ${immediateTitleRuleCount}개 규칙, page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 감시 중입니다.`;
   }
 
-  return '현재는 page1 burst uid가 없어 대기 중입니다.';
+  return '현재는 제목 직차단 / page1 burst 깡계 / 방명록 잠금 저활동 깡계를 함께 대기 중입니다.';
 }
 
 function updateToggle(dom, isRunning) {

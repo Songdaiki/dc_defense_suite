@@ -20,6 +20,7 @@ import {
 import { executeBanWithDeleteFallback } from '../ip/ban-executor.js';
 import { getOrFetchUidStats } from '../../background/uid-stats-cache.js';
 import { getOrFetchUidGallogPrivacy } from '../../background/uid-gallog-privacy-cache.js';
+import { getOrFetchUidGallogGuestbookState } from '../../background/uid-gallog-guestbook-cache.js';
 
 const STORAGE_KEY = 'uidWarningAutoBanSchedulerState';
 const PHASE = {
@@ -28,6 +29,7 @@ const PHASE = {
   WAITING: 'WAITING',
 };
 const UID_ACTION_RETENTION_MS = 24 * 60 * 60 * 1000;
+const SINGLE_SIGHT_TOTAL_ACTIVITY_THRESHOLD = 20;
 
 class Scheduler {
   constructor(dependencies = {}) {
@@ -36,6 +38,7 @@ class Scheduler {
     this.parseImmediateRows = dependencies.parseImmediateRows || parseImmediateTitleBanRows;
     this.fetchUidStats = dependencies.fetchUidStats || getOrFetchUidStats;
     this.fetchUidGallogPrivacy = dependencies.fetchUidGallogPrivacy || getOrFetchUidGallogPrivacy;
+    this.fetchUidGallogGuestbookState = dependencies.fetchUidGallogGuestbookState || getOrFetchUidGallogGuestbookState;
     this.executeBan = dependencies.executeBan || executeBanWithDeleteFallback;
     this.delayFn = dependencies.delayFn || delay;
 
@@ -48,12 +51,16 @@ class Scheduler {
     this.lastTriggeredUid = '';
     this.lastTriggeredPostCount = 0;
     this.lastBurstRecentCount = 0;
+    this.lastSingleSightTriggeredUid = '';
+    this.lastSingleSightTriggeredPostCount = 0;
     this.lastImmediateTitleBanCount = 0;
     this.lastImmediateTitleBanMatchedTitle = '';
     this.lastPageRowCount = 0;
     this.lastPageUidCount = 0;
     this.totalTriggeredUidCount = 0;
+    this.totalSingleSightTriggeredUidCount = 0;
     this.totalImmediateTitleBanPostCount = 0;
+    this.totalSingleSightBannedPostCount = 0;
     this.totalBannedPostCount = 0;
     this.totalFailedPostCount = 0;
     this.deleteLimitFallbackCount = 0;
@@ -141,7 +148,7 @@ class Scheduler {
         this.phase = PHASE.WAITING;
         this.currentPage = 1;
         this.log(
-          `✅ 사이클 #${this.cycleCount} 완료 - page1 글 ${this.lastPageRowCount}개 / uid ${this.lastPageUidCount}명 / 누적 uid 제재 ${this.totalTriggeredUidCount}명 / 제목 직차단 ${this.totalImmediateTitleBanPostCount}개`,
+          `✅ 사이클 #${this.cycleCount} 완료 - page1 글 ${this.lastPageRowCount}개 / uid ${this.lastPageUidCount}명 / 누적 uid 제재 ${this.totalTriggeredUidCount}명 / 제목 직차단 ${this.totalImmediateTitleBanPostCount}개 / 단일깡계 ${this.totalSingleSightBannedPostCount}개`,
         );
         await this.saveState();
       } catch (error) {
@@ -188,6 +195,9 @@ class Scheduler {
     let gallogCandidateCount = 0;
     let gallogFailureCount = 0;
     let gallogSuccessCount = 0;
+    let guestbookCandidateCount = 0;
+    let guestbookFailureCount = 0;
+    let guestbookSuccessCount = 0;
 
     for (const groupedEntry of groupedRows) {
       if (!this.isRunning) {
@@ -200,25 +210,20 @@ class Scheduler {
         getRecentWindowMs(this.config),
         getRecentPostThreshold(this.config),
       );
-      if (recentRows.length < getRecentPostThreshold(this.config)) {
-        if (groupedEntry.rows.length >= getRecentPostThreshold(this.config)) {
-          this.log(
-            `ℹ️ ${groupedEntry.uid} 스킵 - page1 5분 텍스트 burst 글수 ${recentRows.length}개라 기준 ${getRecentPostThreshold(this.config)}개 미달`,
-          );
-        }
-        continue;
-      }
-
-      const representativeNick = String(recentRows[0]?.nick || groupedEntry.rows[0]?.nick || '').trim();
+      const isBurstCandidate = recentRows.length >= getRecentPostThreshold(this.config);
+      const representativeNick = String(
+        recentRows[0]?.nick || countableRows[0]?.nick || groupedEntry.rows[0]?.nick || '',
+      ).trim();
       if (!isTwoConsonantNick(representativeNick)) {
         this.log(`ℹ️ ${groupedEntry.uid} 스킵 - 자음 2글자 닉네임 필터 미달 (최신 닉네임: ${representativeNick || '없음'})`);
         continue;
       }
 
-      const newestPostNo = getNewestPostNo(countableRows);
+      const dedupeRows = countableRows.length > 0 ? countableRows : groupedEntry.rows;
+      const newestPostNo = getNewestPostNo(dedupeRows);
       const actionKey = buildUidActionKey(this.config.galleryId, groupedEntry.uid);
       if (shouldSkipRecentUidAction(this.recentUidActions[actionKey], newestPostNo, nowMs, getRetryCooldownMs(this.config))) {
-        this.log(`ℹ️ ${groupedEntry.uid} 스킵 - 새 글번호가 없어 같은 burst 재시도를 건너뜀`);
+        this.log(`ℹ️ ${groupedEntry.uid} 스킵 - 새 글번호가 없어 같은 uid 재시도를 건너뜀`);
         continue;
       }
 
@@ -253,6 +258,20 @@ class Scheduler {
         continue;
       }
 
+      const totalActivityCount = Number(stats?.totalActivityCount);
+      if (!Number.isFinite(totalActivityCount) || totalActivityCount < 0) {
+        statsFailureCount += 1;
+        this.log(`⚠️ ${groupedEntry.uid} 활동 통계 총합 값이 비정상이라 이번 cycle에서 제외합니다.`);
+        continue;
+      }
+
+      if (!isBurstCandidate && totalActivityCount >= SINGLE_SIGHT_TOTAL_ACTIVITY_THRESHOLD) {
+        this.log(
+          `ℹ️ ${groupedEntry.uid} 스킵 - 글댓총합 ${totalActivityCount}라 단일발견 기준 ${SINGLE_SIGHT_TOTAL_ACTIVITY_THRESHOLD} 미만 초과`,
+        );
+        continue;
+      }
+
       gallogCandidateCount += 1;
       let gallogPrivacy;
       try {
@@ -270,12 +289,95 @@ class Scheduler {
       }
 
       gallogSuccessCount += 1;
+      if (isBurstCandidate) {
+        if (gallogPrivacy.fullyPrivate !== true) {
+          this.log(`ℹ️ ${groupedEntry.uid} 스킵 - 갤로그 필터 미달 (${buildGallogPrivacySummary(gallogPrivacy)})`);
+          continue;
+        }
+
+        const targetPosts = createUidBanTargetPosts(groupedEntry.rows);
+        if (targetPosts.length === 0) {
+          this.log(`ℹ️ ${groupedEntry.uid} 스킵 - page1 대상 글번호를 만들지 못함`);
+          continue;
+        }
+
+        this.lastTriggeredUid = groupedEntry.uid;
+        this.lastTriggeredPostCount = targetPosts.length;
+        this.lastBurstRecentCount = recentRows.length;
+        this.totalTriggeredUidCount += 1;
+        this.log(
+          `🚨 ${groupedEntry.uid} page1 5분 텍스트 burst ${recentRows.length}글 / 글비중 ${formatPostRatio(effectivePostRatio)}% / 갤로그 게시글·댓글 비공개 -> page1 ${targetPosts.length}개 제재 시작`,
+        );
+
+        const result = await this.executeBan({
+          feature: 'uidWarningAutoBan',
+          config: this.config,
+          posts: targetPosts,
+          deleteEnabled: this.runtimeDeleteEnabled,
+          onDeleteLimitFallbackSuccess: (fallbackResult) => {
+            this.log(`🔁 삭제 한도 계정 전환 성공 - ${fallbackResult.activeAccountLabel}로 같은 run을 이어갑니다.`);
+          },
+          onDeleteLimitBanOnlyActivated: (message) => {
+            this.activateDeleteLimitBanOnly(message);
+          },
+        });
+
+        this.totalBannedPostCount += result.successNos.length;
+        this.totalFailedPostCount += result.failedNos.length;
+        this.deleteLimitFallbackCount += result.deleteLimitFallbackCount;
+        if (result.banOnlyFallbackUsed) {
+          this.banOnlyFallbackCount += 1;
+        }
+        this.runtimeDeleteEnabled = result.finalDeleteEnabled;
+
+        if (result.successNos.length > 0) {
+          this.log(`⛔ ${groupedEntry.uid} page1 글 ${result.successNos.length}개 차단${result.finalDeleteEnabled ? '/삭제' : ''} 완료`);
+        }
+
+        if (result.banOnlyRetrySuccessCount > 0) {
+          this.log(`🧯 삭제 한도 초과로 ${groupedEntry.uid} 글 ${result.banOnlyRetrySuccessCount}개는 차단만 수행`);
+        }
+
+        if (result.failedNos.length > 0) {
+          this.log(`⚠️ ${groupedEntry.uid} 제재 실패 ${result.failedNos.length}개 - ${result.failedNos.join(', ')}`);
+        }
+
+        const success = result.failedNos.length === 0 && result.successNos.length > 0;
+        this.recentUidActions[actionKey] = createRecentUidActionEntry({
+          newestPostNo,
+          success,
+          nowIso: new Date().toISOString(),
+        });
+        await this.saveState();
+        continue;
+      }
+
       if (gallogPrivacy.fullyPrivate !== true) {
-        const privacySummary = [
-          gallogPrivacy.postingPrivate ? '게시글 비공개' : '게시글 공개',
-          gallogPrivacy.commentPrivate ? '댓글 비공개' : '댓글 공개',
-        ].join(' / ');
-        this.log(`ℹ️ ${groupedEntry.uid} 스킵 - 갤로그 필터 미달 (${privacySummary})`);
+        this.log(`ℹ️ ${groupedEntry.uid} 스킵 - 단일발견 갤로그 필터 미달 (${buildGallogPrivacySummary(gallogPrivacy)})`);
+        continue;
+      }
+
+      guestbookCandidateCount += 1;
+      let guestbookState;
+      try {
+        guestbookState = await this.fetchUidGallogGuestbookState(this.config, groupedEntry.uid);
+      } catch (error) {
+        guestbookFailureCount += 1;
+        this.log(`⚠️ ${groupedEntry.uid} 방명록 잠금 확인 실패 - ${error.message}`);
+        continue;
+      }
+
+      if (guestbookState?.success !== true) {
+        guestbookFailureCount += 1;
+        this.log(`⚠️ ${groupedEntry.uid} 방명록 잠금 확인 실패 - ${guestbookState?.message || '응답 형식 오류'}`);
+        continue;
+      }
+
+      guestbookSuccessCount += 1;
+      if (guestbookState.guestbookLocked !== true) {
+        this.log(
+          `ℹ️ ${groupedEntry.uid} 스킵 - 단일발견 갤로그 필터 미달 (${buildGallogPrivacySummary(gallogPrivacy)} / ${buildGuestbookStateSummary(guestbookState)})`,
+        );
         continue;
       }
 
@@ -285,12 +387,11 @@ class Scheduler {
         continue;
       }
 
-      this.lastTriggeredUid = groupedEntry.uid;
-      this.lastTriggeredPostCount = targetPosts.length;
-      this.lastBurstRecentCount = recentRows.length;
-      this.totalTriggeredUidCount += 1;
+      this.lastSingleSightTriggeredUid = groupedEntry.uid;
+      this.lastSingleSightTriggeredPostCount = targetPosts.length;
+      this.totalSingleSightTriggeredUidCount += 1;
       this.log(
-        `🚨 ${groupedEntry.uid} page1 5분 텍스트 burst ${recentRows.length}글 / 글비중 ${formatPostRatio(effectivePostRatio)}% / 갤로그 게시글·댓글 비공개 -> page1 ${targetPosts.length}개 제재 시작`,
+        `🚨 ${groupedEntry.uid} 단일발견 깡계 fast-path / 글비중 ${formatPostRatio(effectivePostRatio)}% / 총합 ${totalActivityCount} / 갤로그 게시글·댓글 비공개 + 방명록 잠금 -> page1 ${targetPosts.length}개 제재 시작`,
       );
 
       const result = await this.executeBan({
@@ -306,6 +407,7 @@ class Scheduler {
         },
       });
 
+      this.totalSingleSightBannedPostCount += result.successNos.length;
       this.totalBannedPostCount += result.successNos.length;
       this.totalFailedPostCount += result.failedNos.length;
       this.deleteLimitFallbackCount += result.deleteLimitFallbackCount;
@@ -315,15 +417,15 @@ class Scheduler {
       this.runtimeDeleteEnabled = result.finalDeleteEnabled;
 
       if (result.successNos.length > 0) {
-        this.log(`⛔ ${groupedEntry.uid} page1 글 ${result.successNos.length}개 차단${result.finalDeleteEnabled ? '/삭제' : ''} 완료`);
+        this.log(`⛔ ${groupedEntry.uid} 단일발견 깡계 글 ${result.successNos.length}개 차단${result.finalDeleteEnabled ? '/삭제' : ''} 완료`);
       }
 
       if (result.banOnlyRetrySuccessCount > 0) {
-        this.log(`🧯 삭제 한도 초과로 ${groupedEntry.uid} 글 ${result.banOnlyRetrySuccessCount}개는 차단만 수행`);
+        this.log(`🧯 삭제 한도 초과로 ${groupedEntry.uid} 단일발견 글 ${result.banOnlyRetrySuccessCount}개는 차단만 수행`);
       }
 
       if (result.failedNos.length > 0) {
-        this.log(`⚠️ ${groupedEntry.uid} 제재 실패 ${result.failedNos.length}개 - ${result.failedNos.join(', ')}`);
+        this.log(`⚠️ ${groupedEntry.uid} 단일발견 깡계 제재 실패 ${result.failedNos.length}개 - ${result.failedNos.join(', ')}`);
       }
 
       const success = result.failedNos.length === 0 && result.successNos.length > 0;
@@ -339,6 +441,8 @@ class Scheduler {
       this.lastError = '식별코드 활동 통계 조회에 실패해 이번 사이클을 건너뛰었습니다.';
     } else if (gallogCandidateCount > 0 && gallogSuccessCount === 0 && gallogFailureCount > 0) {
       this.lastError = '갤로그 공개/비공개 확인에 실패해 이번 사이클을 건너뛰었습니다.';
+    } else if (guestbookCandidateCount > 0 && guestbookSuccessCount === 0 && guestbookFailureCount > 0) {
+      this.lastError = '방명록 잠금 확인에 실패해 단일발견 깡계 판정을 건너뛰었습니다.';
     }
 
     pruneRecentUidActions(this.recentUidActions);
@@ -497,12 +601,16 @@ class Scheduler {
           lastTriggeredUid: this.lastTriggeredUid,
           lastTriggeredPostCount: this.lastTriggeredPostCount,
           lastBurstRecentCount: this.lastBurstRecentCount,
+          lastSingleSightTriggeredUid: this.lastSingleSightTriggeredUid,
+          lastSingleSightTriggeredPostCount: this.lastSingleSightTriggeredPostCount,
           lastImmediateTitleBanCount: this.lastImmediateTitleBanCount,
           lastImmediateTitleBanMatchedTitle: this.lastImmediateTitleBanMatchedTitle,
           lastPageRowCount: this.lastPageRowCount,
           lastPageUidCount: this.lastPageUidCount,
           totalTriggeredUidCount: this.totalTriggeredUidCount,
+          totalSingleSightTriggeredUidCount: this.totalSingleSightTriggeredUidCount,
           totalImmediateTitleBanPostCount: this.totalImmediateTitleBanPostCount,
+          totalSingleSightBannedPostCount: this.totalSingleSightBannedPostCount,
           totalBannedPostCount: this.totalBannedPostCount,
           totalFailedPostCount: this.totalFailedPostCount,
           deleteLimitFallbackCount: this.deleteLimitFallbackCount,
@@ -538,12 +646,16 @@ class Scheduler {
       this.lastTriggeredUid = String(schedulerState.lastTriggeredUid || '');
       this.lastTriggeredPostCount = Math.max(0, Number(schedulerState.lastTriggeredPostCount) || 0);
       this.lastBurstRecentCount = Math.max(0, Number(schedulerState.lastBurstRecentCount) || 0);
+      this.lastSingleSightTriggeredUid = String(schedulerState.lastSingleSightTriggeredUid || '');
+      this.lastSingleSightTriggeredPostCount = Math.max(0, Number(schedulerState.lastSingleSightTriggeredPostCount) || 0);
       this.lastImmediateTitleBanCount = Math.max(0, Number(schedulerState.lastImmediateTitleBanCount) || 0);
       this.lastImmediateTitleBanMatchedTitle = String(schedulerState.lastImmediateTitleBanMatchedTitle || '');
       this.lastPageRowCount = Math.max(0, Number(schedulerState.lastPageRowCount) || 0);
       this.lastPageUidCount = Math.max(0, Number(schedulerState.lastPageUidCount) || 0);
       this.totalTriggeredUidCount = Math.max(0, Number(schedulerState.totalTriggeredUidCount) || 0);
+      this.totalSingleSightTriggeredUidCount = Math.max(0, Number(schedulerState.totalSingleSightTriggeredUidCount) || 0);
       this.totalImmediateTitleBanPostCount = Math.max(0, Number(schedulerState.totalImmediateTitleBanPostCount) || 0);
+      this.totalSingleSightBannedPostCount = Math.max(0, Number(schedulerState.totalSingleSightBannedPostCount) || 0);
       this.totalBannedPostCount = Math.max(0, Number(schedulerState.totalBannedPostCount) || 0);
       this.totalFailedPostCount = Math.max(0, Number(schedulerState.totalFailedPostCount) || 0);
       this.deleteLimitFallbackCount = Math.max(0, Number(schedulerState.deleteLimitFallbackCount) || 0);
@@ -602,12 +714,16 @@ class Scheduler {
       lastTriggeredUid: this.lastTriggeredUid,
       lastTriggeredPostCount: this.lastTriggeredPostCount,
       lastBurstRecentCount: this.lastBurstRecentCount,
+      lastSingleSightTriggeredUid: this.lastSingleSightTriggeredUid,
+      lastSingleSightTriggeredPostCount: this.lastSingleSightTriggeredPostCount,
       lastImmediateTitleBanCount: this.lastImmediateTitleBanCount,
       lastImmediateTitleBanMatchedTitle: this.lastImmediateTitleBanMatchedTitle,
       lastPageRowCount: this.lastPageRowCount,
       lastPageUidCount: this.lastPageUidCount,
       totalTriggeredUidCount: this.totalTriggeredUidCount,
+      totalSingleSightTriggeredUidCount: this.totalSingleSightTriggeredUidCount,
       totalImmediateTitleBanPostCount: this.totalImmediateTitleBanPostCount,
+      totalSingleSightBannedPostCount: this.totalSingleSightBannedPostCount,
       totalBannedPostCount: this.totalBannedPostCount,
       totalFailedPostCount: this.totalFailedPostCount,
       deleteLimitFallbackCount: this.deleteLimitFallbackCount,
@@ -666,6 +782,25 @@ function normalizeAvoidReasonText(value) {
   }
 
   return normalized;
+}
+
+function buildGallogPrivacySummary(privacy = {}) {
+  return [
+    privacy.postingPrivate ? '게시글 비공개' : '게시글 공개',
+    privacy.commentPrivate ? '댓글 비공개' : '댓글 공개',
+  ].join(' / ');
+}
+
+function buildGuestbookStateSummary(state = {}) {
+  if (state.guestbookLocked === true) {
+    return '방명록 잠금';
+  }
+
+  if (state.guestbookWritable === true) {
+    return '방명록 공개';
+  }
+
+  return '방명록 미확인';
 }
 
 function buildUidActionKey(galleryId, uid) {

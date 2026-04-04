@@ -54,7 +54,9 @@
   ga('gallog_home.send', 'pageview')
   </script>
   
-      <script type="text/javascript">
+    <script src="/_js/jquery/jquery.validate.min.js" type="text/javascript" charset="utf-8"></script>
+<script src="/_js/guestbook.js?v=250925" type="text/javascript" charset="utf-8"></script>
+  <script type="text/javascript">
 		document.domain = "dcinside.com";
 	</script>
 </head>
@@ -66,7 +68,7 @@
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
 
-  gtag('config', 'G-M13K6V9PME');
+  gtag('config', 'G-ZVFV8DKP29');
 </script>
 
 <script type="text/javascript">
@@ -96,7 +98,7 @@ $(function(){
   </div>
 
   <!-- //스킵 내비게이션-->
-  <div id="top" class="gallog_wrap width1160 home">
+  <div id="top" class="gallog_wrap width1160 guestbook">
     <!-- 상단 -->
     <div class="headbox">
       <div class="dchead">
@@ -111,12 +113,12 @@ $(function(){
     				<li><a href="https://event.dcinside.com">이벤트</a></li>
     				<li><a href="https://mall.dcinside.com/?from=A08">디시콘</a></li>
     				
-										<li class="area_nickname"><a href="javascript:;" id="btn_gallog_user_lyr" class="btn_user_data">ㅇㅇ님</a><!-- li와 a태그 사이 여백 없이 요청드립니다. / 레이어 펼침 시 on 클래스 삽입 -->
+										<li class="area_nickname"><a href="javascript:;" id="btn_gallog_user_lyr" class="btn_user_data">だいき님</a><!-- li와 a태그 사이 여백 없이 요청드립니다. / 레이어 펼침 시 on 클래스 삽입 -->
                       <!-- #user_data_lyr.user_data -->
                       <div id="user_data_lyr" class="user_data" style="right:0;top:25px;display:none">
                         <ul class="user_data_list">
                           <li>
-                            <a href="https://gallog.dcinside.com/camel9912">MY갤로그<em class="sp_img icon_go"></em></a>
+                            <a href="https://gallog.dcinside.com/image8481">MY갤로그<em class="sp_img icon_go"></em></a>
                           </li>
                           <li>
                             <a href="https://sign.dcinside.com/myinfo/modify">고정닉정보<em class="sp_img icon_go"></em></a>
@@ -129,7 +131,7 @@ $(function(){
                       </div>
                       <!-- //#user_data_lyr.user_data -->
                     </li>
-					<li><a class="btn_top_loginout" href="https://sign.dcinside.com/logout?s_url=https%3A%2F%2Fgallog.dcinside.com%2Fdecided5206">로그아웃</a></li>
+					<li><a class="btn_top_loginout" href="https://sign.dcinside.com/logout?s_url=https%3A%2F%2Fgallog.dcinside.com%2Fsummit1923">로그아웃</a></li>
 										
   			  </ul>
 		  	  <div class="fl darkmodebox">
@@ -220,7 +222,7 @@ $(function(){
 </div>
 <!-- //알림 -->
 <script type="text/javascript">
-alarm_init('4c60d6edd4958b');
+alarm_init('4369d1e7d6938a');
 </script>		</div>
 
       </div>
@@ -236,7 +238,7 @@ alarm_init('4c60d6edd4958b');
         <div class="tright_box clear">
   			<!-- 방문자수 영역 -->
   			<div class="visitors_num rbox">
-  			  <span class="today_num">오늘의 방문자<em class="today_num">4/</em><em class="total_num ">4</em></span>  <!-- 210527 갤로그 개선 태그사이 여백x-->
+  			  <span class="today_num">오늘의 방문자<em class="today_num">9/</em><em class="total_num ">9</em></span>  <!-- 210527 갤로그 개선 태그사이 여백x-->
   			</div>
 			<!-- 달력 영역 -->
 			<div class="calendar_wrap rbox">
@@ -260,16 +262,16 @@ alarm_init('4c60d6edd4958b');
           <div class="wrap_left"><!-- 210527 gallog_contop삭제 wrap_left 추가 -->
             <ul class="gallog_menu">
               <!-- 210527 메뉴명 변경 -->
-              <li class="home"><a href="/decided5206">홈</a></li>
-              <li class="posting"><a href="/decided5206/posting">게시글</a></li>
-              <li class="comment"><a href="/decided5206/comment">댓글</a></li>
-              <li class="scrap"><a href="/decided5206/scrap">스크랩</a></li>
+              <li class="home"><a href="/summit1923">홈</a></li>
+              <li class="posting"><a href="/summit1923/posting">게시글</a></li>
+              <li class="comment"><a href="/summit1923/comment">댓글</a></li>
+              <li class="scrap"><a href="/summit1923/scrap">스크랩</a></li>
               <li class="guestbook">
-                <a href="/decided5206/guestbook">방명록</a>
+                <a href="/summit1923/guestbook">방명록</a>
               </li>
               
                           </ul>
-            <script>$('.gallog_menu .home').addClass('on');</script>
+            <script>$('.gallog_menu .guestbook').addClass('on');</script>
                       </div>
           <div id="secret_tip_pop" class="pop_tipbox secret_tip" style="display:none">
       		<p class="txt">익명 사용 미니갤에 남긴 글은 작성자만 볼 수 있습니다.</p>
@@ -278,86 +280,103 @@ alarm_init('4c60d6edd4958b');
           <div class="wrap_right">
             <section>
             
-              <div id="jquery_jplayer"></div>
-
-<!-- 게시글 -->
-<section>
-  <div class="gallog_cont">
-	<header>
-	  <div class="cont_head clear">
-		<h2 class="tit" onclick="location.href='/decided5206/posting';" style="cursor:pointer">게시글<span class="num">(7)</span></h2>
-		<span class="greybox">비공개</span>
+              <div class="gallog_cont">
+  <header>
+	<div class="cont_head clear">
+	  <h2 class="tit">방명록<span class="num">(0)</span></h2>
+	  <div class="option_sort fr gallog">
+		
+				
+	    <div class="select_box select_arraybox">
+	      <div class="select_area"><span class="placeholder">2026</span><em class="sp_img icon_option_more"></em></div>
+	      <ul id="sel_year" class="option_box" style="left:-1px;top:26px;display:none">
+	        
+	        	        <li data-value="2026" onclick="location.href='?y=2026'">2026</li>
+	        	        
+	      </ul>
+	    </div>
+	    <script>select_ul($('#sel_year').parent(), 's_year');</script>
+	    
 	  </div>
-	</header>
-	<div class="cont_box">
-	  
-	  
-<div class="gallog_empty small">
-  게시글이 없습니다. 
-</div>
-	  
 	</div>
-  </div>
-</section>
-
-<!-- 댓글 -->
-<section>
-  <div class="gallog_cont comments">
-	<header>
-	  <div class="cont_head clear">
-		<h2 class="tit" onclick="location.href='/decided5206/comment';" style="cursor:pointer">댓글<span class="num">(1)</span></h2>
-		<span class="greybox">비공개</span>
-	  </div>
-	</header>
-	<div class="cont_box">
-	
-	  
-<div class="gallog_empty small">
-  댓글이 없습니다. 
-</div>
-	  
+  </header>
+  <div class="cont_box">
+	<!-- 방명록 입력 -->
+	<div class="cmt_write_box gallog clear">
+		
+				<div class="nomem_comment_info">허용된 사용자만 방명록을 작성할 수 있습니다.</div>
+				
 	</div>
-  </div>
-</section>
-
-<!-- 스크랩 -->
-<section>
-  <div class="gallog_cont scraps">
-	<header>
-	  <div class="cont_head clear">
-		<h2 class="tit" onclick="location.href='/decided5206/scrap';" style="cursor:pointer">스크랩<span class="num">(0)</span></h2>
-		<span class="greybox">비공개</span>
-	  </div>
-	</header>
-	<div class="cont_box">
 	
-	  
-<div class="gallog_empty small">
-  스크랩에 글이 없습니다. 
-</div>
-	  
-	</div>
-  </div>
-</section>
-
-<!-- 방명록 -->
-<section>
-  <div class="gallog_cont gstbook">
-	<header>
-	  <div class="cont_head clear">
-		<h2 class="tit" onclick="location.href='/decided5206/guestbook';" style="cursor:pointer">방명록<span class="num">(0)</span></h2>
-	  </div>
-	</header>
-	<div class="cont_box">
-	
-	  	  
-		<div class="gallog_empty small">
-        방명록이 없습니다. 
+		
+		<div class="gallog_empty">
+                  방명록이 없습니다. 
     </div>
         
+	<!-- 페이징 -->
+	  </div>
+</div>
+	
+<script id="gb_write_form-tmpl" type="text/x-jquery-tmpl">
+<li class="{{if is_modify}}gst{{else}}comments{{/if}} {{if is_reply}}replys{{/if}} {{if is_first_reply}}line{{/if}}" data-no="${no}" {{if typeof(password) != 'undefined' && password}}data-password="${password}"{{/if}}>
+  <div class="inr clear">
+	<div class="cont box1">
+	<button type="button" class="writer_info">
+	  {{if nickname}}
+		{{html nickname}}
+	  {{else}}
+		 <em class='nickname in' title='だいき' >だいき</em> <span class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0  width='12'  height='11'  style='margin-left:2px;cursor:pointer;' onClick="window.open('/image8481');"></span>	  {{/if}}
+	</button>
+	</div>
+	<div class="cont box2">
+	<!-- cmt_write_box gallog mdf -->
+	<div class="cmt_write_box gallog mdf">
+	  <div class="cmt_txt_cont">
+		<div class="cmt_write">
+		  <textarea>${memo}</textarea>
+		</div>
+		<div class="cmt_cont_bottm clear">
+		   <div class="fl">
+
+			{{if secret !== false && (typeof(password) == 'undefined' || !password)}}
+			<span class="checkbox">
+				<input type="checkbox" id="comment_chk_${no}" name="is_secret" ${secret}="1" value="1">
+				<em class="checkmark"></em>
+				<label for="comment_chk_${no}">비밀글</label>
+			</span>
+			{{/if}}
+
+		   </div>
+		   <div class="fr cont_btnbox">
+			 <button type="button" class="btn_cancel btn_lightgrey smaller">취소</button>
+			 <button type="submit" class="btn_modify_submit btn_grey smaller">등록</button>
+		   </div>
+		</div>
+	  </div>
+	</div>
 	</div>
   </div>
-</section>              
+</li>
+</script>
+
+<script id="gb_password_form-tmpl" type="text/x-jquery-tmpl">
+<div class="cmt_delpw_box" style="margin:4px 0 0 -133px">
+  <input type="password" title="비밀번호" placeholder="비밀번호" class="cmt_delpw">
+  <button type="button" class="btn_ok">확인</button>
+  <button type="button" class="btn_cmtpw_close" onclick="$(this).parent().remove();"><span class="blind">닫기</span><em class="sp_img icon_cmtpw_close"></em></button>
+</div>
+</script>
+
+<script>
+(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+})(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+ga('create', 'UA-55858419-3', 'auto', {'name': 'gallog_guestbook'});
+ga('gallog_guestbook.require', 'displayfeatures');
+ga('gallog_guestbook.send', 'pageview')
+</script>              
             </section>
             <footer class="dcfoot">
              <div class="info_policy">

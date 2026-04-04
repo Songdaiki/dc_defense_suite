@@ -296,6 +296,30 @@ function parseGallogPrivacy(html) {
   };
 }
 
+function parseGallogGuestbookState(html) {
+  const normalizedHtml = String(html || '');
+  const guestbookLocked = normalizedHtml.includes('허용된 사용자만 방명록을 작성할 수 있습니다.');
+  const guestbookWritable = /<form[^>]*(?:name="gb_form"|id="gb_form")[^>]*>/i.test(normalizedHtml);
+  const guestbookStateKnown = guestbookLocked || guestbookWritable;
+
+  if (!guestbookStateKnown) {
+    return {
+      success: false,
+      message: '방명록 잠금 상태를 파싱하지 못했습니다.',
+      guestbookLocked: false,
+      guestbookWritable: false,
+      guestbookStateKnown: false,
+    };
+  }
+
+  return {
+    success: true,
+    guestbookLocked,
+    guestbookWritable,
+    guestbookStateKnown: true,
+  };
+}
+
 function shouldSkipBoardRow(rowHtml) {
   const numberCellMatch = rowHtml.match(/<td[^>]*class="gall_num[^"]*"[^>]*>([\s\S]*?)<\/td>/i);
   const numberText = decodeHtml(stripTags(numberCellMatch ? numberCellMatch[1] : ''));
@@ -433,6 +457,7 @@ export {
   normalizeImmediateTitleBanRules,
   normalizeImmediateTitleValue,
   parseImmediateTitleBanRows,
+  parseGallogGuestbookState,
   parseGallogPrivacy,
   parseGallTimestampKst,
   parseUidWarningAutoBanRows,

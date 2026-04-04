@@ -940,6 +940,14 @@
               <span id="uidWarningAutoBanLastBurstRecentCount" class="status-value">0개</span>
             </div>
             <div class="status-item">
+              <span class="status-label">최근 단일깡계 UID</span>
+              <span id="uidWarningAutoBanLastSingleSightTriggeredUid" class="status-value">-</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">최근 단일깡계 제재</span>
+              <span id="uidWarningAutoBanLastSingleSightTriggeredPostCount" class="status-value">0개</span>
+            </div>
+            <div class="status-item">
               <span class="status-label">제목 직차단 규칙</span>
               <span id="uidWarningAutoBanImmediateTitleRuleCount" class="status-value">0개</span>
             </div>
@@ -956,8 +964,16 @@
               <span id="uidWarningAutoBanTotalTriggeredUidCount" class="status-value">0명</span>
             </div>
             <div class="status-item">
+              <span class="status-label">누적 단일깡계 UID</span>
+              <span id="uidWarningAutoBanTotalSingleSightTriggeredUidCount" class="status-value">0명</span>
+            </div>
+            <div class="status-item">
               <span class="status-label">누적 제목 직차단</span>
               <span id="uidWarningAutoBanTotalImmediateTitleBanPostCount" class="status-value">0개</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">누적 단일깡계 글</span>
+              <span id="uidWarningAutoBanTotalSingleSightBannedPostCount" class="status-value">0개</span>
             </div>
             <div class="status-item">
               <span class="status-label">누적 성공 글</span>
@@ -977,7 +993,7 @@
             </div>
           </div>
 
-          <p id="uidWarningAutoBanMetaText" class="manual-utility-meta">1분마다 1페이지를 확인해 금칙 제목 포함 매치는 즉시 차단하고, 나머지는 5분 안에 2글 이상 + 글비중 90% + 갤로그 글/댓글 비공개 uid를 6시간 차단/삭제합니다.</p>
+          <p id="uidWarningAutoBanMetaText" class="manual-utility-meta">1분마다 1페이지를 확인해 금칙 제목 포함 매치는 즉시 차단하고, 나머지는 5분 안에 2글 이상 깡계와 방명록까지 잠긴 저활동 깡계를 함께 6시간 차단/삭제합니다.</p>
 
           <details class="settings-section uid-warning-title-ban-section">
             <summary>제목 직차단 금칙어</summary>

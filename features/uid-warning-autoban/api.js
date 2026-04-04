@@ -59,6 +59,24 @@ async function fetchGallogHomeHtml(config = {}, uid = '') {
   });
 }
 
+async function fetchGallogGuestbookHtml(config = {}, uid = '') {
+  return withDcRequestLease({ feature: 'uidWarningAutoBan', kind: 'fetchGallogGuestbookHtml' }, async () => {
+    const resolved = resolveConfig(config);
+    const normalizedUid = String(uid || '').trim();
+    if (!normalizedUid) {
+      throw new Error('식별코드(uid) 없음');
+    }
+
+    const url = new URL(`/${encodeURIComponent(normalizedUid)}/guestbook`, resolved.gallogBaseUrl);
+    const response = await dcFetchWithRetry(url.toString(), {
+      headers: {
+        Referer: `${resolved.baseUrl}/mgallery/board/lists/?id=${resolved.galleryId}`,
+      },
+    });
+    return response.text();
+  });
+}
+
 async function dcFetch(url, options = {}) {
   return fetch(url, {
     credentials: 'include',
@@ -109,6 +127,7 @@ export {
   LEGACY_AVOID_REASON_TEXT,
   PREVIOUS_DEFAULT_AVOID_REASON_TEXT,
   delay,
+  fetchGallogGuestbookHtml,
   fetchGallogHomeHtml,
   fetchUidWarningAutoBanListHTML,
   resolveConfig,
