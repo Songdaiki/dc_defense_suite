@@ -38,7 +38,7 @@ function getAttackModeHumanLabel(value) {
     case ATTACK_MODE.CJK_NARROW:
       return '중국어/한자 공격';
     case ATTACK_MODE.SEMICONDUCTOR_REFLUX:
-      return '반도체 역류 공격';
+      return '역류기 공격';
     default:
       return '일반 공격';
   }
@@ -49,7 +49,7 @@ function getAttackModeFilterLabel(value) {
     case ATTACK_MODE.CJK_NARROW:
       return '한자/CJK 필터';
     case ATTACK_MODE.SEMICONDUCTOR_REFLUX:
-      return '반도체 역류 제목 필터';
+      return '역류기 제목 필터';
     default:
       return '전체 유동';
   }
@@ -60,7 +60,7 @@ function getAttackModeSubjectLabel(value) {
     case ATTACK_MODE.CJK_NARROW:
       return '한자/CJK 제목';
     case ATTACK_MODE.SEMICONDUCTOR_REFLUX:
-      return '반도체 역류 제목';
+      return '역류기 제목';
     default:
       return '일반 제목';
   }
@@ -123,7 +123,7 @@ function buildAttackModeDecision(
   if (refluxLikeCount >= ATTACK_MODE_SAMPLE_MATCH_THRESHOLD && hanLikeCount <= 0) {
     return {
       attackMode: ATTACK_MODE.SEMICONDUCTOR_REFLUX,
-      reason: `새 유동글 샘플 ${normalizedSamplePosts.length}개 중 ${refluxLikeCount}개가 반도체 역류 제목`,
+      reason: `새 유동글 샘플 ${normalizedSamplePosts.length}개 중 ${refluxLikeCount}개가 역류기 제목`,
       sampleCount: normalizedSamplePosts.length,
       hanLikeCount,
       refluxLikeCount,
@@ -134,7 +134,7 @@ function buildAttackModeDecision(
   if (hanLikeCount > 0 && refluxLikeCount > 0) {
     return {
       attackMode: ATTACK_MODE.DEFAULT,
-      reason: `새 유동글 샘플 ${normalizedSamplePosts.length}개에 Han/CJK 제목과 반도체 역류 제목이 섞여 있어 DEFAULT 유지`,
+      reason: `새 유동글 샘플 ${normalizedSamplePosts.length}개에 Han/CJK 제목과 역류기 제목이 섞여 있어 DEFAULT 유지`,
       sampleCount: normalizedSamplePosts.length,
       hanLikeCount,
       refluxLikeCount,

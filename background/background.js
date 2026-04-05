@@ -18,6 +18,11 @@ import {
   Scheduler as BumpPostScheduler,
   normalizeConfig as normalizeBumpPostConfig,
 } from '../features/bump-post/scheduler.js';
+import {
+  Scheduler as RefluxDatasetCollectorScheduler,
+  normalizeConfig as normalizeRefluxDatasetCollectorConfig,
+} from '../features/reflux-dataset-collector/scheduler.js';
+import { isValidGalleryId as isValidRefluxCollectorGalleryId } from '../features/reflux-dataset-collector/api.js';
 import { Scheduler as PostScheduler } from '../features/post/scheduler.js';
 import { normalizeAttackMode as normalizePostAttackMode } from '../features/post/attack-mode.js';
 import { Scheduler as SemiPostScheduler } from '../features/semi-post/scheduler.js';
@@ -55,6 +60,7 @@ const conceptPatrolScheduler = new ConceptPatrolScheduler({
 });
 const hanRefreshIpBanScheduler = new HanRefreshIpBanScheduler();
 const bumpPostScheduler = new BumpPostScheduler();
+const refluxDatasetCollectorScheduler = new RefluxDatasetCollectorScheduler();
 const postScheduler = new PostScheduler();
 const semiPostScheduler = new SemiPostScheduler();
 const ipScheduler = new IpScheduler();
@@ -72,6 +78,7 @@ const schedulers = {
   conceptPatrol: conceptPatrolScheduler,
   hanRefreshIpBan: hanRefreshIpBanScheduler,
   bumpPost: bumpPostScheduler,
+  refluxDatasetCollector: refluxDatasetCollectorScheduler,
   post: postScheduler,
   semiPost: semiPostScheduler,
   ip: ipScheduler,
@@ -183,6 +190,7 @@ async function resumeAllSchedulers() {
     await loadSchedulerStateIfIdle(schedulers.conceptPatrol);
     await loadSchedulerStateIfIdle(schedulers.hanRefreshIpBan);
     await loadSchedulerStateIfIdle(schedulers.bumpPost);
+    await loadSchedulerStateIfIdle(schedulers.refluxDatasetCollector);
     await loadSchedulerStateIfIdle(schedulers.post);
     await loadSchedulerStateIfIdle(schedulers.semiPost);
     await loadSchedulerStateIfIdle(schedulers.ip);
@@ -279,6 +287,7 @@ function getAllStatuses() {
     conceptPatrol: schedulers.conceptPatrol.getStatus(),
     hanRefreshIpBan: schedulers.hanRefreshIpBan.getStatus(),
     bumpPost: schedulers.bumpPost.getStatus(),
+    refluxDatasetCollector: schedulers.refluxDatasetCollector.getStatus(),
     post: schedulers.post.getStatus(),
     semiPost: schedulers.semiPost.getStatus(),
     ip: schedulers.ip.getStatus(),
@@ -544,6 +553,26 @@ async function handleMessage(message) {
           });
         }
 
+        if (message.feature === 'refluxDatasetCollector') {
+          const rawGalleryId = message.config.galleryId;
+          if (rawGalleryId !== undefined) {
+            const trimmedGalleryId = String(rawGalleryId || '').trim();
+            if (trimmedGalleryId && !isValidRefluxCollectorGalleryId(trimmedGalleryId)) {
+              return {
+                success: false,
+                message: '갤 ID는 영문/숫자/밑줄만 입력하세요.',
+                status: scheduler.getStatus(),
+                statuses: getAllStatuses(),
+              };
+            }
+          }
+
+          message.config = normalizeRefluxDatasetCollectorConfig({
+            ...scheduler.config,
+            ...message.config,
+          });
+        }
+
         if (message.feature === 'conceptPatrol') {
           message.config = normalizeConceptPatrolConfig({
             ...scheduler.config,
@@ -601,7 +630,19 @@ async function handleMessage(message) {
     }
 
     case 'resetStats':
+      if (message.feature === 'refluxDatasetCollector' && scheduler.isRunning) {
+        return {
+          success: false,
+          message: '역류기글 수집 실행 중에는 통계와 로그를 초기화할 수 없습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
       resetSchedulerStats(message.feature, scheduler);
+      if (message.feature === 'refluxDatasetCollector'
+        && typeof scheduler.clearCollectedData === 'function') {
+        await scheduler.clearCollectedData();
+      }
       if (message.feature === 'conceptMonitor'
         && typeof scheduler.syncRecommendCutCoordinator === 'function') {
         await scheduler.syncRecommendCutCoordinator();
@@ -612,6 +653,22 @@ async function handleMessage(message) {
         status: scheduler.getStatus(),
         statuses: getAllStatuses(),
         sessionFallbackStatus: getDcSessionBrokerStatus(),
+      };
+
+    case 'downloadExportJson':
+      if (message.feature !== 'refluxDatasetCollector'
+        || typeof scheduler.buildDownloadPayload !== 'function') {
+        return {
+          success: false,
+          message: '이 기능은 JSON 다운로드를 지원하지 않습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+      return {
+        ...(await scheduler.buildDownloadPayload()),
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
       };
 
     case 'releaseTrackedBans':
@@ -750,6 +807,24 @@ function resetSchedulerStats(feature, scheduler) {
       scheduler.endsAt = '';
       scheduler.nextRunAt = '';
     }
+    return;
+  }
+
+  if (feature === 'refluxDatasetCollector') {
+    scheduler.runId = '';
+    scheduler.phase = scheduler.isRunning ? 'RUNNING' : 'IDLE';
+    scheduler.currentPage = 0;
+    scheduler.fetchedPageCount = 0;
+    scheduler.rawTitleCount = 0;
+    scheduler.normalizedTitleCount = 0;
+    scheduler.startedAt = '';
+    scheduler.finishedAt = '';
+    scheduler.lastError = '';
+    scheduler.logs = [];
+    scheduler.downloadReady = false;
+    scheduler.exportVersion = '';
+    scheduler.interrupted = false;
+    scheduler.collectedGalleryId = '';
     return;
   }
 
@@ -1049,6 +1124,22 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
       && Number(config.intervalMinutes) !== Number(scheduler.config.intervalMinutes);
     if (postNoChanged || durationChanged || intervalChanged) {
       return '끌올 자동 설정은 기능을 정지한 뒤 변경하세요.';
+    }
+  }
+
+  if (feature === 'refluxDatasetCollector') {
+    const galleryIdChanged = config.galleryId !== undefined
+      && String(config.galleryId || '') !== String(scheduler.config.galleryId || '');
+    const startPageChanged = config.startPage !== undefined
+      && Number(config.startPage) !== Number(scheduler.config.startPage);
+    const endPageChanged = config.endPage !== undefined
+      && Number(config.endPage) !== Number(scheduler.config.endPage);
+    const requestDelayChanged = config.requestDelayMs !== undefined
+      && Number(config.requestDelayMs) !== Number(scheduler.config.requestDelayMs);
+    const jitterChanged = config.jitterMs !== undefined
+      && Number(config.jitterMs) !== Number(scheduler.config.jitterMs);
+    if (galleryIdChanged || startPageChanged || endPageChanged || requestDelayChanged || jitterChanged) {
+      return '역류기글 수집 설정은 기능을 정지한 뒤 변경하세요.';
     }
   }
 

@@ -8,6 +8,7 @@ const DIRTY_FEATURES = {
   conceptPatrol: false,
   hanRefreshIpBan: false,
   bumpPost: false,
+  refluxDatasetCollector: false,
   commentMonitor: false,
   comment: false,
   post: false,
@@ -25,6 +26,7 @@ let latestSessionFallbackStatus = null;
 let latestUidRatioWarningStatus = null;
 let latestUidWarningAutoBanStatus = null;
 let latestBumpPostStatus = null;
+let latestRefluxDatasetCollectorStatus = null;
 
 const SESSION_FALLBACK_DOM = {
   keepaliveToggle: document.getElementById('sessionFallbackKeepaliveToggle'),
@@ -147,6 +149,31 @@ const FEATURE_DOM = {
     intervalMinutesInput: document.getElementById('bumpPostIntervalMinutes'),
     saveConfigBtn: document.getElementById('bumpPostSaveConfigBtn'),
     resetBtn: document.getElementById('bumpPostResetBtn'),
+  },
+  refluxDatasetCollector: {
+    toggleBtn: document.getElementById('refluxDatasetCollectorToggleBtn'),
+    toggleLabel: document.getElementById('refluxDatasetCollectorToggleLabel'),
+    statusText: document.getElementById('refluxDatasetCollectorStatusText'),
+    phaseText: document.getElementById('refluxDatasetCollectorPhaseText'),
+    galleryIdText: document.getElementById('refluxDatasetCollectorGalleryIdText'),
+    progressText: document.getElementById('refluxDatasetCollectorProgressText'),
+    fetchedPageCountText: document.getElementById('refluxDatasetCollectorFetchedPageCountText'),
+    rawTitleCountText: document.getElementById('refluxDatasetCollectorRawTitleCountText'),
+    normalizedTitleCountText: document.getElementById('refluxDatasetCollectorNormalizedTitleCountText'),
+    startedAtText: document.getElementById('refluxDatasetCollectorStartedAtText'),
+    finishedAtText: document.getElementById('refluxDatasetCollectorFinishedAtText'),
+    exportVersionText: document.getElementById('refluxDatasetCollectorExportVersionText'),
+    lastErrorText: document.getElementById('refluxDatasetCollectorLastErrorText'),
+    metaText: document.getElementById('refluxDatasetCollectorMetaText'),
+    logList: document.getElementById('refluxDatasetCollectorLogList'),
+    galleryIdInput: document.getElementById('refluxDatasetCollectorGalleryId'),
+    startPageInput: document.getElementById('refluxDatasetCollectorStartPage'),
+    endPageInput: document.getElementById('refluxDatasetCollectorEndPage'),
+    requestDelayMsInput: document.getElementById('refluxDatasetCollectorRequestDelayMs'),
+    jitterMsInput: document.getElementById('refluxDatasetCollectorJitterMs'),
+    saveConfigBtn: document.getElementById('refluxDatasetCollectorSaveConfigBtn'),
+    downloadBtn: document.getElementById('refluxDatasetCollectorDownloadBtn'),
+    resetBtn: document.getElementById('refluxDatasetCollectorResetBtn'),
   },
   commentMonitor: {
     toggleBtn: document.getElementById('commentMonitorToggleBtn'),
@@ -344,6 +371,7 @@ function bindFeatureEvents() {
   bindConfigDirtyTracking('conceptPatrol');
   bindConfigDirtyTracking('hanRefreshIpBan');
   bindConfigDirtyTracking('bumpPost');
+  bindConfigDirtyTracking('refluxDatasetCollector');
   bindConfigDirtyTracking('commentMonitor');
   bindConfigDirtyTracking('comment');
   bindConfigDirtyTracking('post');
@@ -354,6 +382,7 @@ function bindFeatureEvents() {
   bindConceptMonitorEvents();
   bindHanRefreshIpBanEvents();
   bindBumpPostEvents();
+  bindRefluxDatasetCollectorEvents();
   bindCommentMonitorEvents();
   bindCommentEvents();
   bindPostEvents();
@@ -866,6 +895,143 @@ function bindBumpPostEvents() {
   });
 }
 
+function bindRefluxDatasetCollectorEvents() {
+  const dom = FEATURE_DOM.refluxDatasetCollector;
+
+  dom.toggleBtn.addEventListener('change', async () => {
+    const action = dom.toggleBtn.checked ? 'start' : 'stop';
+
+    if (action === 'start' && DIRTY_FEATURES.refluxDatasetCollector) {
+      alert('역류기글 수집 설정을 먼저 저장하세요.');
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (action === 'start') {
+      const galleryId = normalizeRefluxDatasetCollectorGalleryId(dom.galleryIdInput.value);
+      if (!galleryId) {
+        alert('갤 ID를 입력하세요.');
+        dom.galleryIdInput.focus();
+        await refreshAllStatuses();
+        return;
+      }
+
+      if (!isValidRefluxDatasetCollectorGalleryId(galleryId)) {
+        alert('갤 ID는 영문/숫자/밑줄만 입력하세요.');
+        dom.galleryIdInput.focus();
+        dom.galleryIdInput.select();
+        await refreshAllStatuses();
+        return;
+      }
+    }
+
+    const response = await sendFeatureMessage('refluxDatasetCollector', { action });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.saveConfigBtn.addEventListener('click', async () => {
+    const galleryId = normalizeRefluxDatasetCollectorGalleryId(dom.galleryIdInput.value);
+    if (galleryId && !isValidRefluxDatasetCollectorGalleryId(galleryId)) {
+      alert('갤 ID는 영문/숫자/밑줄만 입력하세요.');
+      dom.galleryIdInput.focus();
+      dom.galleryIdInput.select();
+      return;
+    }
+
+    const startPage = Math.max(1, parseOptionalInt(dom.startPageInput.value, 1));
+    const endPage = Math.max(startPage, parseOptionalInt(dom.endPageInput.value, startPage));
+    const requestDelayMs = Math.max(500, parseOptionalInt(dom.requestDelayMsInput.value, 1200));
+    const jitterMs = Math.max(0, parseOptionalInt(dom.jitterMsInput.value, 400));
+
+    const config = {
+      galleryId,
+      startPage,
+      endPage,
+      requestDelayMs,
+      jitterMs,
+    };
+
+    const response = await sendFeatureMessage('refluxDatasetCollector', { action: 'updateConfig', config });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    DIRTY_FEATURES.refluxDatasetCollector = false;
+    flashSaved(dom.saveConfigBtn);
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.downloadBtn.addEventListener('click', async () => {
+    const response = await sendFeatureMessage('refluxDatasetCollector', { action: 'downloadExportJson' });
+    if (!response?.success || !response.payload) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    const blob = new Blob(
+      [JSON.stringify(response.payload, null, 2)],
+      { type: 'application/json;charset=utf-8' },
+    );
+    const objectUrl = URL.createObjectURL(blob);
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.href = objectUrl;
+    downloadAnchor.download = String(response.fileName || 'reflux-title-set.json');
+    downloadAnchor.click();
+    URL.revokeObjectURL(objectUrl);
+
+    flashSaved(dom.downloadBtn, '✅ 다운로드');
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.resetBtn.addEventListener('click', async () => {
+    if (!confirm('역류기글 수집 통계와 로그, 다운로드 대기 데이터를 초기화하시겠습니까?')) {
+      return;
+    }
+
+    const response = await sendFeatureMessage('refluxDatasetCollector', { action: 'resetStats' });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+}
+
 function bindCommentMonitorEvents() {
   const dom = FEATURE_DOM.commentMonitor;
 
@@ -1097,7 +1263,7 @@ function bindPostEvents() {
   });
 
   bindPostQuickAttackModeToggle(dom.cjkModeToggleInput, 'cjk_narrow', '중국어/한자 공격');
-  bindPostQuickAttackModeToggle(dom.semiconductorRefluxModeToggleInput, 'semiconductor_reflux', '반도체 역류 공격');
+  bindPostQuickAttackModeToggle(dom.semiconductorRefluxModeToggleInput, 'semiconductor_reflux', '역류기 공격');
 
   dom.saveConfigBtn.addEventListener('click', async () => {
     const config = {
@@ -1646,6 +1812,7 @@ function applyStatuses(statuses) {
   updateConceptPatrolUI(statuses.conceptPatrol);
   updateHanRefreshIpBanUI(statuses.hanRefreshIpBan);
   updateBumpPostUI(statuses.bumpPost);
+  updateRefluxDatasetCollectorUI(statuses.refluxDatasetCollector);
   updateCommentMonitorUI(statuses.commentMonitor);
   updateMonitorUI(statuses.monitor);
   updateCommentUI(statuses.comment);
@@ -1928,6 +2095,50 @@ function updateBumpPostUI(status) {
   getFeatureConfigInputs('bumpPost').forEach((input) => setDisabled(input, isLocked));
   setDisabled(dom.saveConfigBtn, isLocked);
   setDisabled(dom.resetBtn, false);
+  setDisabled(dom.toggleBtn, false);
+}
+
+function updateRefluxDatasetCollectorUI(status) {
+  const dom = FEATURE_DOM.refluxDatasetCollector;
+  if (!dom?.toggleBtn) {
+    return;
+  }
+
+  const nextStatus = status || buildDefaultRefluxDatasetCollectorStatus();
+  latestRefluxDatasetCollectorStatus = nextStatus;
+  const displayGalleryId = String(nextStatus.collectedGalleryId || nextStatus.config?.galleryId || '');
+
+  updateToggle(dom, nextStatus.isRunning);
+  updateStatusText(
+    dom.statusText,
+    getRefluxDatasetCollectorStatusLabel(nextStatus),
+    getRefluxDatasetCollectorStatusClassName(nextStatus),
+  );
+  dom.phaseText.textContent = nextStatus.phase || 'IDLE';
+  dom.galleryIdText.textContent = displayGalleryId || '-';
+  dom.progressText.textContent = buildRefluxDatasetCollectorProgressText(nextStatus);
+  dom.fetchedPageCountText.textContent = `${nextStatus.fetchedPageCount ?? 0}페이지`;
+  dom.rawTitleCountText.textContent = `${nextStatus.rawTitleCount ?? 0}개`;
+  dom.normalizedTitleCountText.textContent = `${nextStatus.normalizedTitleCount ?? 0}개`;
+  dom.startedAtText.textContent = formatTimestamp(nextStatus.startedAt);
+  dom.finishedAtText.textContent = formatTimestamp(nextStatus.finishedAt);
+  dom.exportVersionText.textContent = nextStatus.exportVersion || '-';
+  dom.lastErrorText.textContent = nextStatus.lastError || '-';
+  dom.metaText.textContent = buildRefluxDatasetCollectorMetaText(nextStatus);
+  syncFeatureConfigInputs('refluxDatasetCollector', [
+    [dom.galleryIdInput, nextStatus.config?.galleryId ?? ''],
+    [dom.startPageInput, nextStatus.config?.startPage ?? 1],
+    [dom.endPageInput, nextStatus.config?.endPage ?? 397],
+    [dom.requestDelayMsInput, nextStatus.config?.requestDelayMs ?? 1200],
+    [dom.jitterMsInput, nextStatus.config?.jitterMs ?? 400],
+  ]);
+  updateLogList(dom.logList, nextStatus.logs);
+
+  const isLocked = Boolean(nextStatus.isRunning);
+  getFeatureConfigInputs('refluxDatasetCollector').forEach((input) => setDisabled(input, isLocked));
+  setDisabled(dom.saveConfigBtn, isLocked);
+  setDisabled(dom.downloadBtn, isLocked || !nextStatus.downloadReady);
+  setDisabled(dom.resetBtn, isLocked);
   setDisabled(dom.toggleBtn, false);
 }
 
@@ -2279,6 +2490,33 @@ function buildDefaultBumpPostStatus() {
   };
 }
 
+function buildDefaultRefluxDatasetCollectorStatus() {
+  return {
+    isRunning: false,
+    phase: 'IDLE',
+    runId: '',
+    currentPage: 0,
+    fetchedPageCount: 0,
+    rawTitleCount: 0,
+    normalizedTitleCount: 0,
+    startedAt: '',
+    finishedAt: '',
+    lastError: '',
+    logs: [],
+    downloadReady: false,
+    exportVersion: '',
+    interrupted: false,
+    collectedGalleryId: '',
+    config: {
+      galleryId: '',
+      startPage: 1,
+      endPage: 397,
+      requestDelayMs: 1200,
+      jitterMs: 400,
+    },
+  };
+}
+
 function getBumpPostStatusLabel(status = {}) {
   if (status.isRunning && status.phase === 'WAITING') {
     return '🟡 다음 끌올 대기 중';
@@ -2333,6 +2571,87 @@ function buildBumpPostMetaText(status = {}) {
   }
 
   return `${postNo} 글을 시작 즉시 1회 끌올한 뒤 ${intervalMinutes}분마다 반복하고, ${durationMinutes}분이 지나면 자동 정지합니다.`;
+}
+
+function getRefluxDatasetCollectorStatusLabel(status = {}) {
+  if (status.isRunning && status.phase === 'WAITING') {
+    return '🟡 다음 페이지 대기 중';
+  }
+
+  if (status.isRunning) {
+    return '🟢 수집 중';
+  }
+
+  if (status.interrupted) {
+    return '🟠 중단됨';
+  }
+
+  if (status.downloadReady) {
+    return '🟢 수집 완료';
+  }
+
+  if (status.lastError) {
+    return '🔴 정지 (최근 오류)';
+  }
+
+  return '🔴 정지';
+}
+
+function getRefluxDatasetCollectorStatusClassName(status = {}) {
+  if (status.isRunning) {
+    return status.phase === 'WAITING' ? 'status-warn' : 'status-on';
+  }
+
+  if (status.downloadReady) {
+    return 'status-on';
+  }
+
+  if (status.interrupted || status.lastError) {
+    return 'status-warn';
+  }
+
+  return 'status-off';
+}
+
+function buildRefluxDatasetCollectorProgressText(status = {}) {
+  const currentPage = Number(status.currentPage) || 0;
+  const endPage = Number(status.config?.endPage) || 0;
+  if (currentPage <= 0 || endPage <= 0) {
+    return '-';
+  }
+
+  return `${currentPage} / ${endPage}`;
+}
+
+function buildRefluxDatasetCollectorMetaText(status = {}) {
+  const galleryId = status.collectedGalleryId
+    ? String(status.collectedGalleryId)
+    : (status.config?.galleryId ? String(status.config.galleryId) : '미지정');
+  if (status.lastError) {
+    return `최근 오류: ${status.lastError}`;
+  }
+
+  if (status.interrupted) {
+    return '이전 수집 작업이 중간에 끊겨 자동 복원을 건너뛰었습니다. 설정을 확인한 뒤 다시 시작하세요.';
+  }
+
+  if (status.downloadReady) {
+    return `${galleryId} 수집이 완료되었습니다. JSON 다운로드로 배포용 dataset 파일을 내려받을 수 있습니다.`;
+  }
+
+  if (status.isRunning) {
+    return `${galleryId} 목록 제목을 순차 수집 중입니다. 병렬 요청 없이 delay + jitter를 적용합니다.`;
+  }
+
+  return '정지 상태입니다. 수집 시작 후 완료되면 JSON 다운로드가 활성화됩니다.';
+}
+
+function normalizeRefluxDatasetCollectorGalleryId(value) {
+  return String(value || '').trim();
+}
+
+function isValidRefluxDatasetCollectorGalleryId(value) {
+  return /^[a-z0-9_]+$/i.test(normalizeRefluxDatasetCollectorGalleryId(value));
 }
 
 function normalizeBumpPostPostNoInputValue(value) {
@@ -2611,6 +2930,16 @@ function getFeatureConfigInputs(feature) {
       dom.postNoInput,
       dom.durationMinutesInput,
       dom.intervalMinutesInput,
+    ];
+  }
+
+  if (feature === 'refluxDatasetCollector') {
+    return [
+      dom.galleryIdInput,
+      dom.startPageInput,
+      dom.endPageInput,
+      dom.requestDelayMsInput,
+      dom.jitterMsInput,
     ];
   }
 

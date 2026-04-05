@@ -18,6 +18,7 @@ const runtimeState = {
   titleCount: 0,
   updatedAt: '',
   sourceGalleryId: '',
+  sourceGalleryIds: [],
   version: '',
   sourceType: '',
 };
@@ -98,10 +99,12 @@ function shouldHydrateBundledState(storedState, bundledState) {
 
 function normalizeSemiconductorRefluxTitleSetState(storedState) {
   const normalizedTitles = dedupeNormalizedTitles(storedState?.titles || []);
+  const sourceGalleryIds = normalizeSourceGalleryIds(storedState);
   return {
     titles: normalizedTitles,
     updatedAt: String(storedState?.updatedAt || '').trim(),
-    sourceGalleryId: String(storedState?.sourceGalleryId || '').trim(),
+    sourceGalleryId: sourceGalleryIds[0] || '',
+    sourceGalleryIds,
     version: String(storedState?.version || '').trim(),
     sourceType: String(storedState?.sourceType || '').trim(),
   };
@@ -115,6 +118,7 @@ function hydrateSemiconductorRefluxTitleSetState(storedState) {
   runtimeState.titleCount = normalizedTitles.length;
   runtimeState.updatedAt = normalizedState.updatedAt;
   runtimeState.sourceGalleryId = normalizedState.sourceGalleryId;
+  runtimeState.sourceGalleryIds = normalizedState.sourceGalleryIds;
   runtimeState.version = normalizedState.version;
   runtimeState.sourceType = normalizedState.sourceType;
 }
@@ -126,6 +130,7 @@ function getSemiconductorRefluxTitleSetStatus() {
     titleCount: runtimeState.titleCount,
     updatedAt: runtimeState.updatedAt,
     sourceGalleryId: runtimeState.sourceGalleryId,
+    sourceGalleryIds: [...runtimeState.sourceGalleryIds],
     version: runtimeState.version,
     sourceType: runtimeState.sourceType,
   };
@@ -151,6 +156,7 @@ async function replaceSemiconductorRefluxTitleSet(titles, options = {}) {
     titles,
     updatedAt: String(options?.updatedAt || new Date().toISOString()),
     sourceGalleryId: String(options?.sourceGalleryId || '').trim(),
+    sourceGalleryIds: Array.isArray(options?.sourceGalleryIds) ? options.sourceGalleryIds : undefined,
     version: String(options?.version || '').trim(),
     sourceType: String(options?.sourceType || 'manual').trim(),
   });
@@ -173,6 +179,20 @@ function dedupeNormalizedTitles(titles) {
       .map((title) => normalizeSemiconductorRefluxTitle(title))
       .filter(Boolean),
   )];
+}
+
+function normalizeSourceGalleryIds(storedState) {
+  const rawSourceGalleryIds = Array.isArray(storedState?.sourceGalleryIds)
+    ? storedState.sourceGalleryIds
+    : [];
+  const fallbackSourceGalleryId = String(storedState?.sourceGalleryId || '').trim();
+
+  const normalizedSourceGalleryIds = [
+    ...rawSourceGalleryIds.map((value) => String(value || '').trim()).filter(Boolean),
+    ...(fallbackSourceGalleryId ? [fallbackSourceGalleryId] : []),
+  ];
+
+  return [...new Set(normalizedSourceGalleryIds)];
 }
 
 export {

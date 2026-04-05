@@ -552,7 +552,7 @@ class Scheduler {
             return;
         }
 
-        throw new Error('반도체 역류 제목 데이터셋이 비어 있어 시작할 수 없습니다.');
+        throw new Error('역류기 제목 데이터셋이 비어 있어 시작할 수 없습니다.');
     }
 }
 
