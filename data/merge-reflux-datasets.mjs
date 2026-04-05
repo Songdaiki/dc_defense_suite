@@ -3,9 +3,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { normalizeSemiconductorRefluxTitle } from '../features/post/attack-mode.js';
 
 const DEFAULT_OUTPUT_PATH = 'data/semiconductor-reflux-title-set.json';
-const INVISIBLE_CHARS_REGEX = /[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g;
 
 async function main() {
   const { inputPaths, outputPath, version } = parseCliArgs(process.argv.slice(2));
@@ -147,24 +147,9 @@ function normalizeSourceGalleryIds(payload) {
 function dedupeNormalizedTitles(titles) {
   return [...new Set(
     (Array.isArray(titles) ? titles : [])
-      .map((title) => normalizeRefluxTitle(title))
+      .map((title) => normalizeSemiconductorRefluxTitle(title))
       .filter(Boolean),
   )];
-}
-
-function normalizeRefluxTitle(value) {
-  let normalizedTitle = String(value || '');
-  try {
-    normalizedTitle = normalizedTitle.normalize('NFKC');
-  } catch (error) {
-    // Node 환경에서도 normalize가 실패할 수 있으니, 실패해도 다음 정리는 계속 진행한다.
-  }
-
-  return normalizedTitle
-    .replace(INVISIBLE_CHARS_REGEX, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 function buildAutoVersion(now = new Date()) {
