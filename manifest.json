@@ -9,8 +9,7 @@
     "cookies",
     "tabs",
     "scripting",
-    "notifications",
-    "downloads"
+    "notifications"
   ],
   "host_permissions": [
     "https://gall.dcinside.com/*",

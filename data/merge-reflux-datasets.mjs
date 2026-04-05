@@ -5,7 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { normalizeSemiconductorRefluxTitle } from '../features/post/attack-mode.js';
 
-const DEFAULT_OUTPUT_PATH = 'data/semiconductor-reflux-title-set.json';
+const DEFAULT_OUTPUT_PATH = 'data/reflux-title-set-unified.json';
 
 async function main() {
   const { inputPaths, outputPath, version } = parseCliArgs(process.argv.slice(2));

@@ -2,6 +2,9 @@ import { normalizeSemiconductorRefluxTitle } from './attack-mode.js';
 
 const STORAGE_KEY = 'semiconductorRefluxTitleSetState';
 // 번들 dataset은 모든 관리자에게 같이 배포되는 원본이다.
+// 이름이 `reflux-title-set-unified.json`인 이유는,
+// 수집 원본(reflux-title-set-<gallery>-<version>.json)과
+// 실제 확장이 읽는 최종 통합 배포본을 파일명만 봐도 구분하려는 목적이다.
 // 예:
 // - 배포본 version = 2026-04-05-v1
 // - 관리자 로컬 cache version = 2026-04-05-v0
@@ -10,7 +13,7 @@ const STORAGE_KEY = 'semiconductorRefluxTitleSetState';
 // 중요:
 // dataset 제목을 수정했다면 JSON 안의 `version`도 반드시 같이 올려야 한다.
 // version이 그대로면 "같은 dataset"으로 간주해서 기존 cache를 유지할 수 있다.
-const BUNDLED_DATASET_PATH = 'data/semiconductor-reflux-title-set.json';
+const BUNDLED_DATASET_PATH = 'data/reflux-title-set-unified.json';
 
 const runtimeState = {
   loaded: false,

@@ -991,7 +991,39 @@ function bindRefluxDatasetCollectorEvents() {
       return;
     }
 
-    flashSaved(dom.downloadBtn, '✅ 다운로드 시작');
+    let titles;
+    try {
+      titles = await loadRefluxCollectorTitlesForRunInPopup(response.runId);
+    } catch (error) {
+      alert(`IndexedDB 제목 로드 실패 - ${error.message}`);
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (!Array.isArray(titles) || titles.length <= 0) {
+      alert('IndexedDB에 저장된 제목이 비어 있습니다.');
+      await refreshAllStatuses();
+      return;
+    }
+
+    const payload = buildRefluxCollectorExportPayload({
+      version: response.version,
+      updatedAt: response.updatedAt,
+      collectedGalleryId: response.collectedGalleryId,
+      titles,
+    });
+    const blob = new Blob(
+      [JSON.stringify(payload, null, 2)],
+      { type: 'application/json;charset=utf-8' },
+    );
+    const objectUrl = URL.createObjectURL(blob);
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.href = objectUrl;
+    downloadAnchor.download = String(response.fileName || 'reflux-title-set.json');
+    downloadAnchor.click();
+    URL.revokeObjectURL(objectUrl);
+
+    flashSaved(dom.downloadBtn, '✅ 다운로드');
     if (response.statuses) {
       applyStatuses(response.statuses);
     } else {
@@ -3237,6 +3269,70 @@ function syncConfigInput(input, nextValue) {
 function parseOptionalInt(value, fallback) {
   const parsed = parseInt(value, 10);
   return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+const REFLEX_DATASET_COLLECTOR_DB_NAME = 'refluxDatasetCollectorDb';
+const REFLEX_DATASET_COLLECTOR_DB_VERSION = 1;
+const REFLEX_DATASET_COLLECTOR_TITLES_STORE_NAME = 'titles';
+const REFLEX_DATASET_COLLECTOR_RUN_ID_INDEX = 'runId';
+
+function openRefluxCollectorDatabaseInPopup() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(REFLEX_DATASET_COLLECTOR_DB_NAME, REFLEX_DATASET_COLLECTOR_DB_VERSION);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(REFLEX_DATASET_COLLECTOR_TITLES_STORE_NAME)) {
+        const store = db.createObjectStore(REFLEX_DATASET_COLLECTOR_TITLES_STORE_NAME, {
+          keyPath: 'key',
+        });
+        store.createIndex(REFLEX_DATASET_COLLECTOR_RUN_ID_INDEX, 'runId', { unique: false });
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('IndexedDB 열기 실패'));
+  });
+}
+
+async function loadRefluxCollectorTitlesForRunInPopup(runId) {
+  const normalizedRunId = String(runId || '').trim();
+  if (!normalizedRunId) {
+    return [];
+  }
+
+  const db = await openRefluxCollectorDatabaseInPopup();
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(REFLEX_DATASET_COLLECTOR_TITLES_STORE_NAME, 'readonly');
+      const store = transaction.objectStore(REFLEX_DATASET_COLLECTOR_TITLES_STORE_NAME);
+      const index = store.index(REFLEX_DATASET_COLLECTOR_RUN_ID_INDEX);
+      const request = index.getAll(normalizedRunId);
+      request.onsuccess = () => {
+        const titles = (Array.isArray(request.result) ? request.result : [])
+          .map((entry) => String(entry?.title || '').trim())
+          .filter(Boolean)
+          .sort((left, right) => left.localeCompare(right, 'ko-KR'));
+        resolve(titles);
+      };
+      request.onerror = () => reject(request.error || new Error('IndexedDB load 실패'));
+    });
+  } finally {
+    db.close();
+  }
+}
+
+function buildRefluxCollectorExportPayload({ version, updatedAt, collectedGalleryId, titles }) {
+  return {
+    _comment: 'JSON은 일반 주석을 지원하지 않아서 안내를 _comment 필드로 남긴다.',
+    _comment_update_rule: 'titles를 수정했다면 version도 반드시 같이 올려야 한다. version이 그대로면 기존 관리자 local cache가 유지될 수 있다.',
+    _comment_example: '예: 제목을 추가/삭제했다면 version을 2026-04-05-v1 -> 2026-04-06-v2 같이 올린다.',
+    _comment_scope: '이 파일은 반도체산업갤, 특이점이온다갤 등 여러 출처를 합친 통합 역류기 dataset으로 써도 된다.',
+    version: String(version || '').trim(),
+    updatedAt: String(updatedAt || '').trim(),
+    sourceGalleryIds: collectedGalleryId ? [String(collectedGalleryId).trim()] : [],
+    titles: Array.isArray(titles) ? titles : [],
+  };
 }
 
 function formatAttackModeLabel(value) {

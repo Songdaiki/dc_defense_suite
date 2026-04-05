@@ -183,7 +183,7 @@ class Scheduler {
     }
   }
 
-  async buildDownloadPayload() {
+  async buildDownloadDescriptor() {
     if (!this.downloadReady || !this.runId) {
       return {
         success: false,
@@ -191,32 +191,17 @@ class Scheduler {
       };
     }
 
-    const titles = await this.loadTitlesForRun(this.runId);
-    if (!titles.length) {
-      return {
-        success: false,
-        message: 'IndexedDB에 저장된 제목이 비어 있습니다.',
-      };
-    }
-
     const version = this.exportVersion || buildDatasetVersion(this.finishedAt || new Date().toISOString());
     const collectedGalleryId = this.collectedGalleryId || normalizeGalleryId(this.config.galleryId);
-    const payload = {
-      _comment: 'JSON은 일반 주석을 지원하지 않아서 안내를 _comment 필드로 남긴다.',
-      _comment_update_rule: 'titles를 수정했다면 version도 반드시 같이 올려야 한다. version이 그대로면 기존 관리자 local cache가 유지될 수 있다.',
-      _comment_example: '예: 제목을 추가/삭제했다면 version을 2026-04-05-v1 -> 2026-04-06-v2 같이 올린다.',
-      _comment_scope: '이 파일은 반도체산업갤, 특이점이온다갤 등 여러 출처를 합친 통합 역류기 dataset으로 써도 된다.',
-      version,
-      updatedAt: this.finishedAt || new Date().toISOString(),
-      sourceGalleryIds: collectedGalleryId ? [collectedGalleryId] : [],
-      titles,
-    };
 
     return {
       success: true,
-      payload,
+      runId: this.runId,
+      collectedGalleryId,
+      updatedAt: this.finishedAt || new Date().toISOString(),
+      version,
       fileName: buildDownloadFileName(collectedGalleryId, version),
-      titleCount: titles.length,
+      titleCount: this.normalizedTitleCount,
     };
   }
 
