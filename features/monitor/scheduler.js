@@ -1,12 +1,21 @@
 import { deletePosts, fetchPostListHTML, delay } from '../post/api.js';
-import { isHanCjkSpamLikePost, parseBoardPosts } from '../post/parser.js';
+import { parseBoardPosts } from '../post/parser.js';
+import {
+  ATTACK_MODE,
+  ATTACK_MODE_SAMPLE_POST_LIMIT,
+  buildAttackModeDecision,
+  formatAttackModeLabel,
+  getAttackModeFilterLabel,
+  isEligibleForAttackMode,
+  normalizeAttackMode,
+} from '../post/attack-mode.js';
+import {
+  ensureSemiconductorRefluxTitleSetLoaded,
+  hasSemiconductorRefluxTitle,
+  isSemiconductorRefluxTitleSetReady,
+} from '../post/semiconductor-reflux-title-set.js';
 
 const STORAGE_KEY = 'monitorSchedulerState';
-const ATTACK_MODE = {
-  DEFAULT: 'default',
-  CJK_NARROW: 'cjk_narrow',
-};
-const ATTACK_MODE_SAMPLE_POST_LIMIT = 3;
 
 const PHASE = {
   SEEDING: 'SEEDING',
@@ -88,6 +97,7 @@ class Scheduler {
       throw new Error(startBlockReason);
     }
 
+    await ensureSemiconductorRefluxTitleSetLoaded();
     this.isRunning = true;
     this.phase = PHASE.SEEDING;
     this.currentPollPage = 0;
@@ -336,9 +346,9 @@ class Scheduler {
     if (this.attackModeSampleTitles.length > 0) {
       this.log(`🧾 공격 샘플 제목: ${formatAttackSampleTitles(this.attackModeSampleTitles)}`);
     }
-    if (this.attackMode === ATTACK_MODE.CJK_NARROW) {
+    if (this.attackMode !== ATTACK_MODE.DEFAULT) {
       this.log(
-        `🧹 initial sweep 대상 ${formatInitialSweepSnapshotScope(initialSweepPages)} 유동 ${initialSweepAllFluidPosts.length}개 -> 한자/CJK 필터 후 ${initialSweepTargetPosts.length}개`,
+        `🧹 initial sweep 대상 ${formatInitialSweepSnapshotScope(initialSweepPages)} 유동 ${initialSweepAllFluidPosts.length}개 -> ${getAttackModeFilterLabel(this.attackMode)} 후 ${initialSweepTargetPosts.length}개`,
       );
     } else {
       this.log(`🧹 initial sweep 대상 ${formatInitialSweepSnapshotScope(initialSweepPages)} 유동 ${initialSweepTargetPosts.length}개`);
@@ -378,11 +388,14 @@ class Scheduler {
 
   decideAttackMode(metrics) {
     const samplePosts = pickAttackModeSamplePosts(metrics);
-    return analyzeHanCjkAttackSample(samplePosts);
+    return buildAttackModeDecision(samplePosts, {
+      isSemiconductorRefluxDatasetReady: isSemiconductorRefluxTitleSetReady(),
+      matchesSemiconductorRefluxTitle: hasSemiconductorRefluxTitle,
+    });
   }
 
   maybeWidenAttackMode(metrics) {
-    if (this.attackMode !== ATTACK_MODE.CJK_NARROW) {
+    if (this.attackMode === ATTACK_MODE.DEFAULT) {
       return false;
     }
 
@@ -391,14 +404,17 @@ class Scheduler {
       return false;
     }
 
-    if (attackModeDecision.hanLikeCount > 0) {
+    if (attackModeDecision.attackMode === this.attackMode) {
       return false;
     }
 
+    const previousAttackModeLabel = formatAttackModeLabel(this.attackMode);
     this.attackMode = ATTACK_MODE.DEFAULT;
-    this.attackModeReason = '공격 중 최신 샘플 3개에 Han/CJK 제목이 없어 DEFAULT로 확장';
+    this.attackModeReason = attackModeDecision.attackMode === ATTACK_MODE.DEFAULT
+      ? attackModeDecision.reason
+      : `공격 중 최신 샘플 3개가 ${formatAttackModeLabel(attackModeDecision.attackMode)} 패턴으로 바뀌어 DEFAULT로 확장`;
     this.attackModeSampleTitles = attackModeDecision.sampleTitles;
-    this.log(`↔️ 공격 모드 확장: CJK_NARROW -> DEFAULT (${this.attackModeReason})`);
+    this.log(`↔️ 공격 모드 확장: ${previousAttackModeLabel} -> DEFAULT (${this.attackModeReason})`);
     if (this.attackModeSampleTitles.length > 0) {
       this.log(`🧾 공격 샘플 제목: ${formatAttackSampleTitles(this.attackModeSampleTitles)}`);
     }
@@ -824,6 +840,7 @@ class Scheduler {
         ...this.config,
         ...(schedulerState.config || {}),
       };
+      await ensureSemiconductorRefluxTitleSetLoaded();
     } catch (error) {
       console.error('[MonitorScheduler] 상태 복원 실패:', error.message);
     }
@@ -915,20 +932,8 @@ function normalizePhase(value) {
   return Object.values(PHASE).includes(value) ? value : PHASE.SEEDING;
 }
 
-function normalizeAttackMode(value) {
-  return value === ATTACK_MODE.CJK_NARROW
-    ? ATTACK_MODE.CJK_NARROW
-    : ATTACK_MODE.DEFAULT;
-}
-
 function formatRatio(value) {
   return Number(value || 0).toFixed(1);
-}
-
-function formatAttackModeLabel(value) {
-  return normalizeAttackMode(value) === ATTACK_MODE.CJK_NARROW
-    ? 'CJK_NARROW'
-    : 'DEFAULT';
 }
 
 function formatAttackSampleTitles(titles) {
@@ -980,19 +985,14 @@ function buildInitialSweepPosts(snapshot, attackMode = ATTACK_MODE.DEFAULT, init
   const limitedSnapshot = filterSnapshotByMaxSourcePage(snapshot, initialSweepPages);
   const allFluidPosts = buildAllFluidSnapshotPosts(limitedSnapshot);
 
-  if (normalizedAttackMode === ATTACK_MODE.CJK_NARROW) {
-    return allFluidPosts.filter((post) => isEligibleForAttackMode(post, normalizedAttackMode));
+  if (normalizedAttackMode !== ATTACK_MODE.DEFAULT) {
+    return allFluidPosts.filter((post) => isEligibleForAttackMode(post, normalizedAttackMode, {
+      isSemiconductorRefluxDatasetReady: isSemiconductorRefluxTitleSetReady(),
+      matchesSemiconductorRefluxTitle: hasSemiconductorRefluxTitle,
+    }));
   }
 
   return allFluidPosts;
-}
-
-function isEligibleForAttackMode(post, attackMode) {
-  if (normalizeAttackMode(attackMode) !== ATTACK_MODE.CJK_NARROW) {
-    return true;
-  }
-
-  return isHanCjkSpamLikePost(post);
 }
 
 function pickAttackModeSamplePosts(metrics) {
@@ -1000,40 +1000,6 @@ function pickAttackModeSamplePosts(metrics) {
     .filter((post) => post?.isFluid)
     .sort((left, right) => (Number(right?.no) || 0) - (Number(left?.no) || 0))
     .slice(0, ATTACK_MODE_SAMPLE_POST_LIMIT);
-}
-
-function analyzeHanCjkAttackSample(samplePosts) {
-  const normalizedSamplePosts = dedupePostsByNo(samplePosts);
-  const sampleTitles = normalizedSamplePosts.map((post) => String(post?.subject || '').trim()).filter(Boolean);
-  const hanLikeCount = normalizedSamplePosts.filter((post) => isHanCjkSpamLikePost(post)).length;
-
-  if (normalizedSamplePosts.length < ATTACK_MODE_SAMPLE_POST_LIMIT) {
-    return {
-      attackMode: ATTACK_MODE.DEFAULT,
-      reason: '샘플 유동글이 3개 미만이라 DEFAULT 유지',
-      sampleCount: normalizedSamplePosts.length,
-      hanLikeCount,
-      sampleTitles,
-    };
-  }
-
-  if (hanLikeCount > 0) {
-    return {
-      attackMode: ATTACK_MODE.CJK_NARROW,
-      reason: `새 유동글 샘플 ${normalizedSamplePosts.length}개 중 ${hanLikeCount}개가 Han/CJK 제목`,
-      sampleCount: normalizedSamplePosts.length,
-      hanLikeCount,
-      sampleTitles,
-    };
-  }
-
-  return {
-    attackMode: ATTACK_MODE.DEFAULT,
-    reason: '새 유동글 샘플 3개 모두 일반 제목이라 DEFAULT 유지',
-    sampleCount: normalizedSamplePosts.length,
-    hanLikeCount,
-    sampleTitles,
-  };
 }
 
 function formatInitialSweepSnapshotScope(monitorPages) {

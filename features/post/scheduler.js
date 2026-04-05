@@ -20,14 +20,25 @@ import {
     parseFluidPosts,
     extractPostNos,
     extractHeadtextName,
-    isHanCjkSpamLikePost,
 } from './parser.js';
+import {
+    ATTACK_MODE,
+    formatAttackModeLabel,
+    getAttackModeFilterLabel,
+    getAttackModeHumanLabel,
+    getAttackModeSubjectLabel,
+    isEligibleForAttackMode,
+    isNarrowAttackMode,
+    normalizeAttackMode,
+} from './attack-mode.js';
+import {
+    ensureSemiconductorRefluxTitleSetLoaded,
+    getSemiconductorRefluxTitleSetStatus,
+    hasSemiconductorRefluxTitle,
+    isSemiconductorRefluxTitleSetReady,
+} from './semiconductor-reflux-title-set.js';
 
 const STORAGE_KEY = 'postSchedulerState';
-const ATTACK_MODE = {
-    DEFAULT: 'default',
-    CJK_NARROW: 'cjk_narrow',
-};
 
 // ============================================================
 // 스케줄러 클래스
@@ -68,7 +79,9 @@ class Scheduler {
             return;
         }
 
+        await ensureSemiconductorRefluxTitleSetLoaded();
         const normalizedOptions = normalizeStartOptions(options);
+        this.assertManualAttackModeReady(normalizedOptions.source, normalizedOptions.attackMode);
         const shouldApplyCutoff = shouldApplyCutoffForSource(
             normalizedOptions.source,
             normalizedOptions.attackMode,
@@ -91,9 +104,9 @@ class Scheduler {
         if (shouldApplyCutoff) {
             this.log(`🧷 ${getCutoffSourceLabel(normalizedOptions.source)} cutoff 저장 (#${cutoffPostNo})`);
         } else {
-            this.log('🧷 수동 게시글 분류 cutoff 미사용 (중국어/한자 공격 수동 모드)');
+            this.log(`🧷 수동 게시글 분류 cutoff 미사용 (${getAttackModeHumanLabel(normalizedOptions.attackMode)} 수동 모드)`);
         }
-        this.log(`🧠 ${getCutoffSourceLabel(normalizedOptions.source)} 분류 모드: ${getAttackModeLabel(this.getEffectiveAttackMode())}`);
+        this.log(`🧠 ${getCutoffSourceLabel(normalizedOptions.source)} 분류 모드: ${formatAttackModeLabel(this.getEffectiveAttackMode())}`);
         this.log('🟢 자동 분류 시작!');
         await this.saveState();
 
@@ -234,11 +247,13 @@ class Scheduler {
             manualAttackMode: normalizeAttackMode(nextConfig.manualAttackMode),
         };
         const nextAttackMode = normalizeAttackMode(normalizedNextConfig.manualAttackMode);
-        const nextCutoffPostNo = nextAttackMode === ATTACK_MODE.CJK_NARROW
+        await ensureSemiconductorRefluxTitleSetLoaded();
+        this.assertManualAttackModeReady('manual', nextAttackMode);
+        const nextCutoffPostNo = isNarrowAttackMode(nextAttackMode)
             ? 0
             : await this.captureCutoffPostNoWithRetry(normalizedNextConfig);
 
-        if (nextAttackMode !== ATTACK_MODE.CJK_NARROW && nextCutoffPostNo <= 0) {
+        if (!isNarrowAttackMode(nextAttackMode) && nextCutoffPostNo <= 0) {
             throw new Error('게시글 분류 cutoff snapshot 추출에 실패했습니다.');
         }
 
@@ -275,8 +290,10 @@ class Scheduler {
             this.currentSource = 'manual';
             this.currentAttackMode = pendingRuntimeTransition.nextAttackMode;
 
-            if (pendingRuntimeTransition.nextAttackMode === ATTACK_MODE.CJK_NARROW) {
-                this.log('🔁 수동 중국어/한자 공격 모드 적용 - 첫 페이지부터 다시 스캔합니다. (cutoff 미사용)');
+            if (isNarrowAttackMode(pendingRuntimeTransition.nextAttackMode)) {
+                this.log(
+                    `🔁 수동 ${getAttackModeHumanLabel(pendingRuntimeTransition.nextAttackMode)} 모드 적용 - 첫 페이지부터 다시 스캔합니다. (cutoff 미사용)`,
+                );
             } else {
                 this.log(
                     `🔁 수동 일반 공격 모드 적용 - 새 cutoff (#${pendingRuntimeTransition.nextCutoffPostNo}) 기준으로 첫 페이지부터 다시 스캔합니다.`,
@@ -337,16 +354,20 @@ class Scheduler {
                     const basePosts = shouldApplyCutoff
                         ? fluidPosts.filter((post) => isPostAfterCutoff(post, this.config.cutoffPostNo))
                         : fluidPosts;
-                    const candidatePosts = basePosts.filter((post) => isEligibleForAttackMode(post, effectiveAttackMode));
+                    const candidatePosts = basePosts.filter((post) => isEligibleForAttackMode(post, effectiveAttackMode, {
+                        isSemiconductorRefluxDatasetReady: isSemiconductorRefluxTitleSetReady(),
+                        matchesSemiconductorRefluxTitle: hasSemiconductorRefluxTitle,
+                    }));
+                    const filterLabel = getAttackModeFilterLabel(effectiveAttackMode);
 
-                    if (effectiveAttackMode === ATTACK_MODE.CJK_NARROW) {
+                    if (isNarrowAttackMode(effectiveAttackMode)) {
                         if (shouldApplyCutoff) {
                             this.log(
-                                `📄 ${page}페이지: 유동닉 ${fluidPosts.length}개 발견, cutoff 이후 ${basePosts.length}개, 한자/CJK 필터 후 ${candidatePosts.length}개`,
+                                `📄 ${page}페이지: 유동닉 ${fluidPosts.length}개 발견, cutoff 이후 ${basePosts.length}개, ${filterLabel} 후 ${candidatePosts.length}개`,
                             );
                         } else {
                             this.log(
-                                `📄 ${page}페이지: 유동닉 ${fluidPosts.length}개 발견, 기존 포함 ${basePosts.length}개, 한자/CJK 필터 후 ${candidatePosts.length}개`,
+                                `📄 ${page}페이지: 유동닉 ${fluidPosts.length}개 발견, 기존 포함 ${basePosts.length}개, ${filterLabel} 후 ${candidatePosts.length}개`,
                             );
                         }
                     } else {
@@ -365,7 +386,7 @@ class Scheduler {
                     await this.classifyPostsOnce(postNos, {
                         logLabel: shouldApplyCutoff
                             ? `${page}페이지 cutoff 이후 게시물`
-                            : `${page}페이지 기존 포함 한자 제목 게시물`,
+                            : `${page}페이지 기존 포함 ${getAttackModeSubjectLabel(effectiveAttackMode)} 게시물`,
                     });
 
                     await this.saveState();
@@ -471,6 +492,7 @@ class Scheduler {
                     this.clearRuntimeAttackMode();
                 }
             }
+            await ensureSemiconductorRefluxTitleSetLoaded();
         } catch (error) {
             console.error('[Scheduler] 상태 복원 실패:', error.message);
         }
@@ -515,6 +537,23 @@ class Scheduler {
             config: this.config,
         };
     }
+
+    assertManualAttackModeReady(source, attackMode) {
+        if (source !== 'manual') {
+            return;
+        }
+
+        if (normalizeAttackMode(attackMode) !== ATTACK_MODE.SEMICONDUCTOR_REFLUX) {
+            return;
+        }
+
+        const datasetStatus = getSemiconductorRefluxTitleSetStatus();
+        if (datasetStatus.titleCount > 0) {
+            return;
+        }
+
+        throw new Error('반도체 역류 제목 데이터셋이 비어 있어 시작할 수 없습니다.');
+    }
 }
 
 // ============================================================
@@ -541,18 +580,6 @@ function getCutoffSourceLabel(source) {
     return source === 'monitor' ? '감시 자동화' : '수동 게시글 분류';
 }
 
-function getAttackModeLabel(mode) {
-    return normalizeAttackMode(mode) === ATTACK_MODE.CJK_NARROW
-        ? 'CJK_NARROW'
-        : 'DEFAULT';
-}
-
-function normalizeAttackMode(value) {
-    return value === ATTACK_MODE.CJK_NARROW
-        ? ATTACK_MODE.CJK_NARROW
-        : ATTACK_MODE.DEFAULT;
-}
-
 function normalizeRunSource(value, fallback = 'manual') {
     return value === 'monitor' || value === 'manual'
         ? value
@@ -564,7 +591,7 @@ function shouldApplyCutoffForSource(source, attackMode) {
         return true;
     }
 
-    return normalizeAttackMode(attackMode) !== ATTACK_MODE.CJK_NARROW;
+    return !isNarrowAttackMode(attackMode);
 }
 
 function getNormalizedPageRange(config = {}) {
@@ -579,14 +606,6 @@ function getMaxPostNo(posts) {
 
 function isPostAfterCutoff(post, cutoffPostNo) {
     return Number(post?.no) > (Number(cutoffPostNo) || 0);
-}
-
-function isEligibleForAttackMode(post, attackMode) {
-    if (normalizeAttackMode(attackMode) !== ATTACK_MODE.CJK_NARROW) {
-        return true;
-    }
-
-    return isHanCjkSpamLikePost(post);
 }
 
 function dedupePostNos(postNos) {

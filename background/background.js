@@ -19,6 +19,7 @@ import {
   normalizeConfig as normalizeBumpPostConfig,
 } from '../features/bump-post/scheduler.js';
 import { Scheduler as PostScheduler } from '../features/post/scheduler.js';
+import { normalizeAttackMode as normalizePostAttackMode } from '../features/post/attack-mode.js';
 import { Scheduler as SemiPostScheduler } from '../features/semi-post/scheduler.js';
 import { Scheduler as IpScheduler } from '../features/ip/scheduler.js';
 import {
@@ -1396,7 +1397,7 @@ async function maybeHandleRunningPostModeTransition(scheduler, config) {
 }
 
 function normalizePostManualAttackMode(value) {
-  return value === 'cjk_narrow' ? 'cjk_narrow' : 'default';
+  return normalizePostAttackMode(value);
 }
 
 function resetSemiPostSchedulerState(message) {

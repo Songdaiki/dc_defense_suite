@@ -207,6 +207,7 @@ const FEATURE_DOM = {
     requestDelayInput: document.getElementById('postRequestDelay'),
     cycleDelayInput: document.getElementById('postCycleDelay'),
     cjkModeToggleInput: document.getElementById('postCjkModeToggle'),
+    semiconductorRefluxModeToggleInput: document.getElementById('postSemiconductorRefluxModeToggle'),
     saveConfigBtn: document.getElementById('postSaveConfigBtn'),
     resetBtn: document.getElementById('postResetBtn'),
   },
@@ -1095,58 +1096,8 @@ function bindPostEvents() {
     updatePostUI(response.status);
   });
 
-  dom.cjkModeToggleInput.addEventListener('change', async () => {
-    const targetEnabled = dom.cjkModeToggleInput.checked;
-    const statusResponse = await sendFeatureMessage('post', { action: 'getStatus' });
-    if (!statusResponse?.success || !statusResponse.status) {
-      await refreshAllStatuses();
-      return;
-    }
-
-    const currentStatus = statusResponse.status;
-    let response = null;
-
-    if (targetEnabled) {
-      if (currentStatus.isRunning) {
-        if (currentStatus.currentSource === 'manual' && currentStatus.currentAttackMode === 'cjk_narrow') {
-          updatePostUI(currentStatus);
-          return;
-        }
-
-        alert('일반 게시글 분류가 이미 실행 중입니다. 먼저 정지한 뒤 중국어/한자 공격을 켜세요.');
-        await refreshAllStatuses();
-        return;
-      }
-
-      response = await sendFeatureMessage('post', {
-        action: 'start',
-        source: 'manual',
-        attackMode: 'cjk_narrow',
-      });
-    } else {
-      if (!currentStatus.isRunning || currentStatus.currentSource !== 'manual' || currentStatus.currentAttackMode !== 'cjk_narrow') {
-        await refreshAllStatuses();
-        return;
-      }
-
-      response = await sendFeatureMessage('post', { action: 'stop' });
-    }
-
-    if (!response?.success) {
-      if (response?.message) {
-        alert(response.message);
-      }
-      await refreshAllStatuses();
-      return;
-    }
-
-    if (response.statuses) {
-      applyStatuses(response.statuses);
-      return;
-    }
-
-    updatePostUI(response.status);
-  });
+  bindPostQuickAttackModeToggle(dom.cjkModeToggleInput, 'cjk_narrow', '중국어/한자 공격');
+  bindPostQuickAttackModeToggle(dom.semiconductorRefluxModeToggleInput, 'semiconductor_reflux', '반도체 역류 공격');
 
   dom.saveConfigBtn.addEventListener('click', async () => {
     const config = {
@@ -1184,6 +1135,65 @@ function bindPostEvents() {
       updatePostUI(response.status);
     }
   });
+
+  function bindPostQuickAttackModeToggle(toggleInput, attackMode, modeLabel) {
+    if (!toggleInput) {
+      return;
+    }
+
+    toggleInput.addEventListener('change', async () => {
+      const targetEnabled = toggleInput.checked;
+      const statusResponse = await sendFeatureMessage('post', { action: 'getStatus' });
+      if (!statusResponse?.success || !statusResponse.status) {
+        await refreshAllStatuses();
+        return;
+      }
+
+      const currentStatus = statusResponse.status;
+      let response = null;
+
+      if (targetEnabled) {
+        if (currentStatus.isRunning) {
+          if (currentStatus.currentSource === 'manual' && currentStatus.currentAttackMode === attackMode) {
+            updatePostUI(currentStatus);
+            return;
+          }
+
+          alert(`일반 게시글 분류가 이미 실행 중입니다. 먼저 정지한 뒤 ${modeLabel}을 켜세요.`);
+          await refreshAllStatuses();
+          return;
+        }
+
+        response = await sendFeatureMessage('post', {
+          action: 'start',
+          source: 'manual',
+          attackMode,
+        });
+      } else {
+        if (!currentStatus.isRunning || currentStatus.currentSource !== 'manual' || currentStatus.currentAttackMode !== attackMode) {
+          await refreshAllStatuses();
+          return;
+        }
+
+        response = await sendFeatureMessage('post', { action: 'stop' });
+      }
+
+      if (!response?.success) {
+        if (response?.message) {
+          alert(response.message);
+        }
+        await refreshAllStatuses();
+        return;
+      }
+
+      if (response.statuses) {
+        applyStatuses(response.statuses);
+        return;
+      }
+
+      updatePostUI(response.status);
+    });
+  }
 }
 
 function bindIpEvents() {
@@ -2010,6 +2020,11 @@ function updatePostUI(status) {
     && status.currentSource === 'manual'
     && status.currentAttackMode === 'cjk_narrow',
   );
+  dom.semiconductorRefluxModeToggleInput.checked = Boolean(
+    status.isRunning
+    && status.currentSource === 'manual'
+    && status.currentAttackMode === 'semiconductor_reflux',
+  );
   updateLogList(dom.logList, status.logs);
 }
 
@@ -2214,6 +2229,7 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uid
   setDisabled(commentDom.resetBtn, commentLocked);
   setDisabled(postDom.toggleBtn, postIpLocked);
   setDisabled(postDom.cjkModeToggleInput, postIpLocked);
+  setDisabled(postDom.semiconductorRefluxModeToggleInput, postIpLocked);
   setDisabled(postDom.saveConfigBtn, postIpLocked);
   setDisabled(postDom.resetBtn, postIpLocked);
   setDisabled(semiPostDom.toggleBtn, postIpLocked);
@@ -2906,7 +2922,15 @@ function parseOptionalInt(value, fallback) {
 }
 
 function formatAttackModeLabel(value) {
-  return value === 'cjk_narrow' ? 'CJK_NARROW' : 'DEFAULT';
+  if (value === 'cjk_narrow') {
+    return 'CJK_NARROW';
+  }
+
+  if (value === 'semiconductor_reflux') {
+    return 'SEMICONDUCTOR_REFLUX';
+  }
+
+  return 'DEFAULT';
 }
 
 function clampPercent(value, fallback, min) {
