@@ -983,7 +983,7 @@ function bindRefluxDatasetCollectorEvents() {
 
   dom.downloadBtn.addEventListener('click', async () => {
     const response = await sendFeatureMessage('refluxDatasetCollector', { action: 'downloadExportJson' });
-    if (!response?.success || !response.payload) {
+    if (!response?.success) {
       if (response?.message) {
         alert(response.message);
       }
@@ -991,18 +991,7 @@ function bindRefluxDatasetCollectorEvents() {
       return;
     }
 
-    const blob = new Blob(
-      [JSON.stringify(response.payload, null, 2)],
-      { type: 'application/json;charset=utf-8' },
-    );
-    const objectUrl = URL.createObjectURL(blob);
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.href = objectUrl;
-    downloadAnchor.download = String(response.fileName || 'reflux-title-set.json');
-    downloadAnchor.click();
-    URL.revokeObjectURL(objectUrl);
-
-    flashSaved(dom.downloadBtn, '✅ 다운로드');
+    flashSaved(dom.downloadBtn, '✅ 다운로드 시작');
     if (response.statuses) {
       applyStatuses(response.statuses);
     } else {

@@ -665,11 +665,71 @@ async function handleMessage(message) {
           statuses: getAllStatuses(),
         };
       }
-      return {
-        ...(await scheduler.buildDownloadPayload()),
-        status: scheduler.getStatus(),
-        statuses: getAllStatuses(),
-      };
+      {
+        const downloadPayloadResult = await scheduler.buildDownloadPayload();
+        if (!downloadPayloadResult?.success || !downloadPayloadResult?.payload) {
+          return {
+            ...downloadPayloadResult,
+            status: scheduler.getStatus(),
+            statuses: getAllStatuses(),
+          };
+        }
+
+        if (!chrome.downloads?.download) {
+          return {
+            success: false,
+            message: '브라우저 다운로드 API를 사용할 수 없습니다.',
+            status: scheduler.getStatus(),
+            statuses: getAllStatuses(),
+          };
+        }
+
+        const blob = new Blob(
+          [JSON.stringify(downloadPayloadResult.payload, null, 2)],
+          { type: 'application/json;charset=utf-8' },
+        );
+        const objectUrl = URL.createObjectURL(blob);
+
+        try {
+          const downloadId = await chrome.downloads.download({
+            url: objectUrl,
+            filename: String(downloadPayloadResult.fileName || 'reflux-title-set.json'),
+            saveAs: false,
+            conflictAction: 'uniquify',
+          });
+
+          // 큰 dataset도 background에서 바로 내려받게 해 popup 메시지 payload 크기를 줄인다.
+          setTimeout(() => {
+            try {
+              URL.revokeObjectURL(objectUrl);
+            } catch (error) {
+              console.warn('[DefenseSuite Background] download object URL revoke 실패:', error);
+            }
+          }, 60000);
+
+          return {
+            success: true,
+            downloadId,
+            fileName: downloadPayloadResult.fileName,
+            titleCount: downloadPayloadResult.titleCount,
+            status: scheduler.getStatus(),
+            statuses: getAllStatuses(),
+          };
+        } catch (error) {
+          try {
+            URL.revokeObjectURL(objectUrl);
+          } catch (revokeError) {
+            console.warn('[DefenseSuite Background] download object URL revoke 실패:', revokeError);
+          }
+
+          return {
+            success: false,
+            message: `JSON 다운로드 시작 실패 - ${error?.message || '알 수 없는 오류'}`,
+            status: scheduler.getStatus(),
+            statuses: getAllStatuses(),
+          };
+        }
+      }
 
     case 'releaseTrackedBans':
       if (message.feature !== 'ip') {
