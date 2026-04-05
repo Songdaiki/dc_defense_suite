@@ -1027,7 +1027,8 @@ function getNormalizedInitialSweepPages(config = {}, attackMode = ATTACK_MODE.DE
     ? Math.max(1, monitorPages)
     : 1;
 
-  if (normalizeAttackMode(attackMode) !== ATTACK_MODE.CJK_NARROW) {
+  // 기본 모드는 감시 범위를 그대로 쓰고, 좁은 공격 모드(CJK/역류기)는 별도 initial sweep 설정을 공유한다.
+  if (normalizeAttackMode(attackMode) === ATTACK_MODE.DEFAULT) {
     return normalizedMonitorPages;
   }
 

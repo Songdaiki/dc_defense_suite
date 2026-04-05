@@ -237,10 +237,10 @@ for (const candidate of allDatasetTitles) {
 
 예시:
 
-- 샘플 3개 중
+- 샘플 5개 중
   - 1개는 Han/CJK
   - 1개는 반도체 Set match
-  - 1개는 일반글
+  - 나머지는 일반글
 
 이 경우:
 
@@ -466,19 +466,19 @@ SEMICONDUCTOR_REFLUX
 
 판정 규칙:
 
-1. 샘플 3개 미만 -> `DEFAULT`
-2. `refluxMatchCount > 0 && hanLikeCount === 0` -> `SEMICONDUCTOR_REFLUX`
-3. `hanLikeCount > 0 && refluxMatchCount === 0` -> `CJK_NARROW`
+1. 샘플 5개 미만 -> `DEFAULT`
+2. `refluxMatchCount >= 3 && hanLikeCount === 0` -> `SEMICONDUCTOR_REFLUX`
+3. `hanLikeCount >= 3 && refluxMatchCount === 0` -> `CJK_NARROW`
 4. `refluxMatchCount > 0 && hanLikeCount > 0` -> `DEFAULT`
-5. 둘 다 0 -> `DEFAULT`
+5. 그 외 -> `DEFAULT`
 
 예시:
 
-- 샘플 3개 중 2개가 반도체 Set 매치, Han/CJK 0개
+- 샘플 5개 중 3개가 반도체 Set 매치, Han/CJK 0개
   - `SEMICONDUCTOR_REFLUX`
-- 샘플 3개 중 1개 Han/CJK, reflux 0개
+- 샘플 5개 중 3개 Han/CJK, reflux 0개
   - `CJK_NARROW`
-- 샘플 3개 중 1개 Han/CJK, 1개 reflux
+- 샘플 5개 중 Han/CJK와 reflux가 섞임
   - `DEFAULT`
 
 ### `buildInitialSweepPosts(snapshot, attackMode, initialSweepPages)` 변경
@@ -511,7 +511,7 @@ SEMICONDUCTOR_REFLUX
 권장 규칙:
 
 - 이미 narrow mode에 들어간 세션만 widening 허용
-- 최신 샘플 3개를 다시 보고
+- 최신 샘플 5개를 다시 보고
 - 현재 narrow family의 match가 0이면 `DEFAULT`로 넓힘
 - `DEFAULT -> narrow` 중간 재진입은 하지 않음
 - `CJK_NARROW <-> SEMICONDUCTOR_REFLUX` 직접 상호 전환도 하지 않음
@@ -849,15 +849,15 @@ function analyzeAttackSample(samplePosts, refluxTitleMatcher)
 
 권장 reason 예시:
 
-- `샘플 유동글이 3개 미만이라 DEFAULT 유지`
-- `새 유동글 샘플 3개 중 2개가 반도체 역류 제목 Set 매치`
-- `새 유동글 샘플 3개 중 1개가 Han/CJK 제목`
+- `샘플 유동글이 5개 미만이라 DEFAULT 유지`
+- `새 유동글 샘플 5개 중 3개가 반도체 역류 제목 Set 매치`
+- `새 유동글 샘플 5개 중 3개가 Han/CJK 제목`
 - `새 유동글 샘플에 Han/CJK와 반도체 역류 제목이 섞여 있어 DEFAULT 유지`
-- `새 유동글 샘플 3개 모두 일반 제목이라 DEFAULT 유지`
+- `새 유동글 샘플 5개가 기준 미달이라 DEFAULT 유지`
 
 로그 예시:
 
-- `🧠 공격 모드 판정: SEMICONDUCTOR_REFLUX (새 유동글 샘플 3개 중 2개가 반도체 역류 제목 Set 매치)`
+- `🧠 공격 모드 판정: SEMICONDUCTOR_REFLUX (새 유동글 샘플 5개 중 3개가 반도체 역류 제목 Set 매치)`
 - `🧹 initial sweep 대상 1~2페이지 유동 24개 -> 반도체 역류 제목 필터 후 11개`
 
 ---
@@ -867,26 +867,26 @@ function analyzeAttackSample(samplePosts, refluxTitleMatcher)
 현재 monitor엔:
 
 - `monitorPages`
-- `중국어 initial sweep 페이지 수(initialSweepPages)`  
+- `좁은 공격 initial sweep 페이지 수(initialSweepPages)`
   [popup/popup.html](/home/eorb915/projects/dc_defense_suite/popup/popup.html#L1204)
 
-이 상태에서 반도체 역류 initial sweep 페이지 수를 어떻게 할지가 포인트다.
+이 상태에서 `CJK_NARROW`와 `SEMICONDUCTOR_REFLUX`가 같은 initial sweep 설정을 공유하는 게 포인트다.
 
 ### 권장 1차안
 
-이번 단계에서는 **별도 `refluxInitialSweepPages`를 추가하지 않는다.**
+이번 단계에서는 **별도 `refluxInitialSweepPages`를 추가하지 않고**, 좁은 공격 모드가 같은 값을 공유한다.
 
 정책:
 
 - `DEFAULT` -> `monitorPages`
-- `CJK_NARROW` -> 기존 `initialSweepPages`
-- `SEMICONDUCTOR_REFLUX` -> `monitorPages`
+- `CJK_NARROW` -> `initialSweepPages`
+- `SEMICONDUCTOR_REFLUX` -> `initialSweepPages`
 
 이유:
 
-- 반도체 역류 필터는 exact match 기반이라 이미 충분히 좁다
+- 중국어 공격과 역류기 공격은 둘 다 “좁은 공격 모드”라 initial sweep을 더 넓게 훑고 싶다는 운영 요구가 같다
 - 지금 바로 설정칸을 하나 더 늘리면 monitor UI가 더 복잡해진다
-- 나중에 실제 운영하다가 “역류기는 5페이지까지 한 번 더 훑고 싶다”가 필요하면 그때 `refluxInitialSweepPages`를 추가해도 된다
+- 그래서 좁은 공격 모드 둘이 같은 initial sweep 값을 공유하는 쪽이 단순하고 운영도 쉽다
 
 즉 1차 구현은 **기능 우선 / UI 증설 최소화**가 맞다.
 
