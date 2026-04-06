@@ -13,6 +13,10 @@ const STORAGE_KEY = 'semiconductorRefluxTitleSetState';
 // 중요:
 // dataset 제목을 수정했다면 JSON 안의 `version`도 반드시 같이 올려야 한다.
 // version이 그대로면 "같은 dataset"으로 간주해서 기존 cache를 유지할 수 있다.
+//
+// 또한 통합 dataset이 커지면 GitHub 100MB 제한에 걸릴 수 있어서,
+// 지금 배포본은 작은 manifest 1개 + 여러 shard JSON 파일로 쪼개질 수 있다.
+// 로더는 이 manifest를 읽고 shard 파일들을 이어서 읽어 최종 Set을 만든다.
 const BUNDLED_DATASET_PATH = 'data/reflux-title-set-unified.json';
 
 const runtimeState = {
@@ -38,7 +42,9 @@ async function ensureSemiconductorRefluxTitleSetLoaded() {
     ? bundledState
     : normalizeSemiconductorRefluxTitleSetState(storedState);
 
-  hydrateSemiconductorRefluxTitleSetState(nextState);
+  hydrateSemiconductorRefluxTitleSetState(nextState, {
+    titlesArePreNormalized: shouldUseBundledState,
+  });
 
   if (shouldUseBundledState && bundledState) {
     await saveNormalizedSemiconductorRefluxTitleSetState(bundledState);
@@ -59,19 +65,25 @@ async function loadStoredSemiconductorRefluxTitleSetState() {
 
 async function loadBundledSemiconductorRefluxTitleSetState() {
   try {
-    const datasetUrl = chrome.runtime?.getURL
-      ? chrome.runtime.getURL(BUNDLED_DATASET_PATH)
-      : BUNDLED_DATASET_PATH;
-    const response = await fetch(datasetUrl);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    const datasetJson = await readBundledDatasetJson(BUNDLED_DATASET_PATH);
+    if (Array.isArray(datasetJson?.titles)) {
+      return normalizeSemiconductorRefluxTitleSetState({
+        ...datasetJson,
+        sourceType: 'bundled',
+      });
     }
 
-    const datasetJson = await response.json();
-    return normalizeSemiconductorRefluxTitleSetState({
-      ...datasetJson,
+    const manifest = normalizeBundledSemiconductorRefluxManifest(datasetJson);
+    const titles = await loadBundledSemiconductorRefluxShardTitles(manifest.shards);
+    return {
+      titles,
+      titleCount: titles.length,
+      updatedAt: manifest.updatedAt,
+      sourceGalleryId: manifest.sourceGalleryIds[0] || '',
+      sourceGalleryIds: manifest.sourceGalleryIds,
+      version: manifest.version,
       sourceType: 'bundled',
-    });
+    };
   } catch (error) {
     console.warn('[SemiconductorRefluxTitleSet] 번들 dataset 로드 실패:', error.message);
     return null;
@@ -79,32 +91,23 @@ async function loadBundledSemiconductorRefluxTitleSetState() {
 }
 
 function shouldHydrateBundledState(storedState, bundledState) {
-  if (!bundledState) {
-    return false;
+  if (bundledState) {
+    return true;
   }
 
   const normalizedStoredState = normalizeSemiconductorRefluxTitleSetState(storedState);
-  // 번들 dataset이 source-of-truth다.
-  // 즉:
-  // 1. storage에 아직 bundled dataset이 없거나
-  // 2. storage version이 새 번들 version과 다르면
-  // 항상 번들 쪽을 다시 hydration 한다.
-  //
-  // 예:
-  // - storage: sourceType=manual, version=manual-v1
-  // - bundle:  sourceType=bundled, version=2026-04-06-v2
-  // 결과: bundle이 storage를 덮어쓴다.
-  //
-  // 반대로 version이 같으면 같은 배포 dataset으로 보고 기존 cache를 유지한다.
-  return normalizedStoredState.sourceType !== 'bundled'
-    || normalizedStoredState.version !== bundledState.version;
+  return normalizedStoredState.sourceType !== 'bundled' && normalizedStoredState.titles.length > 0;
 }
 
 function normalizeSemiconductorRefluxTitleSetState(storedState) {
   const normalizedTitles = dedupeNormalizedTitles(storedState?.titles || []);
   const sourceGalleryIds = normalizeSourceGalleryIds(storedState);
+  const titleCount = normalizedTitles.length > 0
+    ? normalizedTitles.length
+    : normalizeTitleCount(storedState?.titleCount);
   return {
     titles: normalizedTitles,
+    titleCount,
     updatedAt: String(storedState?.updatedAt || '').trim(),
     sourceGalleryId: sourceGalleryIds[0] || '',
     sourceGalleryIds,
@@ -113,12 +116,33 @@ function normalizeSemiconductorRefluxTitleSetState(storedState) {
   };
 }
 
-function hydrateSemiconductorRefluxTitleSetState(storedState) {
-  const normalizedState = normalizeSemiconductorRefluxTitleSetState(storedState);
+function normalizePreNormalizedSemiconductorRefluxTitleSetState(storedState) {
+  const normalizedTitles = dedupePreNormalizedTitles(storedState?.titles || []);
+  const sourceGalleryIds = normalizeSourceGalleryIds(storedState);
+  const titleCount = normalizedTitles.length > 0
+    ? normalizedTitles.length
+    : normalizeTitleCount(storedState?.titleCount);
+  return {
+    titles: normalizedTitles,
+    titleCount,
+    updatedAt: String(storedState?.updatedAt || '').trim(),
+    sourceGalleryId: sourceGalleryIds[0] || '',
+    sourceGalleryIds,
+    version: String(storedState?.version || '').trim(),
+    sourceType: String(storedState?.sourceType || '').trim(),
+  };
+}
+
+function hydrateSemiconductorRefluxTitleSetState(storedState, options = {}) {
+  const normalizedState = options.titlesArePreNormalized
+    ? normalizePreNormalizedSemiconductorRefluxTitleSetState(storedState)
+    : normalizeSemiconductorRefluxTitleSetState(storedState);
   const normalizedTitles = normalizedState.titles;
   runtimeState.loaded = true;
   runtimeState.titleSet = new Set(normalizedTitles);
-  runtimeState.titleCount = normalizedTitles.length;
+  runtimeState.titleCount = normalizedTitles.length > 0
+    ? normalizedTitles.length
+    : normalizeTitleCount(normalizedState.titleCount);
   runtimeState.updatedAt = normalizedState.updatedAt;
   runtimeState.sourceGalleryId = normalizedState.sourceGalleryId;
   runtimeState.sourceGalleryIds = normalizedState.sourceGalleryIds;
@@ -140,7 +164,7 @@ function getSemiconductorRefluxTitleSetStatus() {
 }
 
 function isSemiconductorRefluxTitleSetReady() {
-  return runtimeState.loaded && runtimeState.titleCount > 0;
+  return runtimeState.loaded && runtimeState.titleSet.size > 0;
 }
 
 function hasSemiconductorRefluxTitle(title) {
@@ -171,8 +195,20 @@ async function replaceSemiconductorRefluxTitleSet(titles, options = {}) {
 }
 
 async function saveNormalizedSemiconductorRefluxTitleSetState(storedState) {
+  const normalizedState = normalizeSemiconductorRefluxTitleSetState(storedState);
+  const storageState = normalizedState.sourceType === 'bundled'
+    ? {
+      titles: [],
+      titleCount: normalizedState.titleCount,
+      updatedAt: normalizedState.updatedAt,
+      sourceGalleryId: normalizedState.sourceGalleryId,
+      sourceGalleryIds: normalizedState.sourceGalleryIds,
+      version: normalizedState.version,
+      sourceType: normalizedState.sourceType,
+    }
+    : normalizedState;
   await chrome.storage.local.set({
-    [STORAGE_KEY]: normalizeSemiconductorRefluxTitleSetState(storedState),
+    [STORAGE_KEY]: storageState,
   });
 }
 
@@ -180,6 +216,14 @@ function dedupeNormalizedTitles(titles) {
   return [...new Set(
     (Array.isArray(titles) ? titles : [])
       .map((title) => normalizeSemiconductorRefluxTitle(title))
+      .filter(Boolean),
+  )];
+}
+
+function dedupePreNormalizedTitles(titles) {
+  return [...new Set(
+    (Array.isArray(titles) ? titles : [])
+      .map((title) => String(title || '').trim())
       .filter(Boolean),
   )];
 }
@@ -196,6 +240,80 @@ function normalizeSourceGalleryIds(storedState) {
   ];
 
   return [...new Set(normalizedSourceGalleryIds)];
+}
+
+function normalizeTitleCount(value) {
+  const parsedValue = Number(value);
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+    return 0;
+  }
+
+  return Math.trunc(parsedValue);
+}
+
+async function readBundledDatasetJson(datasetPath) {
+  const datasetUrl = chrome.runtime?.getURL
+    ? chrome.runtime.getURL(datasetPath)
+    : datasetPath;
+  const response = await fetch(datasetUrl);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+
+function normalizeBundledSemiconductorRefluxManifest(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('번들 dataset manifest 형식이 올바르지 않습니다.');
+  }
+
+  const sourceGalleryIds = normalizeSourceGalleryIds(payload);
+  const shards = (Array.isArray(payload?.shards) ? payload.shards : [])
+    .map((shard, index) => {
+      const shardPath = String(shard?.path || '').trim();
+      if (!shardPath) {
+        throw new Error(`번들 dataset shard 경로가 비어 있습니다. (index=${index})`);
+      }
+      return {
+        path: shardPath,
+        titleCount: normalizeTitleCount(shard?.titleCount),
+      };
+    });
+
+  if (shards.length === 0) {
+    throw new Error('번들 dataset shard 목록이 비어 있습니다.');
+  }
+
+  return {
+    updatedAt: String(payload?.updatedAt || '').trim(),
+    sourceGalleryIds,
+    version: String(payload?.version || '').trim(),
+    titleCount: normalizeTitleCount(payload?.titleCount),
+    shards,
+  };
+}
+
+async function loadBundledSemiconductorRefluxShardTitles(shards) {
+  const titles = [];
+
+  for (const shard of Array.isArray(shards) ? shards : []) {
+    const shardJson = await readBundledDatasetJson(shard.path);
+    const shardTitles = Array.isArray(shardJson?.titles)
+      ? shardJson.titles
+      : Array.isArray(shardJson)
+        ? shardJson
+        : [];
+
+    for (const title of shardTitles) {
+      const normalizedTitle = String(title || '').trim();
+      if (normalizedTitle) {
+        titles.push(normalizedTitle);
+      }
+    }
+  }
+
+  return titles;
 }
 
 export {
