@@ -91,12 +91,9 @@ async function loadBundledSemiconductorRefluxTitleSetState() {
 }
 
 function shouldHydrateBundledState(storedState, bundledState) {
-  if (bundledState) {
-    return true;
-  }
-
-  const normalizedStoredState = normalizeSemiconductorRefluxTitleSetState(storedState);
-  return normalizedStoredState.sourceType !== 'bundled' && normalizedStoredState.titles.length > 0;
+  // 번들 manifest/shard를 읽을 수 있으면 그쪽이 항상 source-of-truth다.
+  // 반대로 번들 로드가 실패하면, 남아 있는 storage 상태(예: 수동 주입 dataset)로 fallback 해야 한다.
+  return Boolean(bundledState);
 }
 
 function normalizeSemiconductorRefluxTitleSetState(storedState) {
