@@ -5,7 +5,10 @@
  * SPEC.md에서 확인된 판별 로직을 사용합니다.
  */
 
+import { COMMENT_ATTACK_MODE, normalizeCommentAttackMode } from './attack-mode.js';
+
 const PURE_HANGUL_COMMENT_REGEX = /^[\p{Script=Hangul}\s]+$/u;
+const INVISIBLE_CHARS_REGEX = /[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g;
 const HTML_ENTITY_MAP = {
     amp: '&',
     lt: '<',
@@ -97,6 +100,28 @@ function normalizeCommentMemo(memo) {
 }
 
 /**
+ * 댓글 dataset exact-match 비교용 정규화
+ *
+ * @param {unknown} memo
+ * @returns {string}
+ */
+function normalizeCommentRefluxMemo(memo) {
+    let normalizedMemo = normalizeCommentMemo(memo);
+
+    try {
+        normalizedMemo = normalizedMemo.normalize('NFKC');
+    } catch (error) {
+        // normalize 미지원 환경에서도 문자열 정리만 계속 진행한다.
+    }
+
+    return normalizedMemo
+        .replace(INVISIBLE_CHARS_REGEX, '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+/**
  * 순수 한글 댓글 여부 확인
  *
  * @param {unknown} memo
@@ -115,13 +140,23 @@ function isPureHangulCommentMemo(memo) {
  * 실제 삭제 대상으로 사용할 댓글만 추출
  *
  * @param {Array} comments
- * @param {{ excludePureHangul?: boolean }} [options]
+ * @param {{ excludePureHangul?: boolean, attackMode?: string, matchesCommentRefluxMemo?: Function }} [options]
  * @returns {Array}
  */
 function filterDeletionTargetComments(comments, options = {}) {
-    const excludePureHangul = options.excludePureHangul === true;
-    if (!excludePureHangul) {
+    const attackMode = normalizeCommentAttackMode(
+        options.attackMode ?? (options.excludePureHangul === true ? COMMENT_ATTACK_MODE.EXCLUDE_PURE_HANGUL : COMMENT_ATTACK_MODE.DEFAULT),
+    );
+
+    if (attackMode === COMMENT_ATTACK_MODE.DEFAULT) {
         return comments;
+    }
+
+    if (attackMode === COMMENT_ATTACK_MODE.COMMENT_REFLUX) {
+        const matcher = typeof options.matchesCommentRefluxMemo === 'function'
+            ? options.matchesCommentRefluxMemo
+            : () => false;
+        return comments.filter((comment) => matcher(comment?.memo));
     }
 
     return comments.filter((comment) => !isPureHangulCommentMemo(comment?.memo));
@@ -169,6 +204,7 @@ export {
     shouldSkip,
     filterFluidComments,
     normalizeCommentMemo,
+    normalizeCommentRefluxMemo,
     isPureHangulCommentMemo,
     filterDeletionTargetComments,
     extractCommentNos,

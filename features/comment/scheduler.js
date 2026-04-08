@@ -19,6 +19,16 @@ import {
     filterDeletionTargetComments,
     extractCommentNos,
 } from './parser.js';
+import {
+    COMMENT_ATTACK_MODE,
+    getCommentAttackModeHumanLabel,
+    normalizeCommentAttackMode,
+} from './attack-mode.js';
+import {
+    ensureCommentRefluxDatasetLoaded,
+    hasCommentRefluxMemo,
+    isCommentRefluxDatasetReady,
+} from './comment-reflux-dataset.js';
 
 const STORAGE_KEY = 'commentSchedulerState';
 const MAX_VERIFICATION_EVENTS = 200;
@@ -57,7 +67,7 @@ class Scheduler {
             excludePureHangulManualOnly: false,
         };
         this.currentSource = '';
-        this.excludePureHangulMode = false;
+        this.currentAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
     }
 
     // ============================================================
@@ -71,16 +81,13 @@ class Scheduler {
         }
 
         this.currentSource = normalizeRunSource(options.source, 'manual');
-        this.excludePureHangulMode = this.currentSource === 'manual' && Boolean(options.excludePureHangulOnStart);
+        this.currentAttackMode = normalizeRequestedCommentAttackMode(options);
+        await this.ensureDatasetReadyForAttackMode(this.currentAttackMode);
         this.isRunning = true;
         if (this.currentSource === 'manual') {
-            if (this.excludePureHangulMode) {
-                this.log('🧹 수동 한글 제외 댓글 방어 시작 - 순수 한글 댓글은 제외합니다.');
-            } else {
-                this.log('🧷 수동 댓글 방어 시작 - 일반 모드로 처리합니다.');
-            }
+            this.log(`🧷 수동 댓글 방어 시작 - ${getCommentAttackModeHumanLabel(this.currentAttackMode)} 모드로 처리합니다.`);
         }
-        this.log(`🟢 자동 삭제 시작! (${getRunSourceLabel(this.currentSource)})`);
+        this.log(`🟢 자동 삭제 시작! (${getRunSourceLabel(this.currentSource)} / ${getCommentAttackModeHumanLabel(this.currentAttackMode)})`);
         await this.saveState();
 
         this.ensureRunLoop();
@@ -89,7 +96,7 @@ class Scheduler {
     async stop() {
         this.isRunning = false;
         this.currentSource = '';
-        this.excludePureHangulMode = false;
+        this.currentAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
         this.log('🔴 자동 삭제 중지.');
         await this.saveState();
     }
@@ -219,11 +226,12 @@ class Scheduler {
             }
 
             const deletionTargets = filterDeletionTargetComments(fluidComments, {
-                excludePureHangul: this.shouldExcludePureHangulForCurrentRun(),
+                attackMode: this.currentAttackMode,
+                matchesCommentRefluxMemo: hasCommentRefluxMemo,
             });
 
             if (deletionTargets.length === 0) {
-                this.log(`ℹ️ #${postNo}: 유동닉 ${fluidComments.length}개 중 순수 한글 제외로 삭제 대상 0개`);
+                this.log(`ℹ️ #${postNo}: 유동닉 ${fluidComments.length}개 중 ${getDeletionSkipReasonText(this.currentAttackMode)} 삭제 대상 0개`);
                 return true;
             }
 
@@ -431,9 +439,23 @@ class Scheduler {
         this.verificationEvents = [];
     }
 
+    async ensureDatasetReadyForAttackMode(attackMode) {
+        if (normalizeCommentAttackMode(attackMode) !== COMMENT_ATTACK_MODE.COMMENT_REFLUX) {
+            return;
+        }
+
+        await ensureCommentRefluxDatasetLoaded();
+        if (!isCommentRefluxDatasetReady()) {
+            throw new Error('댓글 역류기 dataset이 비어 있어 시작할 수 없습니다.');
+        }
+    }
+
     shouldExcludePureHangulForCurrentRun() {
-        return this.currentSource === 'manual'
-            && this.excludePureHangulMode === true;
+        return this.currentAttackMode === COMMENT_ATTACK_MODE.EXCLUDE_PURE_HANGUL;
+    }
+
+    shouldFilterCommentRefluxForCurrentRun() {
+        return this.currentAttackMode === COMMENT_ATTACK_MODE.COMMENT_REFLUX;
     }
 
     setCurrentSource(source, { logChange = true } = {}) {
@@ -443,11 +465,23 @@ class Scheduler {
         }
 
         this.currentSource = nextSource;
-        if (nextSource !== 'manual') {
-            this.excludePureHangulMode = false;
-        }
         if (this.isRunning && logChange) {
             this.log(`ℹ️ 실행 출처 전환: ${getRunSourceLabel(nextSource)}`);
+        }
+        return true;
+    }
+
+    async setRuntimeAttackMode(attackMode, { logChange = true } = {}) {
+        const nextAttackMode = normalizeCommentAttackMode(attackMode);
+        await this.ensureDatasetReadyForAttackMode(nextAttackMode);
+
+        if (this.currentAttackMode === nextAttackMode) {
+            return false;
+        }
+
+        this.currentAttackMode = nextAttackMode;
+        if (this.isRunning && logChange) {
+            this.log(`ℹ️ 댓글 공격 모드 전환: ${getCommentAttackModeHumanLabel(nextAttackMode)}`);
         }
         return true;
     }
@@ -470,7 +504,7 @@ class Scheduler {
                     logs: this.logs.slice(0, 50), // 최근 50개만 저장
                     config: this.config,
                     currentSource: this.currentSource,
-                    excludePureHangulMode: this.excludePureHangulMode,
+                    currentAttackMode: this.currentAttackMode,
                 },
             });
         } catch (error) {
@@ -498,8 +532,7 @@ class Scheduler {
                     schedulerState.currentSource,
                     schedulerState.isRunning ? 'manual' : '',
                 );
-                this.excludePureHangulMode = this.currentSource === 'manual'
-                    && Boolean(schedulerState.excludePureHangulMode);
+                this.currentAttackMode = normalizeStoredCommentAttackMode(schedulerState);
             }
         } catch (error) {
             console.error('[Scheduler] 상태 복원 실패:', error.message);
@@ -522,9 +555,24 @@ class Scheduler {
         }
 
         await this.loadState();
+        await this.ensureDatasetReadyForRestoredMode();
         if (this.isRunning) {
             this.log('🔁 저장된 실행 상태 복원');
             this.ensureRunLoop();
+        }
+    }
+
+    async ensureDatasetReadyForRestoredMode() {
+        if (!this.isRunning) {
+            return;
+        }
+
+        try {
+            await this.ensureDatasetReadyForAttackMode(this.currentAttackMode);
+        } catch (error) {
+            this.log(`⚠️ 저장된 댓글 방어 모드 복원 실패 - ${error.message}. 일반 모드로 전환합니다.`);
+            this.currentAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
+            await this.saveState();
         }
     }
 
@@ -544,8 +592,11 @@ class Scheduler {
             logs: this.logs.slice(0, 20), // 팝업에는 최근 20개만
             config: this.config,
             currentSource: this.currentSource,
-            excludePureHangulMode: this.excludePureHangulMode,
+            currentAttackMode: this.currentAttackMode,
+            excludePureHangulMode: this.currentAttackMode === COMMENT_ATTACK_MODE.EXCLUDE_PURE_HANGUL,
+            commentRefluxMode: this.currentAttackMode === COMMENT_ATTACK_MODE.COMMENT_REFLUX,
             excludePureHangulEffective: this.shouldExcludePureHangulForCurrentRun(),
+            commentRefluxEffective: this.shouldFilterCommentRefluxForCurrentRun(),
         };
     }
 }
@@ -570,6 +621,44 @@ function getRunSourceLabel(source) {
         return '수동';
     }
     return '미지정';
+}
+
+function normalizeRequestedCommentAttackMode(options = {}) {
+    if (options.commentAttackMode !== undefined) {
+        return normalizeCommentAttackMode(options.commentAttackMode);
+    }
+
+    if (options.excludePureHangulOnStart === true) {
+        return COMMENT_ATTACK_MODE.EXCLUDE_PURE_HANGUL;
+    }
+
+    return COMMENT_ATTACK_MODE.DEFAULT;
+}
+
+function normalizeStoredCommentAttackMode(schedulerState) {
+    if (schedulerState?.currentAttackMode !== undefined) {
+        return normalizeCommentAttackMode(schedulerState.currentAttackMode);
+    }
+
+    if (schedulerState?.excludePureHangulMode === true) {
+        return COMMENT_ATTACK_MODE.EXCLUDE_PURE_HANGUL;
+    }
+
+    return COMMENT_ATTACK_MODE.DEFAULT;
+}
+
+function getDeletionSkipReasonText(attackMode) {
+    const normalizedAttackMode = normalizeCommentAttackMode(attackMode);
+
+    if (normalizedAttackMode === COMMENT_ATTACK_MODE.COMMENT_REFLUX) {
+        return '역류기 댓글 필터 후';
+    }
+
+    if (normalizedAttackMode === COMMENT_ATTACK_MODE.EXCLUDE_PURE_HANGUL) {
+        return '순수 한글 제외로';
+    }
+
+    return '필터 후';
 }
 
 function normalizeAvoidReasonText(value) {

@@ -1,0 +1,8 @@
+{
+  "_comment": "실제 댓글 본문은 shard 파일들에 나뉘어 저장된다. 댓글 dataset을 수정했다면 version도 반드시 같이 올려야 한다.",
+  "version": "",
+  "updatedAt": "",
+  "sourceGalleryIds": [],
+  "memoCount": 0,
+  "shards": []
+}

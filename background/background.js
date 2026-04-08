@@ -1,5 +1,6 @@
 import { Scheduler as CommentScheduler } from '../features/comment/scheduler.js';
 import { PHASE as COMMENT_MONITOR_PHASE, Scheduler as CommentMonitorScheduler } from '../features/comment-monitor/scheduler.js';
+import { COMMENT_ATTACK_MODE, normalizeCommentAttackMode } from '../features/comment/attack-mode.js';
 import { Scheduler as ConceptMonitorScheduler } from '../features/concept-monitor/scheduler.js';
 import {
   handleConceptRecommendCutCoordinatorAlarm,
@@ -23,6 +24,11 @@ import {
   normalizeConfig as normalizeRefluxDatasetCollectorConfig,
 } from '../features/reflux-dataset-collector/scheduler.js';
 import { isValidGalleryId as isValidRefluxCollectorGalleryId } from '../features/reflux-dataset-collector/api.js';
+import {
+  Scheduler as CommentRefluxCollectorScheduler,
+  normalizeConfig as normalizeCommentRefluxCollectorConfig,
+} from '../features/comment-reflux-collector/scheduler.js';
+import { isValidGalleryId as isValidCommentRefluxCollectorGalleryId } from '../features/comment-reflux-collector/api.js';
 import { Scheduler as PostScheduler } from '../features/post/scheduler.js';
 import { normalizeAttackMode as normalizePostAttackMode } from '../features/post/attack-mode.js';
 import { Scheduler as SemiPostScheduler } from '../features/semi-post/scheduler.js';
@@ -61,6 +67,7 @@ const conceptPatrolScheduler = new ConceptPatrolScheduler({
 const hanRefreshIpBanScheduler = new HanRefreshIpBanScheduler();
 const bumpPostScheduler = new BumpPostScheduler();
 const refluxDatasetCollectorScheduler = new RefluxDatasetCollectorScheduler();
+const commentRefluxCollectorScheduler = new CommentRefluxCollectorScheduler();
 const postScheduler = new PostScheduler();
 const semiPostScheduler = new SemiPostScheduler();
 const ipScheduler = new IpScheduler();
@@ -79,6 +86,7 @@ const schedulers = {
   hanRefreshIpBan: hanRefreshIpBanScheduler,
   bumpPost: bumpPostScheduler,
   refluxDatasetCollector: refluxDatasetCollectorScheduler,
+  commentRefluxCollector: commentRefluxCollectorScheduler,
   post: postScheduler,
   semiPost: semiPostScheduler,
   ip: ipScheduler,
@@ -191,6 +199,7 @@ async function resumeAllSchedulers() {
     await loadSchedulerStateIfIdle(schedulers.hanRefreshIpBan);
     await loadSchedulerStateIfIdle(schedulers.bumpPost);
     await loadSchedulerStateIfIdle(schedulers.refluxDatasetCollector);
+    await loadSchedulerStateIfIdle(schedulers.commentRefluxCollector);
     await loadSchedulerStateIfIdle(schedulers.post);
     await loadSchedulerStateIfIdle(schedulers.semiPost);
     await loadSchedulerStateIfIdle(schedulers.ip);
@@ -204,8 +213,20 @@ async function resumeAllSchedulers() {
     if (commentMonitorAttacking) {
       if (typeof schedulers.comment.setCurrentSource === 'function') {
         schedulers.comment.setCurrentSource('monitor', { logChange: false });
-        await schedulers.comment.saveState();
       }
+      if (typeof schedulers.comment.setRuntimeAttackMode === 'function') {
+        try {
+          await schedulers.comment.setRuntimeAttackMode(
+            schedulers.commentMonitor.currentManagedAttackMode || COMMENT_ATTACK_MODE.DEFAULT,
+            { logChange: false },
+          );
+        } catch (error) {
+          schedulers.commentMonitor.currentManagedAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
+          schedulers.commentMonitor.lastManagedAttackModeReason = `${error.message} / 기본 댓글 방어 fallback`;
+          await schedulers.comment.setRuntimeAttackMode(COMMENT_ATTACK_MODE.DEFAULT, { logChange: false });
+        }
+      }
+      await schedulers.comment.saveState();
       await resumeStandaloneScheduler(schedulers.comment, '🔁 댓글 감시 자동화 관리 대상 댓글 방어 복원');
     } else if (commentMonitorOwnsChild) {
       await stopDormantCommentMonitorChildScheduler();
@@ -288,6 +309,7 @@ function getAllStatuses() {
     hanRefreshIpBan: schedulers.hanRefreshIpBan.getStatus(),
     bumpPost: schedulers.bumpPost.getStatus(),
     refluxDatasetCollector: schedulers.refluxDatasetCollector.getStatus(),
+    commentRefluxCollector: schedulers.commentRefluxCollector.getStatus(),
     post: schedulers.post.getStatus(),
     semiPost: schedulers.semiPost.getStatus(),
     ip: schedulers.ip.getStatus(),
@@ -470,8 +492,14 @@ async function handleMessage(message) {
         }
       }
       if (message.feature === 'comment') {
+        const normalizedCommentAttackMode = message.commentAttackMode !== undefined
+          ? normalizeCommentAttackMode(message.commentAttackMode)
+          : (message.excludePureHangulOnStart === true
+            ? COMMENT_ATTACK_MODE.EXCLUDE_PURE_HANGUL
+            : COMMENT_ATTACK_MODE.DEFAULT);
         await scheduler.start({
           source: message.source,
+          commentAttackMode: normalizedCommentAttackMode,
           excludePureHangulOnStart: message.excludePureHangulOnStart,
         });
       } else if (message.feature === 'post') {
@@ -573,6 +601,26 @@ async function handleMessage(message) {
           });
         }
 
+        if (message.feature === 'commentRefluxCollector') {
+          const rawGalleryId = message.config.galleryId;
+          if (rawGalleryId !== undefined) {
+            const trimmedGalleryId = String(rawGalleryId || '').trim();
+            if (trimmedGalleryId && !isValidCommentRefluxCollectorGalleryId(trimmedGalleryId)) {
+              return {
+                success: false,
+                message: '갤 ID는 영문/숫자/밑줄만 입력하세요.',
+                status: scheduler.getStatus(),
+                statuses: getAllStatuses(),
+              };
+            }
+          }
+
+          message.config = normalizeCommentRefluxCollectorConfig({
+            ...scheduler.config,
+            ...message.config,
+          });
+        }
+
         if (message.feature === 'conceptPatrol') {
           message.config = normalizeConceptPatrolConfig({
             ...scheduler.config,
@@ -638,8 +686,20 @@ async function handleMessage(message) {
           statuses: getAllStatuses(),
         };
       }
+      if (message.feature === 'commentRefluxCollector' && scheduler.isRunning) {
+        return {
+          success: false,
+          message: '역류댓글 수집 실행 중에는 통계와 로그를 초기화할 수 없습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
       resetSchedulerStats(message.feature, scheduler);
       if (message.feature === 'refluxDatasetCollector'
+        && typeof scheduler.clearCollectedData === 'function') {
+        await scheduler.clearCollectedData();
+      }
+      if (message.feature === 'commentRefluxCollector'
         && typeof scheduler.clearCollectedData === 'function') {
         await scheduler.clearCollectedData();
       }
@@ -656,7 +716,7 @@ async function handleMessage(message) {
       };
 
     case 'downloadExportJson':
-      if (message.feature !== 'refluxDatasetCollector'
+      if (!['refluxDatasetCollector', 'commentRefluxCollector'].includes(message.feature)
         || typeof scheduler.buildDownloadDescriptor !== 'function') {
         return {
           success: false,
@@ -698,7 +758,7 @@ function resetSchedulerStats(feature, scheduler) {
       if (typeof scheduler.setCurrentSource === 'function') {
         scheduler.setCurrentSource('', { logChange: false });
       }
-      scheduler.excludePureHangulMode = false;
+      scheduler.currentAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
     }
     return;
   }
@@ -720,6 +780,8 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.lastSnapshot = [];
     scheduler.attackSessionId = '';
     scheduler.managedCommentStarted = false;
+    scheduler.currentManagedAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
+    scheduler.lastManagedAttackModeReason = '';
     scheduler.totalAttackDetected = 0;
     scheduler.totalAttackReleased = 0;
     scheduler.reseedRemaining = 1;
@@ -817,6 +879,27 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.fetchedPageCount = 0;
     scheduler.rawTitleCount = 0;
     scheduler.normalizedTitleCount = 0;
+    scheduler.startedAt = '';
+    scheduler.finishedAt = '';
+    scheduler.lastError = '';
+    scheduler.logs = [];
+    scheduler.downloadReady = false;
+    scheduler.exportVersion = '';
+    scheduler.interrupted = false;
+    scheduler.collectedGalleryId = '';
+    return;
+  }
+
+  if (feature === 'commentRefluxCollector') {
+    scheduler.runId = '';
+    scheduler.phase = scheduler.isRunning ? 'RUNNING' : 'IDLE';
+    scheduler.currentPage = 0;
+    scheduler.currentPostNo = 0;
+    scheduler.fetchedPageCount = 0;
+    scheduler.processedPostCount = 0;
+    scheduler.failedPostCount = 0;
+    scheduler.rawCommentCount = 0;
+    scheduler.normalizedMemoCount = 0;
     scheduler.startedAt = '';
     scheduler.finishedAt = '';
     scheduler.lastError = '';
@@ -1143,6 +1226,34 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
     }
   }
 
+  if (feature === 'commentRefluxCollector') {
+    const galleryIdChanged = config.galleryId !== undefined
+      && String(config.galleryId || '') !== String(scheduler.config.galleryId || '');
+    const startPageChanged = config.startPage !== undefined
+      && Number(config.startPage) !== Number(scheduler.config.startPage);
+    const endPageChanged = config.endPage !== undefined
+      && Number(config.endPage) !== Number(scheduler.config.endPage);
+    const requestDelayChanged = config.requestDelayMs !== undefined
+      && Number(config.requestDelayMs) !== Number(scheduler.config.requestDelayMs);
+    const cycleDelayChanged = config.cycleDelayMs !== undefined
+      && Number(config.cycleDelayMs) !== Number(scheduler.config.cycleDelayMs);
+    const postConcurrencyChanged = config.postConcurrency !== undefined
+      && Number(config.postConcurrency) !== Number(scheduler.config.postConcurrency);
+    const commentPageConcurrencyChanged = config.commentPageConcurrency !== undefined
+      && Number(config.commentPageConcurrency) !== Number(scheduler.config.commentPageConcurrency);
+    if (
+      galleryIdChanged
+      || startPageChanged
+      || endPageChanged
+      || requestDelayChanged
+      || cycleDelayChanged
+      || postConcurrencyChanged
+      || commentPageConcurrencyChanged
+    ) {
+      return '역류댓글 수집 설정은 기능을 정지한 뒤 변경하세요.';
+    }
+  }
+
   if (feature === 'ip'
     && config.includeUidTargetsOnManualStart !== undefined
     && Boolean(config.includeUidTargetsOnManualStart) !== Boolean(scheduler.config.includeUidTargetsOnManualStart)) {
@@ -1273,6 +1384,7 @@ async function stopDormantCommentMonitorChildScheduler() {
   if (typeof schedulers.comment.setCurrentSource === 'function') {
     schedulers.comment.setCurrentSource('', { logChange: false });
   }
+  schedulers.comment.currentAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
   await schedulers.comment.saveState();
 }
 
@@ -1286,6 +1398,7 @@ function resetCommentSchedulerState(message) {
   if (typeof scheduler.setCurrentSource === 'function') {
     scheduler.setCurrentSource('', { logChange: false });
   }
+  scheduler.currentAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
   scheduler.logs = [];
   scheduler.log(message);
 }
@@ -1308,6 +1421,8 @@ function resetCommentMonitorSchedulerState(message) {
   scheduler.lastSnapshot = [];
   scheduler.attackSessionId = '';
   scheduler.managedCommentStarted = false;
+  scheduler.currentManagedAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
+  scheduler.lastManagedAttackModeReason = '';
   scheduler.totalAttackDetected = 0;
   scheduler.totalAttackReleased = 0;
   scheduler.reseedRemaining = 1;

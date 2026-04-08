@@ -1,6 +1,31 @@
-import { fetchPostList, delay } from '../comment/api.js';
+import {
+  delay,
+  extractEsno,
+  fetchAllComments,
+  fetchPostList,
+  fetchPostPage,
+} from '../comment/api.js';
+import {
+  COMMENT_ATTACK_MODE,
+  getCommentAttackModeHumanLabel,
+  normalizeCommentAttackMode,
+} from '../comment/attack-mode.js';
+import {
+  ensureCommentRefluxDatasetLoaded,
+  hasCommentRefluxMemo,
+  isCommentRefluxDatasetReady,
+} from '../comment/comment-reflux-dataset.js';
+import {
+  filterFluidComments,
+  isPureHangulCommentMemo,
+  normalizeCommentMemo,
+} from '../comment/parser.js';
 
 const STORAGE_KEY = 'commentMonitorSchedulerState';
+const COMMENT_ATTACK_SAMPLE_POST_LIMIT = 5;
+const COMMENT_ATTACK_SAMPLE_COMMENT_LIMIT_PER_POST = 20;
+const COMMENT_ATTACK_SAMPLE_MIN_FLUID_COMMENT_COUNT = 20;
+const COMMENT_ATTACK_SAMPLE_RATIO_THRESHOLD = 0.7;
 
 const PHASE = {
   SEEDING: 'SEEDING',
@@ -29,6 +54,8 @@ class Scheduler {
     this.lastSnapshot = [];
     this.attackSessionId = '';
     this.managedCommentStarted = false;
+    this.currentManagedAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
+    this.lastManagedAttackModeReason = '';
     this.totalAttackDetected = 0;
     this.totalAttackReleased = 0;
     this.reseedRemaining = 1;
@@ -80,6 +107,8 @@ class Scheduler {
     this.lastSnapshot = [];
     this.attackSessionId = '';
     this.managedCommentStarted = false;
+    this.currentManagedAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
+    this.lastManagedAttackModeReason = '';
     this.reseedRemaining = 1;
     this.log('🟢 댓글 감시 자동화 시작!');
     await this.saveState();
@@ -265,7 +294,7 @@ class Scheduler {
       changedPostCount,
       newCommentCount,
       verifiedDeletedCount: 0,
-      topChangedPosts: topChangedPosts.slice(0, 5),
+      topChangedPosts: topChangedPosts.slice(0, COMMENT_ATTACK_SAMPLE_POST_LIMIT),
     };
   }
 
@@ -283,7 +312,7 @@ class Scheduler {
         + `(새 댓글 ${metrics.newCommentCount} / 변화 글 ${metrics.changedPostCount} / 조건 ${attackEvaluation.ruleLabel})`,
       );
       if (this.attackHitCount >= this.config.attackConsecutiveCount) {
-        await this.enterAttackMode();
+        await this.enterAttackMode(metrics);
       }
       return;
     }
@@ -354,18 +383,24 @@ class Scheduler {
     this.releaseHitCount = 0;
   }
 
-  async enterAttackMode() {
+  async enterAttackMode(metrics = buildEmptyMetrics()) {
     if (!this.isRunning) {
       return;
     }
 
+    const attackModeDecision = await this.buildManagedAttackModeDecision(metrics);
     this.phase = PHASE.ATTACKING;
     this.attackSessionId = `comment_attack_${Date.now()}`;
     this.attackHitCount = 0;
     this.releaseHitCount = 0;
     this.totalAttackDetected += 1;
+    this.currentManagedAttackMode = attackModeDecision.attackMode;
+    this.lastManagedAttackModeReason = attackModeDecision.reason;
     this.commentScheduler.resetVerificationState();
-    this.log(`🚨 댓글 공격 상태 진입 (${this.attackSessionId})`);
+    this.log(
+      `🚨 댓글 공격 상태 진입 (${this.attackSessionId}) / ${getCommentAttackModeHumanLabel(this.currentManagedAttackMode)} `
+      + `- ${this.lastManagedAttackModeReason}`,
+    );
     await this.ensureManagedDefenseStarted();
   }
 
@@ -374,23 +409,150 @@ class Scheduler {
       return;
     }
 
+    let attackMode = normalizeCommentAttackMode(this.currentManagedAttackMode);
+
     if (!this.commentScheduler.isRunning) {
       try {
-        await this.commentScheduler.start({ source: 'monitor' });
+        await this.commentScheduler.start({
+          source: 'monitor',
+          commentAttackMode: attackMode,
+        });
       } catch (error) {
-        this.log(`⚠️ 댓글 방어 자동 시작 실패 - ${error.message}`);
+        if (attackMode !== COMMENT_ATTACK_MODE.DEFAULT) {
+          this.log(`⚠️ ${getCommentAttackModeHumanLabel(attackMode)} 자동 시작 실패 - ${error.message}. 기본 댓글 방어로 전환합니다.`);
+          this.currentManagedAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
+          this.lastManagedAttackModeReason = `${error.message} / 기본 댓글 방어 fallback`;
+          attackMode = COMMENT_ATTACK_MODE.DEFAULT;
+          try {
+            await this.commentScheduler.start({
+              source: 'monitor',
+              commentAttackMode: attackMode,
+            });
+          } catch (fallbackError) {
+            this.log(`⚠️ 댓글 방어 자동 시작 실패 - ${fallbackError.message}`);
+          }
+        } else {
+          this.log(`⚠️ 댓글 방어 자동 시작 실패 - ${error.message}`);
+        }
       }
     } else {
       const sourceChanged = this.commentScheduler.setCurrentSource('monitor');
-      if (sourceChanged) {
+      let attackModeChanged = false;
+
+      try {
+        attackModeChanged = await this.commentScheduler.setRuntimeAttackMode(attackMode);
+      } catch (error) {
+        if (attackMode !== COMMENT_ATTACK_MODE.DEFAULT) {
+          this.log(`⚠️ ${getCommentAttackModeHumanLabel(attackMode)} 전환 실패 - ${error.message}. 기본 댓글 방어로 전환합니다.`);
+          this.currentManagedAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
+          this.lastManagedAttackModeReason = `${error.message} / 기본 댓글 방어 fallback`;
+          attackMode = COMMENT_ATTACK_MODE.DEFAULT;
+          attackModeChanged = await this.commentScheduler.setRuntimeAttackMode(attackMode);
+        } else {
+          throw error;
+        }
+      }
+
+      if (sourceChanged || attackModeChanged) {
         await this.commentScheduler.saveState();
       }
     }
 
     if (this.commentScheduler.isRunning && !this.managedCommentStarted) {
       this.managedCommentStarted = true;
-      this.log('🛡️ 댓글 방어 자동 대응 ON');
+      this.log(`🛡️ 댓글 방어 자동 대응 ON - ${getCommentAttackModeHumanLabel(attackMode)}`);
     }
+  }
+
+  async buildManagedAttackModeDecision(metrics = buildEmptyMetrics()) {
+    const sampleComments = await this.collectSampleFluidComments(metrics.topChangedPosts);
+    const sampleCount = sampleComments.length;
+
+    if (sampleCount < COMMENT_ATTACK_SAMPLE_MIN_FLUID_COMMENT_COUNT) {
+      return {
+        attackMode: COMMENT_ATTACK_MODE.DEFAULT,
+        reason: `샘플 유동 댓글 ${sampleCount}개라서 기본 댓글 방어 유지`,
+      };
+    }
+
+    let refluxDatasetReady = false;
+    try {
+      await ensureCommentRefluxDatasetLoaded();
+      refluxDatasetReady = isCommentRefluxDatasetReady();
+    } catch (error) {
+      this.log(`⚠️ 댓글 역류기 dataset 로드 실패 - ${error.message}`);
+    }
+
+    const refluxMatchCount = refluxDatasetReady
+      ? sampleComments.reduce((count, comment) => (
+        hasCommentRefluxMemo(comment.memo) ? count + 1 : count
+      ), 0)
+      : 0;
+    const nonPureHangulCount = sampleComments.reduce((count, comment) => (
+      isNonPureHangulLikeComment(comment.memo) ? count + 1 : count
+    ), 0);
+
+    const refluxRatio = sampleCount > 0 ? refluxMatchCount / sampleCount : 0;
+    const nonPureHangulRatio = sampleCount > 0 ? nonPureHangulCount / sampleCount : 0;
+
+    if (refluxDatasetReady && refluxRatio >= COMMENT_ATTACK_SAMPLE_RATIO_THRESHOLD) {
+      return {
+        attackMode: COMMENT_ATTACK_MODE.COMMENT_REFLUX,
+        reason: `샘플 유동 댓글 ${sampleCount}개 중 dataset 매치 ${refluxMatchCount}개 (${formatRatioPercent(refluxRatio)}%)`,
+      };
+    }
+
+    if (nonPureHangulRatio >= COMMENT_ATTACK_SAMPLE_RATIO_THRESHOLD) {
+      return {
+        attackMode: COMMENT_ATTACK_MODE.EXCLUDE_PURE_HANGUL,
+        reason: `샘플 유동 댓글 ${sampleCount}개 중 비순수한글 ${nonPureHangulCount}개 (${formatRatioPercent(nonPureHangulRatio)}%)`,
+      };
+    }
+
+    return {
+      attackMode: COMMENT_ATTACK_MODE.DEFAULT,
+      reason: `샘플 유동 댓글 ${sampleCount}개 중 역류 ${refluxMatchCount}개 / 비순수한글 ${nonPureHangulCount}개라서 기본 댓글 방어 유지`,
+    };
+  }
+
+  async collectSampleFluidComments(topChangedPosts = []) {
+    const config = { galleryId: this.config.galleryId };
+    const sampleComments = [];
+
+    for (const post of (Array.isArray(topChangedPosts) ? topChangedPosts : []).slice(0, COMMENT_ATTACK_SAMPLE_POST_LIMIT)) {
+      if (!this.isRunning) {
+        break;
+      }
+
+      const postNo = Number(post?.postNo) || 0;
+      if (postNo <= 0) {
+        continue;
+      }
+
+      try {
+        const html = await fetchPostPage(config, postNo);
+        const esno = extractEsno(html);
+        if (!esno) {
+          this.log(`⚠️ 자동 댓글 모드 샘플링 스킵 - #${postNo} e_s_n_o 추출 실패`);
+          continue;
+        }
+
+        const { comments } = await fetchAllComments(config, postNo, esno, 4);
+        const fluidComments = filterFluidComments(comments)
+          .slice(0, COMMENT_ATTACK_SAMPLE_COMMENT_LIMIT_PER_POST)
+          .map((comment) => ({
+            postNo,
+            no: comment.no,
+            memo: comment.memo,
+          }));
+
+        sampleComments.push(...fluidComments);
+      } catch (error) {
+        this.log(`⚠️ 자동 댓글 모드 샘플링 스킵 - #${postNo} ${error.message}`);
+      }
+    }
+
+    return sampleComments;
   }
 
   async enterRecoveringMode() {
@@ -432,6 +594,8 @@ class Scheduler {
     this.managedCommentStarted = false;
     this.attackHitCount = 0;
     this.releaseHitCount = 0;
+    this.currentManagedAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
+    this.lastManagedAttackModeReason = '';
   }
 
   log(message) {
@@ -460,6 +624,8 @@ class Scheduler {
           lastSnapshot: this.lastSnapshot,
           attackSessionId: this.attackSessionId,
           managedCommentStarted: this.managedCommentStarted,
+          currentManagedAttackMode: this.currentManagedAttackMode,
+          lastManagedAttackModeReason: this.lastManagedAttackModeReason,
           totalAttackDetected: this.totalAttackDetected,
           totalAttackReleased: this.totalAttackReleased,
           reseedRemaining: this.reseedRemaining,
@@ -493,6 +659,8 @@ class Scheduler {
       this.lastSnapshot = Array.isArray(schedulerState.lastSnapshot) ? schedulerState.lastSnapshot : [];
       this.attackSessionId = schedulerState.attackSessionId || '';
       this.managedCommentStarted = Boolean(schedulerState.managedCommentStarted);
+      this.currentManagedAttackMode = normalizeCommentAttackMode(schedulerState.currentManagedAttackMode);
+      this.lastManagedAttackModeReason = String(schedulerState.lastManagedAttackModeReason || '');
       this.totalAttackDetected = schedulerState.totalAttackDetected || 0;
       this.totalAttackReleased = schedulerState.totalAttackReleased || 0;
       this.reseedRemaining = Math.max(0, schedulerState.reseedRemaining || 0);
@@ -540,6 +708,8 @@ class Scheduler {
       lastMetrics: this.lastMetrics,
       attackSessionId: this.attackSessionId,
       managedCommentStarted: this.managedCommentStarted,
+      currentManagedAttackMode: this.currentManagedAttackMode,
+      lastManagedAttackModeReason: this.lastManagedAttackModeReason,
       totalAttackDetected: this.totalAttackDetected,
       totalAttackReleased: this.totalAttackReleased,
       reseedRemaining: this.reseedRemaining,
@@ -572,6 +742,19 @@ function normalizePhase(phase) {
   }
 
   return PHASE.SEEDING;
+}
+
+function isNonPureHangulLikeComment(memo) {
+  const normalizedMemo = normalizeCommentMemo(memo);
+  if (!normalizedMemo) {
+    return false;
+  }
+
+  return !isPureHangulCommentMemo(normalizedMemo);
+}
+
+function formatRatioPercent(value) {
+  return (Math.max(0, Number(value) || 0) * 100).toFixed(1);
 }
 
 async function waitForSchedulerRunLoop(scheduler, featureName) {
