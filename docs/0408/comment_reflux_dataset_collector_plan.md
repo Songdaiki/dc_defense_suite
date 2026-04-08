@@ -105,32 +105,35 @@
 
 또 하나 더 중요하다.
 
-현재 [features/comment/api.js](/home/eorb915/projects/dc_defense_suite/features/comment/api.js) 의
+현재 구현은 사용자가 원한 대로 **댓글 수집기도 댓글방어와 같은 요청 경로를 그대로 탄다.**
+
+즉 [features/comment/api.js](/home/eorb915/projects/dc_defense_suite/features/comment/api.js) 의
 
 - `fetchPostList`
 - `fetchPostPage`
 - `fetchAllComments`
-- `deleteComments`
-- `deleteAndBanComments`
 
-는 전부 `withDcRequestLease(...)`와 묶여 있다.  
-[features/comment/api.js](/home/eorb915/projects/dc_defense_suite/features/comment/api.js#L7)
-
-이건 댓글 방어/삭제에는 맞지만, **밤새 수집기**에는 맞지 않는다.
+를 collector가 재사용한다.
 
 쉽게 예시로:
 
-- 댓글 방어는 관리자 세션 보호가 중요해서 lease가 맞음
-- 댓글 수집기는 read-only 대량 크롤링이라 lease를 잡고 오래 달리면
-  - 댓글 방어
-  - 게시물 분류
-  - IP 차단
-같은 다른 기능과 괜히 엮일 수 있다
+- 목록은 `fetchPostList()`로 읽고
+- 목록에서 받은 `e_s_n_o`를 먼저 재사용하고
+- 그걸로 실패한 글만 `fetchPostPage()`로 다시 열어 `e_s_n_o`를 새로 구한 뒤
+- `fetchAllComments()`로 댓글을 끝까지 읽는다
 
-즉 한 줄로:
+즉 collector는 이제 **“삭제 없는 댓글방어 read-only판”**에 가깝다.
 
-- **댓글 수집기는 기존 comment API fetch/delete 경로를 그대로 재사용하면 안 된다**
-- **lease 없는 collector 전용 API 경로가 필요하다**
+중요:
+
+- standalone feature 분리
+- shared gallery 분리
+- busy feature 미포함
+- auto-resume 금지
+- shard export
+
+이런 collector 성질은 그대로 유지하지만,
+**실제 요청 경로 자체는 댓글방어와 동일하게 맞춘 상태**로 보는 게 맞다.
 
 ---
 
@@ -303,46 +306,43 @@ collector는 UI를 너무 복잡하게 만들지 않기 위해,
 
 ### 핵심 원칙
 
-- `fetchPostList`, `fetchPostPage`, `fetchAllComments`는 재사용하지 않는다
-- 이유: lease가 묶여 있기 때문
+- collector는 standalone feature로 분리한다
+- 하지만 **실제 fetch 경로는 댓글방어와 동일하게 재사용한다**
+- 즉 `fetchPostList`, `fetchPostPage`, `fetchAllComments`를 그대로 래핑해서 쓴다
 
-대신 전용 collector API에서
+쉽게 예시로:
 
-1. 목록 HTML GET
-2. 게시물 view HTML GET
-3. 댓글 페이지 POST
+- 댓글방어:
+  - `fetchPostList -> fetchAllComments -> 삭제`
+- 댓글수집:
+  - `fetchPostList -> fetchAllComments -> 저장`
 
-를 lease 없이 구현한다.
+차이는 **삭제하느냐 저장하느냐**지, 목록/본문/댓글을 읽는 요청 경로는 동일하다.
 
 권장 파일:
 
 - `features/comment-reflux-collector/api.js`
 
-### 여기서 재사용 가능한 것
+### 여기서 실제로 재사용하는 것
 
-현재 댓글 API에서 **pure helper**로 재사용 가능한 건 있다.
+현재 collector는 댓글 API에서 이 함수들을 그대로 재사용한다.
 
+- `fetchPostList(config, page)`
+  [features/comment/api.js](/home/eorb915/projects/dc_defense_suite/features/comment/api.js#L79)
+- `fetchPostPage(config, postNo)`
+  [features/comment/api.js](/home/eorb915/projects/dc_defense_suite/features/comment/api.js#L135)
 - `extractEsno(html)`  
-  [features/comment/api.js](/home/eorb915/projects/dc_defense_suite/features/comment/api.js#L160)
-- `fetchComments(config, postNo, esno, commentPage)`  
-  [features/comment/api.js](/home/eorb915/projects/dc_defense_suite/features/comment/api.js#L196)
+  [features/comment/api.js](/home/eorb915/projects/dc_defense_suite/features/comment/api.js#L156)
+- `fetchAllComments(config, postNo, esno, pageConcurrency)`
+  [features/comment/api.js](/home/eorb915/projects/dc_defense_suite/features/comment/api.js#L240)
 
-중요:
+즉 `features/comment-reflux-collector/api.js`는
 
-- `fetchComments` 자체는 lease를 안 잡는다
-- lease는 `fetchAllComments` 바깥 래퍼 쪽에만 있다  
-  [features/comment/api.js](/home/eorb915/projects/dc_defense_suite/features/comment/api.js#L231)
+- 갤 ID/페이지/동시성 정규화
+- collector용 config shape 정리
+- 기존 comment API 래핑
 
-즉 collector는
-
-- `extractEsno`는 그대로 재사용 가능
-- `fetchComments`도 재사용 가능
-- 하지만 `fetchPostList`, `fetchPostPage`, `fetchAllComments`는 collector 전용으로 다시 두는 게 맞다
-
-쉽게 예시로:
-
-- 목록 GET / view GET은 새 collector API
-- 댓글 POST body shape는 기존 `fetchComments`를 써도 됨
+정도의 역할만 맡는다.
 
 주의:
 
@@ -365,8 +365,8 @@ collector는 UI를 너무 복잡하게 만들지 않기 위해,
 - `isValidGalleryId(value)`
 - `buildListUrl(galleryId, page)`
 - `buildViewUrl(galleryId, postNo)`
-- `fetchCollectorPostListHtml(galleryId, page, options)`
-- `fetchCollectorPostViewHtml(galleryId, postNo, options)`
+- `fetchCollectorPostList(config, page)`
+- `fetchCollectorPostPage(config, postNo)`
 - `fetchCollectorCommentsPage(config, postNo, esno, page)`
 - `fetchAllCollectorComments(config, postNo, esno, pageConcurrency = 4)`
 - `delay(ms)`
@@ -412,23 +412,24 @@ collector는 UI를 너무 복잡하게 만들지 않기 위해,
 
 ### 6-1. 목록 parser
 
-현재 [features/comment/api.js](/home/eorb915/projects/dc_defense_suite/features/comment/api.js#L88) 안의 list row 파싱은 fetch 함수 안에 내장돼 있다.
+현재 구현은 **목록 row 파싱도 댓글방어 API의 `fetchPostList()` 결과를 그대로 재사용**한다.
 
-이걸 바로 공용화하려고 live comment API를 크게 건드리는 것보단,
-collector parser에 **같은 row 추출 로직을 얇게 복사**하는 게 1차로 더 안전하다.
-
-권장 함수:
-
-- `parseCollectorPostEntries(html)`
-
-반환 형태:
+즉 collector가 별도로 목록 HTML을 다시 파싱하지 않고,
+`fetchPostList()`가 반환한
 
 ```js
-[
-  { no: 12345, commentCount: 17 },
-  { no: 12344, commentCount: 0 },
-]
+{
+  posts: [{ no: 12345, commentCount: 17 }],
+  esno: "..."
+}
 ```
+
+형태를 그대로 받는 구조다.
+
+참고:
+
+- `parseCollectorPostEntries(html)`는 초기 설계 흔적으로 남아 있을 수 있지만,
+- 현재 기본 런타임 경로의 주력 목록 파서는 아니다.
 
 그리고 scheduler에서는
 
@@ -614,8 +615,8 @@ phase는 title collector와 같은 계열이 맞다.
 3. `runId` 생성
 4. `page = startPage ~ endPage` 순차 반복
 5. 각 page마다:
-   - 목록 HTML fetch
-   - `parseCollectorPostEntries(html)`
+   - `fetchCollectorPostList(config, page)`
+   - 목록 결과의 `posts`, `esno` 확보
    - `commentCount > 0`인 post만 추림
    - concurrency worker로 post 처리
 6. page 하나 끝날 때
@@ -630,13 +631,15 @@ phase는 title collector와 같은 계열이 맞다.
 
 한 post에 대한 권장 흐름:
 
-1. `fetchCollectorPostViewHtml(galleryId, postNo)`
-2. `extractEsno(html)`
-3. `fetchAllCollectorComments(config, postNo, esno, 4)`
-4. `collectNormalizedCommentRefluxMemos(comments)`
-5. IDB append
-6. counters/log 갱신
-7. worker당 `requestDelayMs` 대기
+1. 목록에서 받은 `sharedEsno`를 먼저 사용
+2. 없으면 `fetchCollectorPostPage(config, postNo)`
+3. `extractEsno(html)`
+4. `fetchAllCollectorComments(config, postNo, esno, 4)`
+5. shared esno로 실패했으면 `fetchCollectorPostPage()`로 새 esno 재조회 후 한 번 더 시도
+6. `collectNormalizedCommentRefluxMemos(comments)`
+7. IDB append
+8. counters/log 갱신
+9. worker당 `requestDelayMs` 대기
 
 쉽게 예시로:
 
@@ -998,17 +1001,28 @@ title collector와 같은 정책으로 가는 것이 맞다.
 
 ## 14. 구현 중 반드시 주의할 문제
 
-### 14-1. `fetchComments`는 재사용해도 되지만 `fetchAllComments`는 재사용하면 안 됨
+### 14-1. collector는 댓글방어와 같은 fetch 경로를 써야 한다
 
-이건 실제 코드에서 헷갈리기 쉽다.
+이건 이번 구현에서 가장 중요한 전제다.
 
-- `fetchComments`는 lease 없음
-- `fetchAllComments`는 lease 있음
+- `fetchPostList`
+- `fetchPostPage`
+- `fetchAllComments`
+
+를 collector가 그대로 재사용해야 한다.
+
+쉽게 예시로:
+
+- 목록에서 받은 `shared e_s_n_o`로 먼저 댓글을 읽고
+- 그게 실패한 글만 view를 다시 열어 `e_s_n_o`를 갱신
+- 다시 `fetchAllComments()`를 시도
+
+이 흐름이 현재 댓글방어와 같다.
 
 즉 collector는
 
-- `fetchComments` 재사용 가능
-- `fetchAllComments` 재사용 금지
+- 속도를 위해 별도 direct fetch 경로를 만들지 않고
+- **댓글방어와 동일한 읽기 경로**를 유지하는 게 맞다
 
 ### 14-2. `getAll(runId)` 기반 다운로드 금지
 
@@ -1177,7 +1191,7 @@ popup export streaming
 지금 실제 코드 기준으로 보면,
 댓글 collector는 **그냥 title collector를 복사하는 방식**이 아니라
 
-- **lease 없는 collector 전용 API**
+- **댓글방어와 같은 fetch 경로 재사용**
 - **목록 순차 + 글 병렬 + 댓글페이지 병렬**
 - **IndexedDB runId 저장**
 - **popup cursor streaming export**

@@ -3,8 +3,8 @@ import {
   delay,
   extractEsno,
   fetchAllCollectorComments,
-  fetchCollectorPostListHtml,
-  fetchCollectorPostViewHtml,
+  fetchCollectorPostList,
+  fetchCollectorPostPage,
   isValidGalleryId,
   normalizeConfig,
   normalizeGalleryId,
@@ -29,8 +29,8 @@ const PHASE = {
 
 class Scheduler {
   constructor(dependencies = {}) {
-    this.fetchPostListHtml = dependencies.fetchPostListHtml || fetchCollectorPostListHtml;
-    this.fetchPostViewHtml = dependencies.fetchPostViewHtml || fetchCollectorPostViewHtml;
+    this.fetchPostList = dependencies.fetchPostList || dependencies.fetchPostListHtml || fetchCollectorPostList;
+    this.fetchPostView = dependencies.fetchPostView || dependencies.fetchPostViewHtml || fetchCollectorPostPage;
     this.fetchAllComments = dependencies.fetchAllComments || fetchAllCollectorComments;
     this.extractEsno = dependencies.extractEsno || extractEsno;
     this.parsePostEntries = dependencies.parsePostEntries || parseCollectorPostEntries;
@@ -145,15 +145,14 @@ class Scheduler {
         this.currentPostNo = 0;
         await this.saveState();
 
-        const listHtml = await this.fetchPostListHtml(this.config.galleryId, page);
-        const postEntries = this.parsePostEntries(listHtml);
-        const candidatePosts = postEntries.filter((entry) => Number(entry?.commentCount) > 0);
+        const listResult = normalizePostListResult(await this.fetchPostList(this.config, page), this.parsePostEntries);
+        const candidatePosts = listResult.posts.filter((entry) => Number(entry?.commentCount) > 0);
 
         this.fetchedPageCount += 1;
         this.log(`📄 ${page}페이지 로드 - 댓글 있는 글 ${candidatePosts.length}개 / 동시 처리 ${this.config.postConcurrency}`);
         await this.saveState();
 
-        await this.processPostsInParallel(candidatePosts);
+        await this.processPostsInParallel(candidatePosts, listResult.esno);
 
         if (!this.isRunning || page >= this.config.endPage) {
           continue;
@@ -190,7 +189,7 @@ class Scheduler {
     }
   }
 
-  async processPostsInParallel(posts) {
+  async processPostsInParallel(posts, sharedEsno = null) {
     const normalizedPosts = Array.isArray(posts) ? posts : [];
     if (normalizedPosts.length <= 0) {
       return;
@@ -202,7 +201,7 @@ class Scheduler {
       while (this.isRunning && nextIndex < normalizedPosts.length) {
         const currentIndex = nextIndex;
         nextIndex += 1;
-        await this.processSinglePost(normalizedPosts[currentIndex]);
+        await this.processSinglePost(normalizedPosts[currentIndex], sharedEsno);
 
         if (!this.isRunning) {
           break;
@@ -217,7 +216,7 @@ class Scheduler {
     await this.saveState();
   }
 
-  async processSinglePost(postEntry) {
+  async processSinglePost(postEntry, sharedEsno = null) {
     const postNo = Number(postEntry?.no) || 0;
     if (postNo <= 0 || !this.isRunning) {
       return;
@@ -227,13 +226,38 @@ class Scheduler {
     await this.saveState();
 
     try {
-      const postHtml = await this.fetchPostViewHtml(this.config.galleryId, postNo);
-      const esno = this.extractEsno(postHtml);
+      let esno = sharedEsno;
+      if (!esno) {
+        const postHtml = await this.fetchPostView(this.config, postNo);
+        esno = this.extractEsno(postHtml);
+      }
+
       if (!esno) {
         throw new Error('e_s_n_o 토큰 추출 실패');
       }
 
-      const { comments } = await this.fetchAllComments(this.config, postNo, esno, this.config.commentPageConcurrency);
+      let comments;
+      try {
+        ({ comments } = await this.fetchAllComments(this.config, postNo, esno, this.config.commentPageConcurrency));
+      } catch (error) {
+        if (!sharedEsno) {
+          throw error;
+        }
+
+        const refreshedPostHtml = await this.fetchPostView(this.config, postNo);
+        const refreshedEsno = this.extractEsno(refreshedPostHtml);
+        if (!refreshedEsno) {
+          throw error;
+        }
+
+        ({ comments } = await this.fetchAllComments(
+          this.config,
+          postNo,
+          refreshedEsno,
+          this.config.commentPageConcurrency,
+        ));
+      }
+
       const normalizedMemos = collectNewNormalizedMemos(
         this.collectMemos(comments),
         this.runtimeMemoSet,
@@ -429,6 +453,21 @@ function mergeNormalizedMemosIntoRuntimeSet(runtimeMemoSet, memos) {
 
 function normalizePhase(value) {
   return Object.values(PHASE).includes(value) ? value : PHASE.IDLE;
+}
+
+function normalizePostListResult(result, parsePostEntries) {
+  if (typeof result === 'string') {
+    const parsedPosts = typeof parsePostEntries === 'function' ? parsePostEntries(result) : [];
+    return {
+      posts: Array.isArray(parsedPosts) ? parsedPosts : [],
+      esno: '',
+    };
+  }
+
+  return {
+    posts: Array.isArray(result?.posts) ? result.posts : [],
+    esno: String(result?.esno || '').trim(),
+  };
 }
 
 function buildRunId(nowIso = new Date().toISOString()) {

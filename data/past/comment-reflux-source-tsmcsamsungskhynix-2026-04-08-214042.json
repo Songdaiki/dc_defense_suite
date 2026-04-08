@@ -1,0 +1,16 @@
+{
+  "_comment": "이 파일은 gallery source export manifest다. 최종 runtime dataset이 아니라 merge/build 입력이다.",
+  "_comment_update_rule": "source export를 다시 수집했다면 version을 새로 찍는다.",
+  "version": "2026-04-08-214042",
+  "updatedAt": "2026-04-08T12:40:42.966Z",
+  "sourceGalleryIds": [
+    "tsmcsamsungskhynix"
+  ],
+  "memoCount": 122357,
+  "shards": [
+    {
+      "path": "comment-reflux-source-tsmcsamsungskhynix-2026-04-08-214042.part01.json",
+      "memoCount": 122357
+    }
+  ]
+}
