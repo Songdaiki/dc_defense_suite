@@ -9,7 +9,7 @@ const DEFAULT_CONFIG = {
   galleryType: 'M',
   baseUrl: 'https://gall.dcinside.com',
   gallogBaseUrl: 'https://gallog.dcinside.com',
-  pollIntervalMs: 60000,
+  pollIntervalMs: 10000,
   recentWindowMs: 5 * 60 * 1000,
   recentPostThreshold: 2,
   postRatioThresholdPercent: 90,
