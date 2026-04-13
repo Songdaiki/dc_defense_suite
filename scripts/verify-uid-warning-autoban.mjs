@@ -340,6 +340,15 @@ async function runHelperAssertions() {
   const normalizedAv = normalizeImmediateTitleValue('Ꭺ\u200BV');
   const normalizedSamsung = normalizeImmediateTitleValue('※삼성전자※');
   const normalizedRules = normalizeImmediateTitleBanRules([' AV ', 'A\u200BV', '삼성전자', '', '삼성전자']);
+  const normalizedMixedRules = normalizeImmediateTitleBanRules([
+    ' AV ',
+    { rawTitle: 'A\u200BV' },
+    { type: 'contains', rawTitle: '삼성전자' },
+    { type: 'and', rawTitle: '반도체, 용인, 노가다' },
+    { type: 'and', rawTitle: '노가다, 반도체, 용인' },
+    { type: 'and', rawTitle: '반도체, ,' },
+    { type: 'and', rawTokens: ['용인', '반도체', '노가다', '반도체'] },
+  ]);
   const grouped = groupRowsByUid([
     { uid: 'u1', createdAtMs: BASE_TIME_MS - 3000, no: 1 },
     { uid: 'u1', createdAtMs: BASE_TIME_MS - 1000, no: 2 },
@@ -365,6 +374,20 @@ async function runHelperAssertions() {
   recordEqual(normalizedSamsung, '삼성전자', '정규화가 특수문자를 제거하는지');
   recordEqual(normalizedRules.length, 2, '제목 규칙 정규화가 빈값/중복을 제거하는지');
   recordArrayEqual(normalizedRules.map((rule) => rule.normalizedTitle), ['av', '삼성전자'], '제목 규칙 정규화 결과가 예상과 같은지');
+  recordArrayEqual(normalizedRules.map((rule) => rule.type), ['contains', 'contains'], '구버전 제목 규칙이 contains 타입으로 승격되는지');
+  recordArrayEqual(normalizedRules.map((rule) => rule.ruleKey), ['contains:av', 'contains:삼성전자'], '구버전 제목 규칙의 ruleKey가 contains 접두사로 만들어지는지');
+  recordEqual(normalizedMixedRules.length, 3, 'AND 제목 규칙 정규화가 중복/1토큰 규칙을 제거하는지');
+  recordArrayEqual(normalizedMixedRules.map((rule) => rule.type), ['contains', 'contains', 'and'], '제목 규칙 정규화가 contains와 and를 함께 유지하는지');
+  recordArrayEqual(
+    normalizedMixedRules.map((rule) => rule.ruleKey),
+    ['contains:av', 'contains:삼성전자', 'and:노가다|반도체|용인'],
+    '제목 규칙 정규화가 ruleKey를 타입 포함 canonical key로 만드는지',
+  );
+  recordEqual(normalizedMixedRules[2].rawTitle, '반도체, 용인, 노가다', 'AND 규칙은 첫 입력 rawTitle을 유지하는지');
+  recordArrayEqual(normalizedMixedRules[2].rawTokens, ['노가다', '반도체', '용인'], 'AND 규칙 rawTokens가 canonical 순서로 저장되는지');
+  recordArrayEqual(normalizedMixedRules[2].normalizedTokens, ['노가다', '반도체', '용인'], 'AND 규칙 normalizedTokens가 canonical 순서로 저장되는지');
+  recordEqual(normalizedMixedRules[2].normalizedTitle, '노가다|반도체|용인', 'AND 규칙 normalizedTitle이 token join 형태인지');
+  recordEqual(normalizedMixedRules[2].ruleKey, 'and:노가다|반도체|용인', 'AND 규칙 ruleKey가 and 접두사를 포함하는지');
   recordEqual(grouped.length, 2, 'uid 그룹핑이 uid별로 묶이는지');
   recordArrayEqual(grouped[0].rows.map((row) => row.no), [2, 1], '같은 uid 행이 최신순으로 정렬되는지');
   recordArrayEqual(recentRows.map((row) => row.no), [1, 2, 3], '5분 burst 탐지가 최근 3글 묶음을 고르는지');
@@ -419,7 +442,7 @@ async function runMainScenarioAssertions() {
 
   scheduler.recentUidActions['thesingularity::uid-recent-skip'] = {
     lastNewestPostNo: 9902,
-    lastActionAt: new Date(BASE_TIME_MS).toISOString(),
+    lastActionAt: new Date().toISOString(),
     success: false,
   };
 
@@ -476,12 +499,12 @@ async function runRecentSkipAssertions() {
   );
 
   scheduler.recentImmediatePostActions['11001'] = {
-    lastActionAt: new Date(BASE_TIME_MS).toISOString(),
+    lastActionAt: new Date().toISOString(),
     success: true,
   };
   scheduler.recentUidActions['thesingularity::uid-burst-repeat'] = {
     lastNewestPostNo: 11004,
-    lastActionAt: new Date(BASE_TIME_MS).toISOString(),
+    lastActionAt: new Date().toISOString(),
     success: false,
   };
 
@@ -492,6 +515,72 @@ async function runRecentSkipAssertions() {
   recordEqual(scheduler.totalTriggeredUidCount, 0, 'uid recent skip이면 uid 제재가 발생하지 않는지');
   recordArrayEqual(fetchUidStatsCalls.map((entry) => entry.uid), ['uid-immediate-repeat'], 'uid recent skip이면 같은 uid의 다른 일반 글만 활동통계 조회되는지');
   record(scheduler.logs.some((entry) => entry.includes('최근 처리 이력이 있어 건너뜀')), 'recent skip 로그가 남는지');
+}
+
+async function runAndRuleAssertions() {
+  const rows = [
+    makeRow({ no: 14001, uid: 'uid-and-primary', nick: 'ㄱㄱ', title: '반도체 용인이나 가서 노가다나 쳐해라', createdAtMs: BASE_TIME_MS }),
+    makeRow({ no: 14002, uid: 'uid-and-primary', nick: 'ㄱㄱ', title: '반도체용인노가다', createdAtMs: BASE_TIME_MS - 1000 }),
+    makeRow({ no: 14003, uid: 'uid-contains-only', nick: 'ㄴㄴ', title: '반도체 용인 공장 얘기', createdAtMs: BASE_TIME_MS - 2000 }),
+    makeRow({ no: 14004, uid: 'uid-and-burst', nick: 'ㄷㄷ', title: '노가다 반도체 용인 집합', createdAtMs: BASE_TIME_MS - 3000 }),
+    makeRow({ no: 14005, uid: 'uid-and-burst', nick: 'ㄷㄷ', title: '일반 글', createdAtMs: BASE_TIME_MS - 4000 }),
+  ];
+
+  const {
+    scheduler,
+    executeBanCalls,
+    fetchUidStatsCalls,
+    fetchUidGallogPrivacyCalls,
+    fetchUidGallogGuestbookStateCalls,
+  } = await createSchedulerForRows(
+    rows,
+    {
+      fetchUidStats: async () => ({ success: true, effectivePostRatio: 100, totalActivityCount: 50 }),
+      fetchUidGallogPrivacy: async () => ({ success: true, fullyPrivate: false, postingPrivate: false, commentPrivate: false }),
+      fetchUidGallogGuestbookState: async () => ({ success: true, guestbookLocked: false, guestbookWritable: true }),
+    },
+    {
+      immediateTitleBanRules: [
+        '반도체',
+        { type: 'and', rawTitle: '반도체, 용인, 노가다' },
+      ],
+    },
+  );
+
+  await scheduler.runCycle();
+
+  recordEqual(executeBanCalls.length, 2, 'AND 규칙 시나리오에서 즉시 제목 제재 호출이 2번인지');
+  recordArrayEqual(collectNos(executeBanCalls[0].posts), [14001, 14002, 14004], 'AND 규칙 매치 글이 같은 그룹으로 묶이는지');
+  recordArrayEqual(collectNos(executeBanCalls[1].posts), [14003], 'contains 전용 글은 별도 그룹으로 묶이는지');
+  recordArrayEqual(
+    collectSubjects(executeBanCalls[0].posts),
+    ['노가다 반도체 용인 집합', '반도체 용인이나 가서 노가다나 쳐해라', '반도체용인노가다'].sort(),
+    'AND 규칙 그룹이 순서가 다른 제목과 붙은 문자열 제목을 함께 잡는지',
+  );
+  recordArrayEqual(collectSubjects(executeBanCalls[1].posts), ['반도체 용인 공장 얘기'], 'contains 규칙 그룹은 부분 포함 제목만 잡는지');
+  recordEqual(scheduler.lastImmediateTitleBanCount, 4, 'AND 규칙 시나리오의 즉시 제목 차단 수가 4개인지');
+  recordEqual(scheduler.totalImmediateTitleBanPostCount, 4, 'AND 규칙 시나리오의 누적 제목 차단 수가 4개인지');
+  recordEqual(scheduler.totalTriggeredUidCount, 0, 'AND 즉시차단 글은 UID burst 경로로 재진입하지 않는지');
+  recordEqual(scheduler.totalSingleSightTriggeredUidCount, 0, 'AND 즉시차단 시나리오에서 단일발견 UID 제재가 추가로 생기지 않는지');
+  recordEqual(scheduler.lastImmediateTitleBanMatchedTitle, '반도체, 용인, 노가다 외 1개', '최근 제목 직차단 요약이 AND 규칙 이름을 유지하는지');
+  record(fetchUidStatsCalls.some((entry) => entry.uid === 'uid-and-burst'), 'AND 즉시차단 뒤에도 같은 uid의 일반 글 1개는 후속 통계 조회가 가능한지');
+  recordEqual(
+    fetchUidStatsCalls.filter((entry) => entry.uid === 'uid-and-primary').length,
+    0,
+    'AND 즉시차단으로 처리된 uid의 글은 UID 통계 조회로 재진입하지 않는지',
+  );
+  recordEqual(
+    fetchUidGallogPrivacyCalls.filter((entry) => entry.uid === 'uid-and-primary').length,
+    0,
+    'AND 즉시차단으로 처리된 uid는 갤로그 조회로 재진입하지 않는지',
+  );
+  recordEqual(
+    fetchUidGallogGuestbookStateCalls.filter((entry) => entry.uid === 'uid-and-primary').length,
+    0,
+    'AND 즉시차단으로 처리된 uid는 방명록 조회로 재진입하지 않는지',
+  );
+  record(scheduler.logs.some((entry) => entry.includes('[AND] 반도체, 용인, 노가다 매치')), 'AND 규칙 로그가 타입 라벨과 함께 남는지');
+  record(scheduler.logs.some((entry) => entry.includes('[포함] 반도체 매치')), 'contains 규칙 로그도 타입 라벨과 함께 남는지');
 }
 
 async function runFailureAssertions() {
@@ -585,6 +674,7 @@ async function main() {
   await runHelperAssertions();
   await runMainScenarioAssertions();
   await runRecentSkipAssertions();
+  await runAndRuleAssertions();
   await runFailureAssertions();
   await runDeleteFallbackAssertions();
 

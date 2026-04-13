@@ -477,6 +477,7 @@ class Scheduler {
         continue;
       }
 
+      // recent-skip이어도 같은 글이 UID 경로로 다시 들어가 중복 처리되지 않게 먼저 표시한다.
       processedImmediatePostNos.add(postNo);
 
       const actionKey = buildImmediatePostActionKey(postNo);
@@ -487,17 +488,18 @@ class Scheduler {
           getRetryCooldownMs(this.config),
         )
       ) {
-        this.log(`ℹ️ 제목 직차단 스킵 - #${postNo} ${matchedRule.rawTitle}는 최근 처리 이력이 있어 건너뜀`);
+        this.log(`ℹ️ 제목 직차단 스킵 - #${postNo} ${getImmediateTitleRuleLogLabel(matchedRule)}는 최근 처리 이력이 있어 건너뜀`);
         continue;
       }
 
-      const existingGroup = matchedGroups.get(matchedRule.normalizedTitle);
+      const matchedRuleKey = String(matchedRule.ruleKey || matchedRule.normalizedTitle || '').trim();
+      const existingGroup = matchedGroups.get(matchedRuleKey);
       if (existingGroup) {
         existingGroup.rows.push(row);
         continue;
       }
 
-      matchedGroups.set(matchedRule.normalizedTitle, {
+      matchedGroups.set(matchedRuleKey, {
         rule: matchedRule,
         rows: [row],
       });
@@ -517,7 +519,7 @@ class Scheduler {
 
       matchedTitles.push(matchedGroup.rule.rawTitle);
       this.lastImmediateTitleBanCount += targetPosts.length;
-      this.log(`🚨 제목 직차단 ${matchedGroup.rule.rawTitle} 포함 매치 -> page1 ${targetPosts.length}개 제재 시작`);
+      this.log(`🚨 제목 직차단 ${getImmediateTitleRuleLogLabel(matchedGroup.rule)} 매치 -> page1 ${targetPosts.length}개 제재 시작`);
 
       const result = await this.executeBan({
         feature: 'uidWarningAutoBan',
@@ -542,15 +544,15 @@ class Scheduler {
       this.runtimeDeleteEnabled = result.finalDeleteEnabled;
 
       if (result.successNos.length > 0) {
-        this.log(`⛔ 제목 직차단 ${matchedGroup.rule.rawTitle} 글 ${result.successNos.length}개 차단${result.finalDeleteEnabled ? '/삭제' : ''} 완료`);
+        this.log(`⛔ 제목 직차단 ${getImmediateTitleRuleLogLabel(matchedGroup.rule)} 글 ${result.successNos.length}개 차단${result.finalDeleteEnabled ? '/삭제' : ''} 완료`);
       }
 
       if (result.banOnlyRetrySuccessCount > 0) {
-        this.log(`🧯 제목 직차단 ${matchedGroup.rule.rawTitle} 글 ${result.banOnlyRetrySuccessCount}개는 차단만 수행`);
+        this.log(`🧯 제목 직차단 ${getImmediateTitleRuleLogLabel(matchedGroup.rule)} 글 ${result.banOnlyRetrySuccessCount}개는 차단만 수행`);
       }
 
       if (result.failedNos.length > 0) {
-        this.log(`⚠️ 제목 직차단 ${matchedGroup.rule.rawTitle} 제재 실패 ${result.failedNos.length}개 - ${result.failedNos.join(', ')}`);
+        this.log(`⚠️ 제목 직차단 ${getImmediateTitleRuleLogLabel(matchedGroup.rule)} 제재 실패 ${result.failedNos.length}개 - ${result.failedNos.join(', ')}`);
       }
 
       const actionAt = new Date().toISOString();
@@ -988,18 +990,93 @@ function findImmediateTitleMatchedRule(rules = [], normalizedTitle = '') {
   }
 
   let matchedRule = null;
+  let matchedSpecificity = -1;
   for (const rule of Array.isArray(rules) ? rules : []) {
-    const normalizedRule = String(rule?.normalizedTitle || '').trim();
-    if (!normalizedRule || !title.includes(normalizedRule)) {
+    if (!matchesImmediateTitleRule(rule, title)) {
       continue;
     }
 
-    if (!matchedRule || normalizedRule.length > String(matchedRule.normalizedTitle || '').length) {
+    const specificity = getImmediateTitleRuleSpecificity(rule);
+    if (!matchedRule) {
       matchedRule = rule;
+      matchedSpecificity = specificity;
+      continue;
+    }
+
+    if (specificity > matchedSpecificity) {
+      matchedRule = rule;
+      matchedSpecificity = specificity;
+      continue;
+    }
+
+    if (specificity !== matchedSpecificity) {
+      continue;
+    }
+
+    const normalizedRuleLength = String(rule?.normalizedTitle || '').length;
+    const matchedRuleLength = String(matchedRule?.normalizedTitle || '').length;
+    if (normalizedRuleLength > matchedRuleLength) {
+      matchedRule = rule;
+      matchedSpecificity = specificity;
+      continue;
+    }
+
+    if (normalizedRuleLength !== matchedRuleLength) {
+      continue;
+    }
+
+    if (String(rule?.type || '') === 'and' && String(matchedRule?.type || '') !== 'and') {
+      matchedRule = rule;
+      matchedSpecificity = specificity;
+      continue;
+    }
+
+    const ruleKey = String(rule?.ruleKey || '').trim();
+    const matchedRuleKey = String(matchedRule?.ruleKey || '').trim();
+    if (ruleKey && matchedRuleKey && ruleKey.localeCompare(matchedRuleKey, 'ko-KR') < 0) {
+      matchedRule = rule;
+      matchedSpecificity = specificity;
     }
   }
 
   return matchedRule;
+}
+
+function matchesImmediateTitleRule(rule = {}, normalizedTitle = '') {
+  const title = String(normalizedTitle || '').trim();
+  if (!title) {
+    return false;
+  }
+
+  if (String(rule?.type || '').trim() === 'and') {
+    const normalizedTokens = Array.isArray(rule?.normalizedTokens)
+      ? rule.normalizedTokens
+      : [];
+    return normalizedTokens.length >= 2
+      && normalizedTokens.every((token) => title.includes(String(token || '').trim()));
+  }
+
+  const normalizedRule = String(rule?.normalizedTitle || '').trim();
+  return Boolean(normalizedRule) && title.includes(normalizedRule);
+}
+
+function getImmediateTitleRuleSpecificity(rule = {}) {
+  if (String(rule?.type || '').trim() === 'and') {
+    const normalizedTokens = Array.isArray(rule?.normalizedTokens)
+      ? rule.normalizedTokens.map((token) => String(token || '').trim()).filter(Boolean)
+      : [];
+    const tokenLengthSum = normalizedTokens.reduce((sum, token) => sum + token.length, 0);
+    return tokenLengthSum + normalizedTokens.length;
+  }
+
+  return String(rule?.normalizedTitle || '').trim().length;
+}
+
+function getImmediateTitleRuleLogLabel(rule = {}) {
+  const typeLabel = String(rule?.type || '').trim() === 'and' ? '[AND]' : '[포함]';
+  const rawTitle = String(rule?.rawTitle || '').trim();
+  const normalizedTitle = String(rule?.normalizedTitle || '').trim();
+  return `${typeLabel} ${rawTitle || normalizedTitle}`;
 }
 
 function isTwoConsonantNick(value) {

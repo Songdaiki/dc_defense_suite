@@ -228,29 +228,128 @@ function createImmediateTitleBanTargetPosts(rows = []) {
 
 function normalizeImmediateTitleBanRules(rules = []) {
   const normalizedRules = [];
-  const seenNormalizedTitles = new Set();
+  const seenRuleKeys = new Set();
 
   for (const rule of Array.isArray(rules) ? rules : []) {
-    const rawTitle = typeof rule === 'string'
-      ? String(rule || '').trim()
-      : String(rule?.rawTitle || '').trim();
-    if (!rawTitle) {
+    const normalizedRule = normalizeImmediateTitleBanRule(rule);
+    if (!normalizedRule) {
       continue;
     }
 
-    const normalizedTitle = normalizeImmediateTitleValue(rawTitle);
-    if (!normalizedTitle || seenNormalizedTitles.has(normalizedTitle)) {
+    if (seenRuleKeys.has(normalizedRule.ruleKey)) {
       continue;
     }
 
-    seenNormalizedTitles.add(normalizedTitle);
-    normalizedRules.push({
-      rawTitle,
-      normalizedTitle,
-    });
+    seenRuleKeys.add(normalizedRule.ruleKey);
+    normalizedRules.push(normalizedRule);
   }
 
   return normalizedRules;
+}
+
+function normalizeImmediateTitleBanRule(rule) {
+  if (typeof rule === 'string') {
+    return normalizeImmediateContainsTitleBanRule({ rawTitle: rule });
+  }
+
+  if (
+    String(rule?.type || '').trim().toLowerCase() === 'and'
+    || Array.isArray(rule?.rawTokens)
+    || Array.isArray(rule?.normalizedTokens)
+  ) {
+    return normalizeImmediateAndTitleBanRule(rule);
+  }
+
+  return normalizeImmediateContainsTitleBanRule(rule);
+}
+
+function normalizeImmediateContainsTitleBanRule(rule = {}) {
+  const rawTitle = String(rule?.rawTitle || '').trim();
+  if (!rawTitle) {
+    return null;
+  }
+
+  const normalizedTitle = normalizeImmediateTitleValue(rawTitle);
+  if (!normalizedTitle) {
+    return null;
+  }
+
+  return {
+    type: 'contains',
+    rawTitle,
+    normalizedTitle,
+    ruleKey: buildImmediateTitleRuleKey({
+      type: 'contains',
+      normalizedTitle,
+    }),
+  };
+}
+
+function normalizeImmediateAndTitleBanRule(rule = {}) {
+  const rawTokenEntries = normalizeImmediateTitleBanAndTokenEntries(
+    Array.isArray(rule?.rawTokens) && rule.rawTokens.length > 0
+      ? rule.rawTokens
+      : String(rule?.rawTitle || '').trim(),
+  );
+  if (rawTokenEntries.length < 2) {
+    return null;
+  }
+
+  const rawTokens = rawTokenEntries.map((entry) => entry.rawToken);
+  const normalizedTokens = rawTokenEntries.map((entry) => entry.normalizedToken);
+  const normalizedTitle = normalizedTokens.join('|');
+
+  return {
+    type: 'and',
+    rawTitle: String(rule?.rawTitle || '').trim() || rawTokens.join(', '),
+    rawTokens,
+    normalizedTokens,
+    normalizedTitle,
+    ruleKey: buildImmediateTitleRuleKey({
+      type: 'and',
+      normalizedTitle,
+    }),
+  };
+}
+
+function normalizeImmediateTitleBanAndTokenEntries(value) {
+  const entries = [];
+  const seenNormalizedTokens = new Set();
+  const rawTokens = Array.isArray(value) ? value : String(value || '').split(',');
+
+  for (const rawTokenValue of rawTokens) {
+    const rawToken = String(rawTokenValue || '').trim();
+    if (!rawToken) {
+      continue;
+    }
+
+    const normalizedToken = normalizeImmediateTitleValue(rawToken);
+    if (!normalizedToken || seenNormalizedTokens.has(normalizedToken)) {
+      continue;
+    }
+
+    seenNormalizedTokens.add(normalizedToken);
+    entries.push({
+      rawToken,
+      normalizedToken,
+    });
+  }
+
+  // AND 규칙은 입력 순서와 무관하게 같은 key가 되도록 canonical 순서를 강제한다.
+  entries.sort((left, right) => left.normalizedToken.localeCompare(right.normalizedToken, 'ko-KR'));
+  return entries;
+}
+
+function buildImmediateTitleRuleKey(rule = {}) {
+  const normalizedType = String(rule?.type || '').trim().toLowerCase() === 'and'
+    ? 'and'
+    : 'contains';
+  const normalizedTitle = String(rule?.normalizedTitle || '').trim();
+  if (!normalizedTitle) {
+    return '';
+  }
+
+  return `${normalizedType}:${normalizedTitle}`;
 }
 
 function normalizeImmediateTitleValue(value) {

@@ -1353,11 +1353,12 @@
               <input type="hidden" id="uidWarningAutoBanImmediateTitleRulesValue" value="[]">
               <div class="action-row uid-warning-title-rule-action-row">
                 <button id="uidWarningAutoBanAddImmediateTitleRuleBtn" class="btn btn-primary">금칙 제목 추가</button>
+                <button id="uidWarningAutoBanAddImmediateTitleAndRuleBtn" class="btn btn-secondary">AND 키워드 추가</button>
                 <button id="uidWarningAutoBanSaveConfigBtn" class="btn btn-secondary">설정 저장</button>
               </div>
             </div>
             <p class="manual-utility-meta uid-warning-title-rule-help">
-              띄어쓰기, 따옴표, 쉼표, 특수문자, zero-width를 제거하고 한글/영문 기준 포함 매치로 비교합니다.
+              금칙 제목은 정규화 후 포함 매치로 비교하고, AND 규칙은 쉼표(,)로 구분한 키워드가 제목에 모두 들어가면 매치합니다. 예: 반도체, 용인, 노가다
             </p>
             <div id="uidWarningAutoBanImmediateTitleRuleList" class="manual-rule-list">
               <div class="log-empty">등록된 금칙 제목이 없습니다.</div>

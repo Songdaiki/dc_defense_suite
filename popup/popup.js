@@ -327,6 +327,7 @@ const FEATURE_DOM = {
     immediateTitleRulesValueInput: document.getElementById('uidWarningAutoBanImmediateTitleRulesValue'),
     immediateTitleRuleList: document.getElementById('uidWarningAutoBanImmediateTitleRuleList'),
     addImmediateTitleRuleBtn: document.getElementById('uidWarningAutoBanAddImmediateTitleRuleBtn'),
+    addImmediateTitleAndRuleBtn: document.getElementById('uidWarningAutoBanAddImmediateTitleAndRuleBtn'),
     saveConfigBtn: document.getElementById('uidWarningAutoBanSaveConfigBtn'),
     resetBtn: document.getElementById('uidWarningAutoBanResetBtn'),
   },
@@ -1860,38 +1861,11 @@ function bindUidWarningAutoBanEvents() {
   });
 
   dom.addImmediateTitleRuleBtn.addEventListener('click', () => {
-    const rawTitle = dom.immediateTitleRuleInput.value.trim();
-    if (!rawTitle) {
-      alert('금칙 제목을 입력하세요.');
-      dom.immediateTitleRuleInput.focus();
-      return;
-    }
+    addUidWarningAutoBanImmediateTitleRule('contains');
+  });
 
-    const normalizedTitle = normalizeUidWarningAutoBanImmediateTitleRuleValue(rawTitle);
-    if (!normalizedTitle) {
-      alert('한글/영문 기준으로 남는 제목만 추가할 수 있습니다.');
-      dom.immediateTitleRuleInput.focus();
-      return;
-    }
-
-    const rules = parseUidWarningAutoBanImmediateTitleRulesValue(dom.immediateTitleRulesValueInput.value);
-    if (rules.some((rule) => rule.normalizedTitle === normalizedTitle)) {
-      alert('이미 등록된 금칙 제목입니다.');
-      dom.immediateTitleRuleInput.focus();
-      dom.immediateTitleRuleInput.select();
-      return;
-    }
-
-    const nextRules = [
-      ...rules,
-      {
-        rawTitle,
-        normalizedTitle,
-      },
-    ];
-    updateUidWarningAutoBanImmediateTitleRulesEditor(nextRules);
-    dom.immediateTitleRuleInput.value = '';
-    dom.immediateTitleRuleInput.focus();
+  dom.addImmediateTitleAndRuleBtn.addEventListener('click', () => {
+    addUidWarningAutoBanImmediateTitleRule('and');
   });
 
   dom.saveConfigBtn.addEventListener('click', async () => {
@@ -1911,6 +1885,7 @@ function bindUidWarningAutoBanEvents() {
     }
 
     DIRTY_FEATURES.uidWarningAutoBan = false;
+    flashSaved(dom.saveConfigBtn);
     if (response.statuses) {
       applyStatuses(response.statuses);
     } else {
@@ -2637,6 +2612,7 @@ function updateUidWarningAutoBanUI(status) {
   setDisabled(dom.toggleBtn, false);
   setDisabled(dom.saveConfigBtn, false);
   setDisabled(dom.addImmediateTitleRuleBtn, false);
+  setDisabled(dom.addImmediateTitleAndRuleBtn, false);
   setDisabled(dom.resetBtn, false);
 }
 
@@ -2711,6 +2687,7 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uid
   setDisabled(uidWarningAutoBanDom.toggleBtn, monitorUidWarningAutoBanLocked || ipLocked);
   setDisabled(uidWarningAutoBanDom.immediateTitleRuleInput, monitorUidWarningAutoBanLocked || ipLocked);
   setDisabled(uidWarningAutoBanDom.addImmediateTitleRuleBtn, monitorUidWarningAutoBanLocked || ipLocked);
+  setDisabled(uidWarningAutoBanDom.addImmediateTitleAndRuleBtn, monitorUidWarningAutoBanLocked || ipLocked);
   setDisabled(uidWarningAutoBanDom.saveConfigBtn, monitorUidWarningAutoBanLocked || ipLocked);
   setDisabled(uidWarningAutoBanDom.resetBtn, monitorUidWarningAutoBanLocked || ipLocked);
   uidWarningAutoBanDom.immediateTitleRuleList
@@ -3462,23 +3439,19 @@ function parseUidWarningAutoBanImmediateTitleRulesValue(value) {
   }
 
   const normalizedRules = [];
-  const seenNormalizedTitles = new Set();
+  const seenRuleKeys = new Set();
   for (const rule of Array.isArray(parsed) ? parsed : []) {
-    const rawTitle = String(rule?.rawTitle || '').trim();
-    if (!rawTitle) {
+    const normalizedRule = normalizeUidWarningAutoBanImmediateTitleRule(rule);
+    if (!normalizedRule) {
       continue;
     }
 
-    const normalizedTitle = normalizeUidWarningAutoBanImmediateTitleRuleValue(rawTitle);
-    if (!normalizedTitle || seenNormalizedTitles.has(normalizedTitle)) {
+    if (seenRuleKeys.has(normalizedRule.ruleKey)) {
       continue;
     }
 
-    seenNormalizedTitles.add(normalizedTitle);
-    normalizedRules.push({
-      rawTitle,
-      normalizedTitle,
-    });
+    seenRuleKeys.add(normalizedRule.ruleKey);
+    normalizedRules.push(normalizedRule);
   }
 
   return normalizedRules;
@@ -3514,18 +3487,20 @@ function renderUidWarningAutoBanImmediateTitleRuleList(rules = []) {
 
     const rawTitle = document.createElement('span');
     rawTitle.className = 'manual-rule-raw';
-    rawTitle.textContent = rule.rawTitle;
+    rawTitle.textContent = `${getUidWarningAutoBanImmediateTitleRuleTypeLabel(rule)} ${rule.rawTitle}`;
 
     const normalizedTitle = document.createElement('span');
     normalizedTitle.className = 'manual-rule-normalized';
-    normalizedTitle.textContent = `정규화: ${rule.normalizedTitle}`;
+    normalizedTitle.textContent = String(rule?.type || '') === 'and'
+      ? `정규화: ${(Array.isArray(rule?.normalizedTokens) ? rule.normalizedTokens : []).join(' | ')}`
+      : `정규화: ${rule.normalizedTitle}`;
 
     const removeBtn = document.createElement('button');
     removeBtn.className = 'manual-rule-remove-btn';
     removeBtn.textContent = '삭제';
     removeBtn.addEventListener('click', () => {
       const currentRules = parseUidWarningAutoBanImmediateTitleRulesValue(dom.immediateTitleRulesValueInput.value);
-      const nextRules = currentRules.filter((currentRule) => currentRule.normalizedTitle !== rule.normalizedTitle);
+      const nextRules = currentRules.filter((currentRule) => currentRule.ruleKey !== rule.ruleKey);
       updateUidWarningAutoBanImmediateTitleRulesEditor(nextRules);
     });
 
@@ -3535,6 +3510,154 @@ function renderUidWarningAutoBanImmediateTitleRuleList(rules = []) {
     item.appendChild(removeBtn);
     dom.immediateTitleRuleList.appendChild(item);
   }
+}
+
+function addUidWarningAutoBanImmediateTitleRule(ruleType = 'contains') {
+  const dom = FEATURE_DOM.uidWarningAutoBan;
+  const rawTitle = dom.immediateTitleRuleInput.value.trim();
+  if (!rawTitle) {
+    alert(ruleType === 'and' ? 'AND 키워드를 입력하세요.' : '금칙 제목을 입력하세요.');
+    dom.immediateTitleRuleInput.focus();
+    return;
+  }
+
+  const normalizedRule = normalizeUidWarningAutoBanImmediateTitleRule({
+    type: ruleType,
+    rawTitle,
+  });
+  if (!normalizedRule) {
+    alert(
+      ruleType === 'and'
+        ? 'AND 규칙은 쉼표로 구분된 키워드가 정규화 후 2개 이상 남아야 합니다.'
+        : '한글/영문 기준으로 남는 제목만 추가할 수 있습니다.',
+    );
+    dom.immediateTitleRuleInput.focus();
+    return;
+  }
+
+  const rules = parseUidWarningAutoBanImmediateTitleRulesValue(dom.immediateTitleRulesValueInput.value);
+  if (rules.some((rule) => rule.ruleKey === normalizedRule.ruleKey)) {
+    alert(ruleType === 'and' ? '이미 등록된 AND 키워드 규칙입니다.' : '이미 등록된 금칙 제목입니다.');
+    dom.immediateTitleRuleInput.focus();
+    dom.immediateTitleRuleInput.select();
+    return;
+  }
+
+  updateUidWarningAutoBanImmediateTitleRulesEditor([
+    ...rules,
+    normalizedRule,
+  ]);
+  dom.immediateTitleRuleInput.value = '';
+  dom.immediateTitleRuleInput.focus();
+}
+
+function normalizeUidWarningAutoBanImmediateTitleRule(rule) {
+  if (typeof rule === 'string') {
+    return normalizeUidWarningAutoBanImmediateContainsTitleRule({ rawTitle: rule });
+  }
+
+  if (
+    String(rule?.type || '').trim().toLowerCase() === 'and'
+    || Array.isArray(rule?.rawTokens)
+    || Array.isArray(rule?.normalizedTokens)
+  ) {
+    return normalizeUidWarningAutoBanImmediateAndTitleRule(rule);
+  }
+
+  return normalizeUidWarningAutoBanImmediateContainsTitleRule(rule);
+}
+
+function normalizeUidWarningAutoBanImmediateContainsTitleRule(rule = {}) {
+  const rawTitle = String(rule?.rawTitle || '').trim();
+  if (!rawTitle) {
+    return null;
+  }
+
+  const normalizedTitle = normalizeUidWarningAutoBanImmediateTitleRuleValue(rawTitle);
+  if (!normalizedTitle) {
+    return null;
+  }
+
+  return {
+    type: 'contains',
+    rawTitle,
+    normalizedTitle,
+    ruleKey: buildUidWarningAutoBanImmediateTitleRuleKey({
+      type: 'contains',
+      normalizedTitle,
+    }),
+  };
+}
+
+function normalizeUidWarningAutoBanImmediateAndTitleRule(rule = {}) {
+  const tokenEntries = normalizeUidWarningAutoBanImmediateAndTokenEntries(
+    Array.isArray(rule?.rawTokens) && rule.rawTokens.length > 0
+      ? rule.rawTokens
+      : String(rule?.rawTitle || '').trim(),
+  );
+  if (tokenEntries.length < 2) {
+    return null;
+  }
+
+  const rawTokens = tokenEntries.map((entry) => entry.rawToken);
+  const normalizedTokens = tokenEntries.map((entry) => entry.normalizedToken);
+  const normalizedTitle = normalizedTokens.join('|');
+
+  return {
+    type: 'and',
+    rawTitle: String(rule?.rawTitle || '').trim() || rawTokens.join(', '),
+    rawTokens,
+    normalizedTokens,
+    normalizedTitle,
+    ruleKey: buildUidWarningAutoBanImmediateTitleRuleKey({
+      type: 'and',
+      normalizedTitle,
+    }),
+  };
+}
+
+function normalizeUidWarningAutoBanImmediateAndTokenEntries(value) {
+  const tokenEntries = [];
+  const seenNormalizedTokens = new Set();
+  const rawTokens = Array.isArray(value) ? value : String(value || '').split(',');
+
+  for (const rawTokenValue of rawTokens) {
+    const rawToken = String(rawTokenValue || '').trim();
+    if (!rawToken) {
+      continue;
+    }
+
+    const normalizedToken = normalizeUidWarningAutoBanImmediateTitleRuleValue(rawToken);
+    if (!normalizedToken || seenNormalizedTokens.has(normalizedToken)) {
+      continue;
+    }
+
+    seenNormalizedTokens.add(normalizedToken);
+    tokenEntries.push({
+      rawToken,
+      normalizedToken,
+    });
+  }
+
+  // popup에서도 AND 규칙 key가 parser와 완전히 동일해야 저장/삭제가 꼬이지 않는다.
+  tokenEntries.sort((left, right) => left.normalizedToken.localeCompare(right.normalizedToken, 'ko-KR'));
+  return tokenEntries;
+}
+
+function buildUidWarningAutoBanImmediateTitleRuleKey(rule = {}) {
+  const normalizedType = String(rule?.type || '').trim().toLowerCase() === 'and'
+    ? 'and'
+    : 'contains';
+  const normalizedTitle = String(rule?.normalizedTitle || '').trim();
+  if (!normalizedTitle) {
+    return '';
+  }
+
+  return `${normalizedType}:${normalizedTitle}`;
+}
+
+function getUidWarningAutoBanImmediateTitleRuleTypeLabel(rule = {}) {
+  return String(rule?.type || '').trim() === 'and' ? '[AND]' : '[포함]';
 }
 
 function normalizeUidWarningAutoBanImmediateTitleRuleValue(value) {
