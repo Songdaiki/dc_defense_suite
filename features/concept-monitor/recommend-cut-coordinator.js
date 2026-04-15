@@ -1,5 +1,6 @@
 import {
   DEFAULT_CONFIG,
+  syncKcaptchaRecomCnt,
   updateRecommendCut,
 } from './api.js';
 
@@ -7,6 +8,9 @@ const STORAGE_KEY = 'conceptRecommendCutCoordinatorState';
 const HOLD_ALARM_NAME = 'conceptRecommendCutHoldExpiry';
 const NORMAL_RECOMMEND_CUT = 14;
 const DEFENDING_RECOMMEND_CUT = 100;
+const NORMAL_KCAPTCHA_RECOM_CNT = 2;
+const DEFENDING_KCAPTCHA_RECOM_CNT = 8;
+const UNKNOWN_KCAPTCHA_RECOM_CNT = 0;
 const AUTO_CUT_STATE = {
   NORMAL: 'NORMAL',
   DEFENDING: 'DEFENDING',
@@ -28,6 +32,9 @@ const state = {
   lastAppliedRecommendCut: NORMAL_RECOMMEND_CUT,
   lastRecommendCutApplySucceeded: true,
   lastCutChangedAt: '',
+  lastAppliedKcaptchaRecomCnt: UNKNOWN_KCAPTCHA_RECOM_CNT,
+  lastKcaptchaApplySucceeded: false,
+  lastKcaptchaSettings: null,
 };
 
 async function initializeConceptRecommendCutCoordinator() {
@@ -50,6 +57,9 @@ async function initializeConceptRecommendCutCoordinator() {
         state.lastAppliedRecommendCut = normalizeRecommendCut(savedState.lastAppliedRecommendCut);
         state.lastRecommendCutApplySucceeded = savedState.lastRecommendCutApplySucceeded !== false;
         state.lastCutChangedAt = savedState.lastCutChangedAt || '';
+        state.lastAppliedKcaptchaRecomCnt = normalizeStoredKcaptchaRecomCnt(savedState.lastAppliedKcaptchaRecomCnt);
+        state.lastKcaptchaApplySucceeded = savedState.lastKcaptchaApplySucceeded === true;
+        state.lastKcaptchaSettings = normalizeStoredKcaptchaSettings(savedState.lastKcaptchaSettings);
       }
 
       if (state.patrolHoldUntilTs > Date.now()) {
@@ -85,6 +95,8 @@ function getConceptRecommendCutCoordinatorStatus() {
       : NORMAL_RECOMMEND_CUT,
     lastAppliedRecommendCut: state.lastAppliedRecommendCut,
     lastRecommendCutApplySucceeded: state.lastRecommendCutApplySucceeded,
+    lastAppliedKcaptchaRecomCnt: state.lastAppliedKcaptchaRecomCnt,
+    lastKcaptchaApplySucceeded: state.lastKcaptchaApplySucceeded,
     lastCutChangedAt: state.lastCutChangedAt,
     config: { ...state.config },
   };
@@ -119,8 +131,11 @@ async function resetConceptRecommendCutCoordinator(config = {}) {
   state.conceptMonitorAutoCutState = AUTO_CUT_STATE.NORMAL;
   state.patrolHoldUntilTs = 0;
   state.lastAppliedRecommendCut = NORMAL_RECOMMEND_CUT;
-  state.lastRecommendCutApplySucceeded = true;
+  state.lastRecommendCutApplySucceeded = false;
   state.lastCutChangedAt = '';
+  state.lastAppliedKcaptchaRecomCnt = UNKNOWN_KCAPTCHA_RECOM_CNT;
+  state.lastKcaptchaApplySucceeded = false;
+  state.lastKcaptchaSettings = null;
   await clearHoldAlarm();
   await saveState();
   return getConceptRecommendCutCoordinatorStatus();
@@ -133,6 +148,7 @@ async function handleConceptRecommendCutCoordinatorAlarm(alarmName) {
 
   await initializeConceptRecommendCutCoordinator();
   if (state.patrolHoldUntilTs <= 0) {
+    await reconcileRecommendCutCoordinator();
     return true;
   }
 
@@ -152,29 +168,42 @@ async function reconcileRecommendCutCoordinator() {
   await initializeConceptRecommendCutCoordinator();
   const task = async () => {
     const desiredRecommendCut = getConceptRecommendCutCoordinatorStatus().effectiveRecommendCut;
-    if (state.lastAppliedRecommendCut === desiredRecommendCut && state.lastRecommendCutApplySucceeded) {
-      return getConceptRecommendCutCoordinatorStatus();
+    const desiredKcaptchaRecomCnt = desiredRecommendCut === DEFENDING_RECOMMEND_CUT
+      ? DEFENDING_KCAPTCHA_RECOM_CNT
+      : NORMAL_KCAPTCHA_RECOM_CNT;
+
+    if (state.lastAppliedRecommendCut !== desiredRecommendCut || !state.lastRecommendCutApplySucceeded) {
+      let updateResult = null;
+      try {
+        updateResult = await updateRecommendCut(state.config, desiredRecommendCut);
+      } catch (_error) {
+        state.lastRecommendCutApplySucceeded = false;
+        await saveState();
+        return getConceptRecommendCutCoordinatorStatus();
+      }
+
+      if (updateResult.success) {
+        state.lastAppliedRecommendCut = desiredRecommendCut;
+        state.lastRecommendCutApplySucceeded = true;
+        state.lastCutChangedAt = new Date().toISOString();
+        await saveState();
+      } else {
+        state.lastRecommendCutApplySucceeded = false;
+        await saveState();
+        return getConceptRecommendCutCoordinatorStatus();
+      }
     }
 
-    let updateResult = null;
-    try {
-      updateResult = await updateRecommendCut(state.config, desiredRecommendCut);
-    } catch (_error) {
-      state.lastRecommendCutApplySucceeded = false;
-      await saveState();
-      return getConceptRecommendCutCoordinatorStatus();
+    if (state.lastAppliedKcaptchaRecomCnt !== desiredKcaptchaRecomCnt || !state.lastKcaptchaApplySucceeded) {
+      try {
+        await applyKcaptchaRecomCnt(desiredKcaptchaRecomCnt);
+      } catch (error) {
+        console.error('[RecommendCutCoordinator] kcaptcha recom_cnt 변경 실패:', error.message);
+        state.lastKcaptchaApplySucceeded = false;
+        await saveState();
+      }
     }
 
-    if (updateResult.success) {
-      state.lastAppliedRecommendCut = desiredRecommendCut;
-      state.lastRecommendCutApplySucceeded = true;
-      state.lastCutChangedAt = new Date().toISOString();
-      await saveState();
-      return getConceptRecommendCutCoordinatorStatus();
-    }
-
-    state.lastRecommendCutApplySucceeded = false;
-    await saveState();
     return getConceptRecommendCutCoordinatorStatus();
   };
 
@@ -206,8 +235,25 @@ async function saveState() {
       lastAppliedRecommendCut: state.lastAppliedRecommendCut,
       lastRecommendCutApplySucceeded: state.lastRecommendCutApplySucceeded,
       lastCutChangedAt: state.lastCutChangedAt,
+      lastAppliedKcaptchaRecomCnt: state.lastAppliedKcaptchaRecomCnt,
+      lastKcaptchaApplySucceeded: state.lastKcaptchaApplySucceeded,
+      lastKcaptchaSettings: state.lastKcaptchaSettings,
     },
   });
+}
+
+async function applyKcaptchaRecomCnt(desiredRecomCnt) {
+  const result = await syncKcaptchaRecomCnt(state.config, desiredRecomCnt);
+  if (!result.success) {
+    state.lastKcaptchaApplySucceeded = false;
+    await saveState();
+    throw new Error(`kcaptcha update 실패: ${result.rawSummary}`);
+  }
+
+  state.lastAppliedKcaptchaRecomCnt = normalizeStoredKcaptchaRecomCnt(desiredRecomCnt);
+  state.lastKcaptchaApplySucceeded = true;
+  state.lastKcaptchaSettings = normalizeStoredKcaptchaSettings(result.appliedSettings);
+  await saveState();
 }
 
 function scheduleHoldAlarm(whenTs) {
@@ -237,6 +283,29 @@ function normalizeAutoCutState(value) {
   return value === AUTO_CUT_STATE.DEFENDING
     ? AUTO_CUT_STATE.DEFENDING
     : AUTO_CUT_STATE.NORMAL;
+}
+
+function normalizeStoredKcaptchaRecomCnt(value) {
+  if (Number(value) === NORMAL_KCAPTCHA_RECOM_CNT) {
+    return NORMAL_KCAPTCHA_RECOM_CNT;
+  }
+
+  return Number(value) === DEFENDING_KCAPTCHA_RECOM_CNT
+    ? DEFENDING_KCAPTCHA_RECOM_CNT
+    : UNKNOWN_KCAPTCHA_RECOM_CNT;
+}
+
+function normalizeStoredKcaptchaSettings(settings) {
+  if (!settings || typeof settings !== 'object') {
+    return null;
+  }
+
+  const normalized = {};
+  for (const [key, value] of Object.entries(settings)) {
+    normalized[key] = String(value ?? '').trim();
+  }
+
+  return normalized;
 }
 
 export {
