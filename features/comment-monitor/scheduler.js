@@ -480,7 +480,7 @@ class Scheduler {
       await ensureCommentRefluxDatasetLoaded();
       refluxDatasetReady = isCommentRefluxDatasetReady();
     } catch (error) {
-      this.log(`⚠️ 댓글 역류기 dataset 로드 실패 - ${error.message}`);
+      this.log(`⚠️ 역류기 공용 dataset 로드 실패 - ${error.message}`);
     }
 
     const refluxMatchCount = refluxDatasetReady

@@ -446,7 +446,7 @@ class Scheduler {
 
         await ensureCommentRefluxDatasetLoaded();
         if (!isCommentRefluxDatasetReady()) {
-            throw new Error('댓글 역류기 dataset이 비어 있어 시작할 수 없습니다.');
+            throw new Error('역류기 공용 dataset이 비어 있어 시작할 수 없습니다.');
         }
     }
 

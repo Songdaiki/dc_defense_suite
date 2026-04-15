@@ -170,7 +170,16 @@ function hasSemiconductorRefluxTitle(title) {
     return false;
   }
 
-  return runtimeState.titleSet.has(normalizedTitle);
+  return hasNormalizedSemiconductorRefluxTitle(normalizedTitle);
+}
+
+function hasNormalizedSemiconductorRefluxTitle(normalizedTitle) {
+  const normalizedValue = String(normalizedTitle || '').trim();
+  if (!normalizedValue) {
+    return false;
+  }
+
+  return runtimeState.titleSet.has(normalizedValue);
 }
 
 async function replaceSemiconductorRefluxTitleSet(titles, options = {}) {
@@ -316,6 +325,7 @@ async function loadBundledSemiconductorRefluxShardTitles(shards) {
 export {
   ensureSemiconductorRefluxTitleSetLoaded,
   getSemiconductorRefluxTitleSetStatus,
+  hasNormalizedSemiconductorRefluxTitle,
   hasSemiconductorRefluxTitle,
   isSemiconductorRefluxTitleSetReady,
   replaceSemiconductorRefluxTitleSet,
