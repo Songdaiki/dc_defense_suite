@@ -1,4 +1,8 @@
 import { isHanCjkSpamLikePost } from './parser.js';
+import {
+  buildRefluxSearchQuery,
+  normalizeRefluxCompareKey,
+} from '../reflux-normalization.js';
 
 const ATTACK_MODE = {
   DEFAULT: 'default',
@@ -8,11 +12,6 @@ const ATTACK_MODE = {
 
 const ATTACK_MODE_SAMPLE_POST_LIMIT = 5;
 const ATTACK_MODE_SAMPLE_MATCH_THRESHOLD = 3;
-const REFLUX_INVISIBLE_DELIMITER_REGEX = /[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u2800\u3164\uffa0\ufeff]/gu;
-const REFLUX_INVISIBLE_DELIMITER_TEST_REGEX = /[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u2800\u3164\uffa0\ufeff]/u;
-const REFLUX_SINGLE_COMPACTABLE_TOKEN_REGEX = /^[\p{Script=Hangul}\p{Script=Han}A-Za-z0-9]$/u;
-const REFLUX_WHITESPACE_REGEX = /\s+/gu;
-
 function normalizeAttackMode(value) {
   if (value === ATTACK_MODE.CJK_NARROW || value === ATTACK_MODE.SEMICONDUCTOR_REFLUX) {
     return value;
@@ -70,100 +69,11 @@ function getAttackModeSubjectLabel(value) {
 }
 
 function buildSemiconductorRefluxSearchQuery(value) {
-  const tokenEntries = [];
-  let currentToken = '';
-  let nextDelimiterKind = 'space';
-
-  const pushToken = () => {
-    if (!currentToken) {
-      return;
-    }
-
-    tokenEntries.push({
-      token: currentToken,
-      delimiterKind: nextDelimiterKind,
-    });
-    currentToken = '';
-  };
-
-  for (const char of [...String(value || '')]) {
-    if (REFLUX_INVISIBLE_DELIMITER_TEST_REGEX.test(char)) {
-      pushToken();
-      nextDelimiterKind = 'invisible';
-      continue;
-    }
-
-    if (/\s/u.test(char)) {
-      pushToken();
-      nextDelimiterKind = 'space';
-      continue;
-    }
-
-    currentToken += char;
-  }
-  pushToken();
-
-  const mergedTokens = [];
-  let mergedToken = '';
-  let mergedMode = 'idle';
-
-  const flushMergedToken = () => {
-    if (!mergedToken) {
-      return;
-    }
-
-    mergedTokens.push(mergedToken);
-    mergedToken = '';
-    mergedMode = 'idle';
-  };
-
-  for (const { token, delimiterKind } of tokenEntries) {
-    const isSingleCompactableToken = [...token].length === 1
-      && REFLUX_SINGLE_COMPACTABLE_TOKEN_REGEX.test(token);
-
-    if (!mergedToken) {
-      mergedToken = token;
-      mergedMode = isSingleCompactableToken ? 'single' : 'multi';
-      continue;
-    }
-
-    if (delimiterKind !== 'invisible') {
-      flushMergedToken();
-      mergedToken = token;
-      mergedMode = isSingleCompactableToken ? 'single' : 'multi';
-      continue;
-    }
-
-    if (mergedMode === 'single' && isSingleCompactableToken) {
-      mergedToken += token;
-      continue;
-    }
-
-    flushMergedToken();
-    mergedToken = token;
-    mergedMode = isSingleCompactableToken ? 'single' : 'multi';
-  }
-  flushMergedToken();
-
-  return mergedTokens
-    .join(' ')
-    .replace(REFLUX_WHITESPACE_REGEX, ' ')
-    .trim();
+  return buildRefluxSearchQuery(value);
 }
 
 function normalizeSemiconductorRefluxTitle(value) {
-  let normalizedTitle = buildSemiconductorRefluxSearchQuery(value);
-  try {
-    normalizedTitle = normalizedTitle.normalize('NFKC');
-  } catch (error) {
-    // normalize 미지원 환경에서도 문자열 정리만 계속 진행한다.
-  }
-
-  return normalizedTitle
-    .replace(REFLUX_INVISIBLE_DELIMITER_REGEX, '')
-    .toLowerCase()
-    .replace(REFLUX_WHITESPACE_REGEX, '')
-    .trim();
+  return normalizeRefluxCompareKey(value);
 }
 
 function buildAttackModeDecision(

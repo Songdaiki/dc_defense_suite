@@ -309,7 +309,6 @@ async function fetchSearchRows(queueItem) {
 }
 
 function findDuplicateMatch(searchRows, queueItem) {
-  const targetSearchGalleryId = queueItem.searchGalleryId;
   const deleteTargetGalleryId = queueItem.deleteGalleryId;
   const currentPostNo = normalizePostNo(queueItem.postNo);
 
@@ -318,18 +317,17 @@ function findDuplicateMatch(searchRows, queueItem) {
       continue;
     }
 
-    if (normalizeGalleryId(row.boardId) !== targetSearchGalleryId) {
+    const rowGalleryId = normalizeGalleryId(row.boardId);
+    const rowPostNo = normalizePostNo(row.postNo);
+    if (
+      rowGalleryId
+      && deleteTargetGalleryId
+      && rowGalleryId === deleteTargetGalleryId
+      && currentPostNo > 0
+      && rowPostNo > 0
+      && rowPostNo === currentPostNo
+    ) {
       continue;
-    }
-
-    if (targetSearchGalleryId === deleteTargetGalleryId) {
-      if (currentPostNo <= 0 || normalizePostNo(row.postNo) <= 0) {
-        continue;
-      }
-
-      if (normalizePostNo(row.postNo) === currentPostNo) {
-        continue;
-      }
     }
 
     return row;

@@ -540,9 +540,12 @@ async function handleMessage(message) {
           };
         }
 
-        if (message.feature === 'post' && message.config.refluxSearchGalleryId !== undefined) {
-          const trimmedSearchGalleryId = normalizePostRefluxSearchGalleryId(message.config.refluxSearchGalleryId);
-          if (trimmedSearchGalleryId && !isValidPostRefluxSearchGalleryId(trimmedSearchGalleryId)) {
+        if (
+          ['post', 'comment'].includes(message.feature)
+          && message.config.refluxSearchGalleryId !== undefined
+        ) {
+          const trimmedSearchGalleryId = normalizeRefluxSearchGalleryId(message.config.refluxSearchGalleryId);
+          if (trimmedSearchGalleryId && !isValidRefluxSearchGalleryId(trimmedSearchGalleryId)) {
             return {
               success: false,
               message: '역류 검색 갤 ID는 영문/숫자/밑줄만 입력하세요.',
@@ -1203,6 +1206,16 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
     return '댓글 감시 페이지 수는 댓글 감시 자동화를 정지한 뒤 변경하세요.';
   }
 
+  if (feature === 'comment'
+    && normalizeCommentAttackMode(scheduler.currentAttackMode) === COMMENT_ATTACK_MODE.COMMENT_REFLUX
+    && config.refluxSearchGalleryId !== undefined
+    && resolveRefluxSearchGalleryId({
+      ...scheduler.config,
+      ...config,
+    }) !== resolveRefluxSearchGalleryId(scheduler.config)) {
+    return '역류 검색 갤 ID는 댓글 역류기 방어를 정지한 뒤 변경하세요.';
+  }
+
   if (feature === 'conceptMonitor'
     && config.testMode !== undefined
     && Boolean(config.testMode) !== Boolean(scheduler.config.testMode)) {
@@ -1592,8 +1605,8 @@ async function maybeHandleRunningPostModeTransition(scheduler, config) {
     ...config,
     manualAttackMode: nextManualAttackMode,
   };
-  const currentSearchGalleryId = resolvePostRefluxSearchGalleryId(scheduler.config);
-  const nextSearchGalleryId = resolvePostRefluxSearchGalleryId(nextMergedConfig);
+  const currentSearchGalleryId = resolveRefluxSearchGalleryId(scheduler.config);
+  const nextSearchGalleryId = resolveRefluxSearchGalleryId(nextMergedConfig);
 
   if (currentManualAttackMode === nextManualAttackMode) {
     const shouldRestartRunningManualReflux = scheduler.currentSource === 'manual'
@@ -1642,16 +1655,16 @@ async function maybeHandleRunningPostModeTransition(scheduler, config) {
   }
 }
 
-function normalizePostRefluxSearchGalleryId(value) {
+function normalizeRefluxSearchGalleryId(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function isValidPostRefluxSearchGalleryId(value) {
-  return /^[a-z0-9_]+$/i.test(normalizePostRefluxSearchGalleryId(value));
+function isValidRefluxSearchGalleryId(value) {
+  return /^[a-z0-9_]+$/i.test(normalizeRefluxSearchGalleryId(value));
 }
 
-function resolvePostRefluxSearchGalleryId(config = {}) {
-  const explicitSearchGalleryId = normalizePostRefluxSearchGalleryId(config?.refluxSearchGalleryId);
+function resolveRefluxSearchGalleryId(config = {}) {
+  const explicitSearchGalleryId = normalizeRefluxSearchGalleryId(config?.refluxSearchGalleryId);
   if (explicitSearchGalleryId) {
     return explicitSearchGalleryId;
   }

@@ -6,9 +6,12 @@
  */
 
 import { COMMENT_ATTACK_MODE, normalizeCommentAttackMode } from './attack-mode.js';
+import {
+    buildRefluxSearchQuery,
+    normalizeRefluxCompareKey,
+} from '../reflux-normalization.js';
 
 const PURE_HANGUL_COMMENT_REGEX = /^[\p{Script=Hangul}\s]+$/u;
-const INVISIBLE_CHARS_REGEX = /[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g;
 const HTML_ENTITY_MAP = {
     amp: '&',
     lt: '<',
@@ -106,19 +109,29 @@ function normalizeCommentMemo(memo) {
  * @returns {string}
  */
 function normalizeCommentRefluxMemo(memo) {
-    let normalizedMemo = normalizeCommentMemo(memo);
+    return normalizeCommentRefluxCompareKey(memo);
+}
 
-    try {
-        normalizedMemo = normalizedMemo.normalize('NFKC');
-    } catch (error) {
-        // normalize 미지원 환경에서도 문자열 정리만 계속 진행한다.
-    }
+/**
+ * 댓글 검색용 query 정규화
+ *
+ * HTML/entity 제거 후 공용 역류 검색 정규화를 적용한다.
+ *
+ * @param {unknown} memo
+ * @returns {string}
+ */
+function buildCommentRefluxSearchQuery(memo) {
+    return buildRefluxSearchQuery(normalizeCommentMemo(memo));
+}
 
-    return normalizedMemo
-        .replace(INVISIBLE_CHARS_REGEX, '')
-        .toLowerCase()
-        .replace(/\s+/g, ' ')
-        .trim();
+/**
+ * 댓글 검색/dataset 공용 compare key 정규화
+ *
+ * @param {unknown} memo
+ * @returns {string}
+ */
+function normalizeCommentRefluxCompareKey(memo) {
+    return normalizeRefluxCompareKey(normalizeCommentMemo(memo));
 }
 
 /**
@@ -200,10 +213,12 @@ function fromCodePointSafe(codePoint) {
 // Export
 // ============================================================
 export {
+    buildCommentRefluxSearchQuery,
     isFluidUser,
     shouldSkip,
     filterFluidComments,
     normalizeCommentMemo,
+    normalizeCommentRefluxCompareKey,
     normalizeCommentRefluxMemo,
     isPureHangulCommentMemo,
     filterDeletionTargetComments,

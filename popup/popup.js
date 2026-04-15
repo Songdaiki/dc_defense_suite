@@ -245,6 +245,7 @@ const FEATURE_DOM = {
     maxPageInput: document.getElementById('commentMaxPage'),
     requestDelayInput: document.getElementById('commentRequestDelay'),
     cycleDelayInput: document.getElementById('commentCycleDelay'),
+    refluxSearchGalleryIdInput: document.getElementById('commentRefluxSearchGalleryId'),
     postConcurrencyInput: document.getElementById('commentPostConcurrency'),
     banOnDeleteInput: document.getElementById('commentBanOnDelete'),
     excludePureHangulInput: document.getElementById('commentExcludePureHangul'),
@@ -1330,11 +1331,18 @@ function bindCommentEvents() {
   bindCommentQuickAttackModeToggle(dom.commentRefluxModeInput, 'comment_reflux', '역류기 공용 dataset 공격');
 
   dom.saveConfigBtn.addEventListener('click', async () => {
+    const refluxSearchGalleryId = normalizeRefluxSearchGalleryIdInputValue(dom.refluxSearchGalleryIdInput.value);
+    if (refluxSearchGalleryId && !isValidRefluxSearchGalleryId(refluxSearchGalleryId)) {
+      alert('역류 검색 갤 ID는 영문/숫자/밑줄만 입력하세요.');
+      return;
+    }
+
     const config = {
       minPage: parseOptionalInt(dom.minPageInput.value, 1),
       maxPage: parseOptionalInt(dom.maxPageInput.value, 5),
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 100),
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
+      refluxSearchGalleryId,
       postConcurrency: parseOptionalInt(dom.postConcurrencyInput.value, 50),
       banOnDelete: dom.banOnDeleteInput.checked,
       avoidHour: String(Math.max(1, parseOptionalInt(dom.avoidHourInput.value, 1))),
@@ -1468,8 +1476,8 @@ function bindPostEvents() {
   bindPostQuickAttackModeToggle(dom.semiconductorRefluxModeToggleInput, 'semiconductor_reflux', '역류기 공격');
 
   dom.saveConfigBtn.addEventListener('click', async () => {
-    const refluxSearchGalleryId = normalizePostRefluxSearchGalleryIdInputValue(dom.refluxSearchGalleryIdInput.value);
-    if (refluxSearchGalleryId && !isValidPostRefluxSearchGalleryId(refluxSearchGalleryId)) {
+    const refluxSearchGalleryId = normalizeRefluxSearchGalleryIdInputValue(dom.refluxSearchGalleryIdInput.value);
+    if (refluxSearchGalleryId && !isValidRefluxSearchGalleryId(refluxSearchGalleryId)) {
       alert('역류 검색 갤 ID는 영문/숫자/밑줄만 입력하세요.');
       return;
     }
@@ -2428,6 +2436,7 @@ function updateCommentUI(status) {
     [dom.maxPageInput, status.config?.maxPage ?? 1],
     [dom.requestDelayInput, status.config?.requestDelay ?? 100],
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
+    [dom.refluxSearchGalleryIdInput, status.config?.refluxSearchGalleryId ?? ''],
     [dom.postConcurrencyInput, status.config?.postConcurrency ?? 50],
     [dom.banOnDeleteInput, status.config?.banOnDelete ?? true],
     [dom.avoidHourInput, status.config?.avoidHour ?? '1'],
@@ -3007,12 +3016,12 @@ function isValidCommentRefluxCollectorGalleryId(value) {
   return /^[a-z0-9_]+$/i.test(normalizeCommentRefluxCollectorGalleryId(value));
 }
 
-function normalizePostRefluxSearchGalleryIdInputValue(value) {
+function normalizeRefluxSearchGalleryIdInputValue(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function isValidPostRefluxSearchGalleryId(value) {
-  return /^[a-z0-9_]+$/i.test(normalizePostRefluxSearchGalleryIdInputValue(value));
+function isValidRefluxSearchGalleryId(value) {
+  return /^[a-z0-9_]+$/i.test(normalizeRefluxSearchGalleryIdInputValue(value));
 }
 
 function normalizeBumpPostPostNoInputValue(value) {
@@ -3321,6 +3330,7 @@ function getFeatureConfigInputs(feature) {
       dom.maxPageInput,
       dom.requestDelayInput,
       dom.cycleDelayInput,
+      dom.refluxSearchGalleryIdInput,
       dom.postConcurrencyInput,
       dom.banOnDeleteInput,
       dom.avoidHourInput,

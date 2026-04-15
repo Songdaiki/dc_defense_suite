@@ -1,4 +1,4 @@
-import { normalizeSemiconductorRefluxTitle } from './attack-mode.js';
+import { normalizeRefluxCompareKey } from '../reflux-normalization.js';
 
 const SEARCH_BASE_URL = 'https://search.dcinside.com';
 const GALL_BASE_URL = 'https://gall.dcinside.com';
@@ -109,7 +109,7 @@ function buildRowIdentityKey(row) {
 function normalizeSearchRow(row) {
   const rawTitle = stripHtml(String(row?.title || ''));
   const decodedTitle = decodeHtmlEntities(rawTitle).trim();
-  const normalizedTitle = normalizeSemiconductorRefluxTitle(decodedTitle);
+  const normalizedTitle = normalizeRefluxCompareKey(decodedTitle);
   const boardId = String(row?.board_id || row?.url_param?.id || extractBoardIdFromUrl(row?.url) || '').trim();
   const postNo = normalizePostNo(row?.url_param?.no || extractPostNoFromUrl(row?.url));
   const href = normalizeHref(row?.url);
