@@ -1275,8 +1275,8 @@ function getMonitorManualLockMessage(feature, action) {
 
   if (feature === 'uidWarningAutoBan'
     && action === 'start'
-    && (monitorOwnsUidWarningAutoBanLock || isSchedulerBusy(schedulers.ip) || schedulers.ip.isReleaseRunning)) {
-    return '분탕자동차단을 시작하기 전에 감시 자동화 / IP 차단을 먼저 정지하세요.';
+    && monitorOwnsUidWarningAutoBanLock) {
+    return '감시 자동화 공격/복구 중에는 분탕자동차단을 수동으로 시작할 수 없습니다.';
   }
 
   const baseLockedActions = new Set(['start', 'stop', 'updateConfig', 'resetStats', 'releaseTrackedBans']);
@@ -1301,19 +1301,6 @@ function getMonitorManualLockMessage(feature, action) {
   const commentMonitorLockedActions = new Set(['start', 'stop', 'updateConfig', 'resetStats']);
   if (schedulers.commentMonitor.isRunning && feature === 'comment' && commentMonitorLockedActions.has(action)) {
     return '댓글 감시 자동화 실행 중에는 댓글 방어를 수동으로 조작할 수 없습니다.';
-  }
-
-  const ipLockedActions = new Set(['start', 'stop', 'updateConfig', 'resetStats']);
-  if ((schedulers.ip.isRunning || schedulers.ip.isReleaseRunning)
-    && feature === 'uidWarningAutoBan'
-    && ipLockedActions.has(action)) {
-    return 'IP 차단 실행 중에는 분탕자동차단을 수동으로 조작할 수 없습니다.';
-  }
-
-  if (isSchedulerBusy(schedulers.uidWarningAutoBan)
-    && feature === 'ip'
-    && baseLockedActions.has(action)) {
-    return '분탕자동차단 실행 중에는 IP 차단을 수동으로 조작할 수 없습니다.';
   }
 
   return '';
@@ -1368,9 +1355,9 @@ async function resolveUidWarningAutoBanResumeConflict() {
   const monitorOwnsUidWarningAutoBanLock = schedulers.monitor.isRunning
     && [MONITOR_PHASE.ATTACKING, MONITOR_PHASE.RECOVERING].includes(schedulers.monitor.phase);
 
-  if (monitorOwnsUidWarningAutoBanLock || isSchedulerBusy(schedulers.ip) || schedulers.ip.isReleaseRunning) {
+  if (monitorOwnsUidWarningAutoBanLock) {
     await schedulers.uidWarningAutoBan.stop();
-    schedulers.uidWarningAutoBan.log('ℹ️ 감시 자동화 / IP 차단과 충돌해 분탕자동차단 자동 복원을 취소했습니다.');
+    schedulers.uidWarningAutoBan.log('ℹ️ 감시 자동화 공격/복구 상태와 충돌해 분탕자동차단 자동 복원을 취소했습니다.');
     await schedulers.uidWarningAutoBan.saveState();
   }
 }

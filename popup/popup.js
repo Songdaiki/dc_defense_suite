@@ -2656,8 +2656,6 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uid
     monitorStatus?.isRunning && ['ATTACKING', 'RECOVERING'].includes(String(monitorStatus?.phase || '')),
   );
   const commentLocked = Boolean(commentMonitorStatus?.isRunning);
-  const ipLocked = Boolean(ipStatus?.isRunning || ipStatus?.isReleaseRunning);
-  const uidWarningAutoBanLocked = Boolean(uidWarningAutoBanStatus?.isRunning);
   const commentMonitorDom = FEATURE_DOM.commentMonitor;
   const commentDom = FEATURE_DOM.comment;
   const postDom = FEATURE_DOM.post;
@@ -2679,26 +2677,26 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uid
   setDisabled(semiPostDom.toggleBtn, postIpLocked);
   setDisabled(semiPostDom.saveConfigBtn, postIpLocked);
   setDisabled(semiPostDom.resetBtn, postIpLocked);
-  setDisabled(ipDom.toggleBtn, postIpLocked || uidWarningAutoBanLocked);
-  setDisabled(ipDom.includeExistingTargetsOnStartInput, postIpLocked || uidWarningAutoBanLocked);
-  setDisabled(ipDom.saveConfigBtn, postIpLocked || uidWarningAutoBanLocked);
-  setDisabled(ipDom.resetBtn, postIpLocked || uidWarningAutoBanLocked);
-  setDisabled(ipDom.releaseBtn, postIpLocked || uidWarningAutoBanLocked || ipDom.releaseBtn.disabled);
-  setDisabled(uidWarningAutoBanDom.toggleBtn, monitorUidWarningAutoBanLocked || ipLocked);
-  setDisabled(uidWarningAutoBanDom.immediateTitleRuleInput, monitorUidWarningAutoBanLocked || ipLocked);
-  setDisabled(uidWarningAutoBanDom.addImmediateTitleRuleBtn, monitorUidWarningAutoBanLocked || ipLocked);
-  setDisabled(uidWarningAutoBanDom.addImmediateTitleAndRuleBtn, monitorUidWarningAutoBanLocked || ipLocked);
-  setDisabled(uidWarningAutoBanDom.saveConfigBtn, monitorUidWarningAutoBanLocked || ipLocked);
-  setDisabled(uidWarningAutoBanDom.resetBtn, monitorUidWarningAutoBanLocked || ipLocked);
+  setDisabled(ipDom.toggleBtn, postIpLocked);
+  setDisabled(ipDom.includeExistingTargetsOnStartInput, postIpLocked);
+  setDisabled(ipDom.saveConfigBtn, postIpLocked);
+  setDisabled(ipDom.resetBtn, postIpLocked);
+  setDisabled(ipDom.releaseBtn, postIpLocked || ipDom.releaseBtn.disabled);
+  setDisabled(uidWarningAutoBanDom.toggleBtn, monitorUidWarningAutoBanLocked);
+  setDisabled(uidWarningAutoBanDom.immediateTitleRuleInput, monitorUidWarningAutoBanLocked);
+  setDisabled(uidWarningAutoBanDom.addImmediateTitleRuleBtn, monitorUidWarningAutoBanLocked);
+  setDisabled(uidWarningAutoBanDom.addImmediateTitleAndRuleBtn, monitorUidWarningAutoBanLocked);
+  setDisabled(uidWarningAutoBanDom.saveConfigBtn, monitorUidWarningAutoBanLocked);
+  setDisabled(uidWarningAutoBanDom.resetBtn, monitorUidWarningAutoBanLocked);
   uidWarningAutoBanDom.immediateTitleRuleList
     ?.querySelectorAll('.manual-rule-remove-btn')
-    .forEach((button) => setDisabled(button, monitorUidWarningAutoBanLocked || ipLocked));
+    .forEach((button) => setDisabled(button, monitorUidWarningAutoBanLocked));
 
   getFeatureConfigInputs('comment').forEach((input) => setDisabled(input, commentLocked));
   getFeatureConfigInputs('post').forEach((input) => setDisabled(input, postIpLocked));
   getFeatureConfigInputs('semiPost').forEach((input) => setDisabled(input, postIpLocked));
-  getFeatureConfigInputs('ip').forEach((input) => setDisabled(input, postIpLocked || uidWarningAutoBanLocked));
-  getFeatureConfigInputs('uidWarningAutoBan').forEach((input) => setDisabled(input, monitorUidWarningAutoBanLocked || ipLocked));
+  getFeatureConfigInputs('ip').forEach((input) => setDisabled(input, postIpLocked));
+  getFeatureConfigInputs('uidWarningAutoBan').forEach((input) => setDisabled(input, monitorUidWarningAutoBanLocked));
 }
 
 function buildDefaultBumpPostStatus() {
