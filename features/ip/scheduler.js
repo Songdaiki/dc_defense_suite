@@ -7,6 +7,7 @@ import {
   releaseBan,
 } from './api.js';
 import { executeBanWithDeleteFallback } from './ban-executor.js';
+import { deletePosts as deleteBoardPosts } from '../post/api.js';
 
 import {
   parseBlockListRows,
@@ -15,6 +16,7 @@ import {
 import { parseBoardPosts } from '../post/parser.js';
 
 const STORAGE_KEY = 'ipBanSchedulerState';
+const RESIDUAL_CLEANUP_SWEEP_INTERVAL_CYCLES = 30;
 
 class Scheduler {
   constructor() {
@@ -294,7 +296,10 @@ class Scheduler {
           this.currentPage = 0;
           this.log(`🔄 사이클 #${this.cycleCount} 완료. ${this.config.cycleDelay}ms 후 재시작...`);
           await this.saveState();
-          await delay(this.config.cycleDelay);
+          await this.maybeRunResidualCleanupSweep();
+          if (this.isRunning) {
+            await delay(this.config.cycleDelay);
+          }
         }
       } catch (error) {
         this.log(`❌ 오류 발생: ${error.message}`);
@@ -342,6 +347,145 @@ class Scheduler {
         this.log(`⚠️ 상세: ${aggregate.messages.join(' | ')}`);
       }
     }
+  }
+
+  async maybeRunResidualCleanupSweep() {
+    if (!this.isRunning) {
+      return;
+    }
+
+    if (this.currentSource !== 'manual') {
+      return;
+    }
+
+    if (!this.runtimeDeleteEnabled) {
+      return;
+    }
+
+    if (this.cycleCount <= 0 || this.cycleCount % RESIDUAL_CLEANUP_SWEEP_INTERVAL_CYCLES !== 0) {
+      return;
+    }
+
+    try {
+      await this.runResidualCleanupSweep();
+    } catch (error) {
+      this.log(`⚠️ 잔여 도배기탭 청소 스윕 오류 - ${error.message}`);
+    }
+  }
+
+  async runResidualCleanupSweep() {
+    this.expireStaleBans();
+
+    const activeWriterKeys = new Set(
+      this.activeBans
+        .filter((entry) => isBanActive(entry) && entry.writerKey)
+        .map((entry) => entry.writerKey),
+    );
+    if (activeWriterKeys.size <= 0) {
+      return;
+    }
+
+    const [minPage, maxPage] = getNormalizedPageRange(this.config);
+    const seenPostNos = new Set();
+    let totalResidualTargets = 0;
+    let totalDeleted = 0;
+    let totalFailed = 0;
+    let deleteLimitExceeded = false;
+
+    this.log(`🧹 ${RESIDUAL_CLEANUP_SWEEP_INTERVAL_CYCLES}사이클 잔여 도배기탭 청소 스윕 시작`);
+
+    try {
+      for (let page = minPage; page <= maxPage; page += 1) {
+        if (!this.isRunning || !this.runtimeDeleteEnabled) {
+          break;
+        }
+
+        // 보조 청소 스윕은 재개 기준점이 아니므로 중간 페이지 체크포인트는 저장하지 않는다.
+        this.currentPage = page;
+
+        this.log(`🧹 잔여 청소 ${page}페이지 확인...`);
+        const html = await fetchTargetListHTML(this.config, page);
+        const posts = parseTargetPosts(
+          html,
+          this.config.headtextName || '',
+          { includeUidTargets: this.includeUidTargetsMode },
+        );
+        const residualDeleteTargets = [];
+
+        for (const post of posts) {
+          const postNo = String(post?.no || '').trim();
+          if (!/^\d+$/.test(postNo) || seenPostNos.has(postNo)) {
+            continue;
+          }
+
+          seenPostNos.add(postNo);
+          if (!activeWriterKeys.has(String(post?.writerKey || '').trim())) {
+            continue;
+          }
+
+          residualDeleteTargets.push(post);
+        }
+
+        if (residualDeleteTargets.length <= 0) {
+          if (this.config.requestDelay > 0 && page < maxPage) {
+            await delay(this.config.requestDelay);
+          }
+          continue;
+        }
+
+        totalResidualTargets += residualDeleteTargets.length;
+        this.log(`🧹 ${page}페이지 잔여 도배기탭 ${residualDeleteTargets.length}개 삭제 재시도`);
+
+        const result = await deleteBoardPosts(
+          this.config,
+          residualDeleteTargets.map((post) => post.no),
+        );
+
+        totalDeleted += result.successNos.length;
+        totalFailed += result.failedNos.length;
+
+        if (result.successNos.length > 0) {
+          this.log(`✅ 잔여 도배기탭 ${result.successNos.length}개 삭제 완료`);
+        }
+
+        if (result.failedNos.length > 0) {
+          this.log(`⚠️ 잔여 도배기탭 ${result.failedNos.length}개 삭제 실패 - ${result.failedNos.join(', ')}`);
+          if (result.message) {
+            this.log(`⚠️ 잔여 청소 상세: ${result.message}`);
+          }
+        }
+
+        if (result.deleteLimitExceeded) {
+          deleteLimitExceeded = true;
+          this.log('⚠️ 잔여 청소 중 삭제 한도 초과로 이번 스윕을 종료합니다.');
+          break;
+        }
+
+        if (this.config.requestDelay > 0 && page < maxPage) {
+          await delay(this.config.requestDelay);
+        }
+      }
+    } finally {
+      this.currentPage = 0;
+      await this.saveState();
+    }
+
+    if (!this.isRunning) {
+      return;
+    }
+
+    if (totalResidualTargets <= 0) {
+      this.log('ℹ️ 잔여 도배기탭 청소 대상이 없었습니다.');
+      return;
+    }
+
+    const summary = `삭제 ${totalDeleted}개 / 실패 ${totalFailed}개 / 대상 ${totalResidualTargets}개`;
+    if (deleteLimitExceeded) {
+      this.log(`⚠️ 잔여 도배기탭 청소 스윕 부분 종료 - ${summary}`);
+      return;
+    }
+
+    this.log(`✅ 잔여 도배기탭 청소 스윕 완료 - ${summary}`);
   }
 
   async banPostsOnce(posts, options = {}) {
