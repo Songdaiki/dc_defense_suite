@@ -270,18 +270,22 @@ class Scheduler {
             this.config.headtextName || '',
             { includeUidTargets: this.includeUidTargetsMode },
           );
-          const uniquePosts = dedupeBanCandidates(posts);
-          const cutoffPosts = uniquePosts.filter((post) => isPostAfterCutoff(post, this.config.cutoffPostNo));
-          const candidates = cutoffPosts.filter((post) => !this.hasActiveBanForPost(post));
           const targetLabel = this.includeUidTargetsMode ? '대상' : '유동';
+          if (this.includeExistingTargetsMode) {
+            await this.processIncludeExistingTargetsPage(posts, { page, targetLabel });
+          } else {
+            const uniquePosts = dedupeBanCandidates(posts);
+            const cutoffPosts = uniquePosts.filter((post) => isPostAfterCutoff(post, this.config.cutoffPostNo));
+            const candidates = cutoffPosts.filter((post) => !this.hasActiveBanForPost(post));
 
-          this.log(
-            `📄 ${page}페이지: ${targetLabel} ${posts.length}개, 고유 후보 ${uniquePosts.length}개, `
-            + `cutoff 이후 ${cutoffPosts.length}개, 신규 차단 후보 ${candidates.length}개`,
-          );
+            this.log(
+              `📄 ${page}페이지: ${targetLabel} ${posts.length}개, 고유 후보 ${uniquePosts.length}개, `
+              + `cutoff 이후 ${cutoffPosts.length}개, 신규 차단 후보 ${candidates.length}개`,
+            );
 
-          if (candidates.length > 0) {
-            await this.processBanCandidates(candidates);
+            if (candidates.length > 0) {
+              await this.processBanCandidates(candidates);
+            }
           }
 
           await this.saveState();
@@ -316,12 +320,30 @@ class Scheduler {
     await this.saveState();
   }
 
-  async processBanCandidates(posts) {
+  async processIncludeExistingTargetsPage(posts, { page = 1, targetLabel = '유동' } = {}) {
+    const uniquePosts = dedupePostsByNo(posts);
+    const actionLabel = this.runtimeDeleteEnabled ? '차단+삭제' : '차단';
+
+    this.log(
+      `📄 ${page}페이지: ${targetLabel} ${posts.length}개, 글 기준 ${uniquePosts.length}개, `
+      + `${actionLabel} 대상 ${uniquePosts.length}개 (del_chk=${this.runtimeDeleteEnabled ? '1' : '0'})`,
+    );
+
+    if (uniquePosts.length > 0) {
+      await this.processBanCandidates(uniquePosts, {
+        logLabel: `${page}페이지 도배기탭 전체 ${actionLabel}`,
+      });
+    }
+  }
+
+  async processBanCandidates(posts, options = {}) {
     const aggregate = await executeBanWithDeleteFallback({
       config: this.config,
       posts,
       feature: 'ip',
-      deleteEnabled: this.runtimeDeleteEnabled,
+      deleteEnabled: options.deleteEnabled === undefined
+        ? this.runtimeDeleteEnabled
+        : Boolean(options.deleteEnabled),
       onRecordSuccesses: (postMap, successNos, deleteEnabled) => {
         this.recordBanSuccesses(postMap, successNos, deleteEnabled);
       },
@@ -333,18 +355,20 @@ class Scheduler {
       },
     });
 
+    const logLabel = String(options.logLabel || 'IP 차단').trim() || 'IP 차단';
+
     if (aggregate.successNos.length > 0) {
-      this.log(`⛔ ${aggregate.successNos.length}개 차단 완료 (총 ${this.totalBanned}건)`);
+      this.log(`⛔ ${logLabel}: ${aggregate.successNos.length}개 차단 완료 (총 ${this.totalBanned}건)`);
     }
 
     if (aggregate.banOnlyRetrySuccessCount > 0) {
-      this.log(`🧯 삭제 한도 초과로 ${aggregate.banOnlyRetrySuccessCount}개는 IP 차단만 수행`);
+      this.log(`🧯 ${logLabel}: 삭제 한도 초과로 ${aggregate.banOnlyRetrySuccessCount}개는 IP 차단만 수행`);
     }
 
     if (aggregate.failedNos.length > 0) {
-      this.log(`⚠️ ${aggregate.failedNos.length}개 차단 실패 - ${aggregate.failedNos.join(', ')}`);
+      this.log(`⚠️ ${logLabel}: ${aggregate.failedNos.length}개 차단 실패 - ${aggregate.failedNos.join(', ')}`);
       if (aggregate.messages.length > 0) {
-        this.log(`⚠️ 상세: ${aggregate.messages.join(' | ')}`);
+        this.log(`⚠️ ${logLabel} 상세: ${aggregate.messages.join(' | ')}`);
       }
     }
   }
@@ -355,6 +379,10 @@ class Scheduler {
     }
 
     if (this.currentSource !== 'manual') {
+      return;
+    }
+
+    if (this.includeExistingTargetsMode) {
       return;
     }
 
@@ -665,11 +693,12 @@ class Scheduler {
         return entry;
       }
 
+      const preferredPostEntry = pickEntryWithHigherPostNo(entry, nextEntry);
       replacedExisting = true;
       return {
         ...entry,
-        postNo: nextEntry.postNo,
-        subject: nextEntry.subject,
+        postNo: preferredPostEntry.postNo,
+        subject: preferredPostEntry.subject,
         writerKey: nextEntry.writerKey,
         writerDisplay: nextEntry.writerDisplay,
         avoidHour: nextEntry.avoidHour,
@@ -1036,6 +1065,12 @@ function getActiveBanDedupeKey(entry) {
   }
 
   return `writer:${entry.writerKey}`;
+}
+
+function pickEntryWithHigherPostNo(left, right) {
+  const leftPostNo = Number(left?.postNo) || 0;
+  const rightPostNo = Number(right?.postNo) || 0;
+  return rightPostNo >= leftPostNo ? right : left;
 }
 
 function pickLatestBanEntry(left, right) {
