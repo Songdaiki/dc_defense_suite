@@ -265,6 +265,7 @@ const FEATURE_DOM = {
     maxPageInput: document.getElementById('postMaxPage'),
     requestDelayInput: document.getElementById('postRequestDelay'),
     cycleDelayInput: document.getElementById('postCycleDelay'),
+    refluxSearchGalleryIdInput: document.getElementById('postRefluxSearchGalleryId'),
     cjkModeToggleInput: document.getElementById('postCjkModeToggle'),
     semiconductorRefluxModeToggleInput: document.getElementById('postSemiconductorRefluxModeToggle'),
     saveConfigBtn: document.getElementById('postSaveConfigBtn'),
@@ -1467,11 +1468,18 @@ function bindPostEvents() {
   bindPostQuickAttackModeToggle(dom.semiconductorRefluxModeToggleInput, 'semiconductor_reflux', '역류기 공격');
 
   dom.saveConfigBtn.addEventListener('click', async () => {
+    const refluxSearchGalleryId = normalizePostRefluxSearchGalleryIdInputValue(dom.refluxSearchGalleryIdInput.value);
+    if (refluxSearchGalleryId && !isValidPostRefluxSearchGalleryId(refluxSearchGalleryId)) {
+      alert('역류 검색 갤 ID는 영문/숫자/밑줄만 입력하세요.');
+      return;
+    }
+
     const config = {
       minPage: parseOptionalInt(dom.minPageInput.value, 1),
       maxPage: parseOptionalInt(dom.maxPageInput.value, 1),
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 500),
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
+      refluxSearchGalleryId,
     };
 
     const response = await sendFeatureMessage('post', { action: 'updateConfig', config });
@@ -2456,6 +2464,7 @@ function updatePostUI(status) {
     [dom.maxPageInput, status.config?.maxPage ?? 1],
     [dom.requestDelayInput, status.config?.requestDelay ?? 500],
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
+    [dom.refluxSearchGalleryIdInput, status.config?.refluxSearchGalleryId ?? ''],
   ]);
   dom.cjkModeToggleInput.checked = Boolean(
     status.isRunning
@@ -2998,6 +3007,14 @@ function isValidCommentRefluxCollectorGalleryId(value) {
   return /^[a-z0-9_]+$/i.test(normalizeCommentRefluxCollectorGalleryId(value));
 }
 
+function normalizePostRefluxSearchGalleryIdInputValue(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isValidPostRefluxSearchGalleryId(value) {
+  return /^[a-z0-9_]+$/i.test(normalizePostRefluxSearchGalleryIdInputValue(value));
+}
+
 function normalizeBumpPostPostNoInputValue(value) {
   return String(value || '').trim();
 }
@@ -3365,6 +3382,7 @@ function getFeatureConfigInputs(feature) {
       dom.maxPageInput,
       dom.requestDelayInput,
       dom.cycleDelayInput,
+      dom.refluxSearchGalleryIdInput,
     ];
   }
 

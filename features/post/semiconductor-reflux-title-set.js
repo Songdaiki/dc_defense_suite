@@ -174,7 +174,7 @@ function hasSemiconductorRefluxTitle(title) {
 }
 
 function hasNormalizedSemiconductorRefluxTitle(normalizedTitle) {
-  const normalizedValue = String(normalizedTitle || '').trim();
+  const normalizedValue = normalizeSemiconductorRefluxTitle(normalizedTitle);
   if (!normalizedValue) {
     return false;
   }
@@ -229,7 +229,7 @@ function dedupeNormalizedTitles(titles) {
 function dedupePreNormalizedTitles(titles) {
   return [...new Set(
     (Array.isArray(titles) ? titles : [])
-      .map((title) => String(title || '').trim())
+      .map((title) => normalizeSemiconductorRefluxTitle(title))
       .filter(Boolean),
   )];
 }

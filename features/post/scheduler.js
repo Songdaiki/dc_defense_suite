@@ -33,10 +33,18 @@ import {
 } from './attack-mode.js';
 import {
     ensureSemiconductorRefluxTitleSetLoaded,
-    getSemiconductorRefluxTitleSetStatus,
     hasSemiconductorRefluxTitle,
     isSemiconductorRefluxTitleSetReady,
 } from './semiconductor-reflux-title-set.js';
+import {
+    enqueueRefluxSearchDuplicate,
+    ensureRefluxSearchDuplicateBrokerLoaded,
+    getRefluxSearchDuplicateDecision,
+    getRefluxSearchDuplicatePositiveDecision,
+    resetRefluxSearchDuplicateBrokerRuntime,
+    setRefluxSearchDuplicateBrokerLogger,
+    shouldEnqueueRefluxSearchDuplicate,
+} from './reflux-search-duplicate-broker.js';
 
 const STORAGE_KEY = 'postSchedulerState';
 
@@ -60,6 +68,7 @@ class Scheduler {
         this.config = {
             galleryId: 'thesingularity',
             headtextId: '130',
+            refluxSearchGalleryId: '',
             minPage: 1,            // 시작 페이지
             maxPage: 1,            // 끝 페이지
             requestDelay: 500,     // 페이지 간 딜레이 (ms)
@@ -67,6 +76,9 @@ class Scheduler {
             cutoffPostNo: 0,       // 시작 시점 snapshot 기준 게시물 번호
             manualAttackMode: ATTACK_MODE.DEFAULT,
         };
+        setRefluxSearchDuplicateBrokerLogger((message) => {
+            this.log(message);
+        });
     }
 
     // ============================================================
@@ -82,6 +94,10 @@ class Scheduler {
         await ensureSemiconductorRefluxTitleSetLoaded();
         const normalizedOptions = normalizeStartOptions(options);
         this.assertManualAttackModeReady(normalizedOptions.source, normalizedOptions.attackMode);
+        if (shouldUseSearchDuplicateForCurrentRun(normalizedOptions.source, normalizedOptions.attackMode)) {
+            await ensureRefluxSearchDuplicateBrokerLoaded();
+            resetRefluxSearchDuplicateBrokerRuntime();
+        }
         const shouldApplyCutoff = shouldApplyCutoffForSource(
             normalizedOptions.source,
             normalizedOptions.attackMode,
@@ -118,8 +134,13 @@ class Scheduler {
         this.currentPage = 0;
         this.cancelPendingRuntimeTransition('게시글 분류가 정지되어 모드 전환을 취소했습니다.');
         this.clearRuntimeAttackMode();
+        this.resetSearchDuplicateRuntime();
         this.log('🔴 자동 분류 중지.');
         await this.saveState();
+    }
+
+    resetSearchDuplicateRuntime() {
+        resetRefluxSearchDuplicateBrokerRuntime();
     }
 
     async captureCutoffPostNo(config = this.config) {
@@ -246,9 +267,14 @@ class Scheduler {
             ...nextConfig,
             manualAttackMode: normalizeAttackMode(nextConfig.manualAttackMode),
         };
+        const currentAttackMode = normalizeAttackMode(this.currentAttackMode);
         const nextAttackMode = normalizeAttackMode(normalizedNextConfig.manualAttackMode);
         await ensureSemiconductorRefluxTitleSetLoaded();
         this.assertManualAttackModeReady('manual', nextAttackMode);
+        if (shouldUseSearchDuplicateForCurrentRun('manual', nextAttackMode)
+            || shouldUseSearchDuplicateForCurrentRun('manual', currentAttackMode)) {
+            await ensureRefluxSearchDuplicateBrokerLoaded();
+        }
         const nextCutoffPostNo = isNarrowAttackMode(nextAttackMode)
             ? 0
             : await this.captureCutoffPostNoWithRetry(normalizedNextConfig);
@@ -266,6 +292,59 @@ class Scheduler {
                 },
                 nextAttackMode,
                 nextCutoffPostNo,
+                resetRefluxSearchRuntime: shouldResetRefluxSearchRuntime(currentAttackMode, nextAttackMode),
+                transitionLogMessage: buildManualRuntimeTransitionLogMessage({
+                    nextAttackMode,
+                    nextCutoffPostNo,
+                    nextConfig: normalizedNextConfig,
+                    modeChangeOnly: true,
+                }),
+                resolve,
+                reject,
+            };
+            this.ensureRunLoop();
+        });
+    }
+
+    async transitionManualRefluxConfigWhileRunning(nextConfig = {}) {
+        if (!this.isRunning || this.currentSource !== 'manual') {
+            throw new Error('수동 게시글 분류 실행 중에만 역류기 설정 전환을 적용할 수 있습니다.');
+        }
+
+        if (this.pendingRuntimeTransition) {
+            throw new Error('게시글 분류 모드 전환이 이미 진행 중입니다. 잠시 후 다시 시도하세요.');
+        }
+
+        const currentAttackMode = normalizeAttackMode(this.currentAttackMode);
+        if (currentAttackMode !== ATTACK_MODE.SEMICONDUCTOR_REFLUX) {
+            return false;
+        }
+
+        await ensureSemiconductorRefluxTitleSetLoaded();
+        await ensureRefluxSearchDuplicateBrokerLoaded();
+        const normalizedNextConfig = {
+            ...this.config,
+            ...nextConfig,
+            manualAttackMode: normalizeAttackMode(this.config.manualAttackMode),
+            cutoffPostNo: 0,
+        };
+
+        return await new Promise((resolve, reject) => {
+            this.pendingRuntimeTransition = {
+                nextConfig: {
+                    ...nextConfig,
+                    manualAttackMode: normalizeAttackMode(this.config.manualAttackMode),
+                    cutoffPostNo: 0,
+                },
+                nextAttackMode: currentAttackMode,
+                nextCutoffPostNo: 0,
+                resetRefluxSearchRuntime: true,
+                transitionLogMessage: buildManualRuntimeTransitionLogMessage({
+                    nextAttackMode: currentAttackMode,
+                    nextCutoffPostNo: 0,
+                    nextConfig: normalizedNextConfig,
+                    modeChangeOnly: false,
+                }),
                 resolve,
                 reject,
             };
@@ -289,16 +368,19 @@ class Scheduler {
             this.currentPage = 0;
             this.currentSource = 'manual';
             this.currentAttackMode = pendingRuntimeTransition.nextAttackMode;
-
-            if (isNarrowAttackMode(pendingRuntimeTransition.nextAttackMode)) {
-                this.log(
-                    `🔁 수동 ${getAttackModeHumanLabel(pendingRuntimeTransition.nextAttackMode)} 모드 적용 - 첫 페이지부터 다시 스캔합니다. (cutoff 미사용)`,
-                );
-            } else {
-                this.log(
-                    `🔁 수동 일반 공격 모드 적용 - 새 cutoff (#${pendingRuntimeTransition.nextCutoffPostNo}) 기준으로 첫 페이지부터 다시 스캔합니다.`,
-                );
+            if (pendingRuntimeTransition.resetRefluxSearchRuntime) {
+                this.resetSearchDuplicateRuntime();
             }
+
+            this.log(
+                pendingRuntimeTransition.transitionLogMessage
+                    || buildManualRuntimeTransitionLogMessage({
+                        nextAttackMode: pendingRuntimeTransition.nextAttackMode,
+                        nextCutoffPostNo: pendingRuntimeTransition.nextCutoffPostNo,
+                        nextConfig: this.config,
+                        modeChangeOnly: true,
+                    }),
+            );
 
             await this.saveState();
             pendingRuntimeTransition.resolve();
@@ -354,20 +436,34 @@ class Scheduler {
                     const basePosts = shouldApplyCutoff
                         ? fluidPosts.filter((post) => isPostAfterCutoff(post, this.config.cutoffPostNo))
                         : fluidPosts;
-                    const candidatePosts = basePosts.filter((post) => isEligibleForAttackMode(post, effectiveAttackMode, {
-                        isSemiconductorRefluxDatasetReady: isSemiconductorRefluxTitleSetReady(),
-                        matchesSemiconductorRefluxTitle: hasSemiconductorRefluxTitle,
-                    }));
-                    const filterLabel = getAttackModeFilterLabel(effectiveAttackMode);
+                    const shouldUseSearchDuplicate = shouldUseSearchDuplicateForCurrentRun(this.currentSource, effectiveAttackMode);
+                    const refluxFilterResult = shouldUseSearchDuplicate
+                        ? await filterRefluxCandidatePosts(basePosts, {
+                            deleteGalleryId: this.config.galleryId,
+                            searchGalleryId: resolveRefluxSearchGalleryId(this.config),
+                        })
+                        : null;
+                    const candidatePosts = refluxFilterResult
+                        ? refluxFilterResult.candidatePosts
+                        : basePosts.filter((post) => isEligibleForAttackMode(post, effectiveAttackMode, {
+                            isSemiconductorRefluxDatasetReady: isSemiconductorRefluxTitleSetReady(),
+                            matchesSemiconductorRefluxTitle: hasSemiconductorRefluxTitle,
+                        }));
+                    const filterLabel = shouldUseSearchDuplicate
+                        ? '역류기 검색/데이터셋 필터'
+                        : getAttackModeFilterLabel(effectiveAttackMode);
+                    const refluxSummary = refluxFilterResult
+                        ? buildRefluxFilterSummary(refluxFilterResult.stats)
+                        : '';
 
                     if (isNarrowAttackMode(effectiveAttackMode)) {
                         if (shouldApplyCutoff) {
                             this.log(
-                                `📄 ${page}페이지: 유동닉 ${fluidPosts.length}개 발견, cutoff 이후 ${basePosts.length}개, ${filterLabel} 후 ${candidatePosts.length}개`,
+                                `📄 ${page}페이지: 유동닉 ${fluidPosts.length}개 발견, cutoff 이후 ${basePosts.length}개, ${filterLabel} 후 ${candidatePosts.length}개${refluxSummary}`,
                             );
                         } else {
                             this.log(
-                                `📄 ${page}페이지: 유동닉 ${fluidPosts.length}개 발견, 기존 포함 ${basePosts.length}개, ${filterLabel} 후 ${candidatePosts.length}개`,
+                                `📄 ${page}페이지: 유동닉 ${fluidPosts.length}개 발견, 기존 포함 ${basePosts.length}개, ${filterLabel} 후 ${candidatePosts.length}개${refluxSummary}`,
                             );
                         }
                     } else {
@@ -493,6 +589,9 @@ class Scheduler {
                 }
             }
             await ensureSemiconductorRefluxTitleSetLoaded();
+            if (shouldUseSearchDuplicateForCurrentRun(this.currentSource, this.currentAttackMode)) {
+                await ensureRefluxSearchDuplicateBrokerLoaded();
+            }
         } catch (error) {
             console.error('[Scheduler] 상태 복원 실패:', error.message);
         }
@@ -546,13 +645,6 @@ class Scheduler {
         if (normalizeAttackMode(attackMode) !== ATTACK_MODE.SEMICONDUCTOR_REFLUX) {
             return;
         }
-
-        const datasetStatus = getSemiconductorRefluxTitleSetStatus();
-        if (datasetStatus.titleCount > 0) {
-            return;
-        }
-
-        throw new Error('역류기 제목 데이터셋이 비어 있어 시작할 수 없습니다.');
     }
 }
 
@@ -614,4 +706,156 @@ function dedupePostNos(postNos) {
             .map((postNo) => String(postNo || '').trim())
             .filter((postNo) => /^\d+$/.test(postNo)),
     )];
+}
+
+function shouldUseSearchDuplicateForCurrentRun(source, attackMode) {
+    return source === 'manual' && normalizeAttackMode(attackMode) === ATTACK_MODE.SEMICONDUCTOR_REFLUX;
+}
+
+function shouldResetRefluxSearchRuntime(currentAttackMode, nextAttackMode) {
+    return normalizeAttackMode(currentAttackMode) === ATTACK_MODE.SEMICONDUCTOR_REFLUX
+        || normalizeAttackMode(nextAttackMode) === ATTACK_MODE.SEMICONDUCTOR_REFLUX;
+}
+
+function resolveRefluxSearchGalleryId(config = {}) {
+    const explicitGalleryId = String(config?.refluxSearchGalleryId || '').trim().toLowerCase();
+    if (explicitGalleryId) {
+        return explicitGalleryId;
+    }
+
+    return String(config?.galleryId || '').trim().toLowerCase();
+}
+
+function buildManualRuntimeTransitionLogMessage({
+    nextAttackMode,
+    nextCutoffPostNo,
+    nextConfig,
+    modeChangeOnly = true,
+} = {}) {
+    if (normalizeAttackMode(nextAttackMode) === ATTACK_MODE.SEMICONDUCTOR_REFLUX) {
+        const searchGalleryId = resolveRefluxSearchGalleryId(nextConfig);
+        const messagePrefix = modeChangeOnly ? '모드 적용' : '설정 적용';
+        return `🔁 수동 역류기 공격 ${messagePrefix} - 첫 페이지부터 다시 스캔합니다. (검색 갤: ${searchGalleryId || '-'}, cutoff 미사용)`;
+    }
+
+    if (isNarrowAttackMode(nextAttackMode)) {
+        return `🔁 수동 ${getAttackModeHumanLabel(nextAttackMode)} 모드 적용 - 첫 페이지부터 다시 스캔합니다. (cutoff 미사용)`;
+    }
+
+    return `🔁 수동 일반 공격 모드 적용 - 새 cutoff (#${nextCutoffPostNo}) 기준으로 첫 페이지부터 다시 스캔합니다.`;
+}
+
+async function filterRefluxCandidatePosts(posts, context = {}) {
+    await ensureRefluxSearchDuplicateBrokerLoaded();
+
+    const immediateMatches = [];
+    const stats = {
+        positiveHotsetCount: 0,
+        datasetCount: 0,
+        positiveCacheCount: 0,
+        negativeCount: 0,
+        pendingCount: 0,
+        errorCooldownCount: 0,
+        queueEnqueuedCount: 0,
+    };
+
+    for (const post of Array.isArray(posts) ? posts : []) {
+        const title = String(post?.subject || '').trim();
+        if (!title) {
+            continue;
+        }
+
+        const hotsetDecision = getRefluxSearchDuplicatePositiveDecision({
+            searchGalleryId: context.searchGalleryId,
+            title,
+        });
+        if (hotsetDecision === 'positive') {
+            immediateMatches.push(post);
+            stats.positiveHotsetCount += 1;
+            continue;
+        }
+
+        if (hasSemiconductorRefluxTitle(title)) {
+            immediateMatches.push(post);
+            stats.datasetCount += 1;
+            continue;
+        }
+
+        const cacheDecision = getRefluxSearchDuplicateDecision({
+            searchGalleryId: context.searchGalleryId,
+            title,
+        });
+        if (cacheDecision === 'positive') {
+            immediateMatches.push(post);
+            stats.positiveCacheCount += 1;
+            continue;
+        }
+
+        if (cacheDecision === 'negative') {
+            stats.negativeCount += 1;
+            continue;
+        }
+
+        if (cacheDecision === 'pending') {
+            stats.pendingCount += 1;
+            continue;
+        }
+
+        if (cacheDecision === 'error') {
+            stats.errorCooldownCount += 1;
+            continue;
+        }
+
+        const canEnqueue = shouldEnqueueRefluxSearchDuplicate({
+            searchGalleryId: context.searchGalleryId,
+            title,
+        });
+        if (!canEnqueue) {
+            continue;
+        }
+
+        const didEnqueue = enqueueRefluxSearchDuplicate({
+            deleteGalleryId: context.deleteGalleryId,
+            searchGalleryId: context.searchGalleryId,
+            postNo: post?.no,
+            title,
+        });
+        if (didEnqueue) {
+            stats.queueEnqueuedCount += 1;
+        }
+    }
+
+    return {
+        candidatePosts: immediateMatches,
+        stats,
+    };
+}
+
+function buildRefluxFilterSummary(stats = {}) {
+    const summaryParts = [];
+    if (stats.positiveHotsetCount > 0) {
+        summaryParts.push(`search hotset ${stats.positiveHotsetCount}`);
+    }
+    if (stats.positiveCacheCount > 0) {
+        summaryParts.push(`search cache ${stats.positiveCacheCount}`);
+    }
+    if (stats.datasetCount > 0) {
+        summaryParts.push(`dataset ${stats.datasetCount}`);
+    }
+    if (stats.pendingCount > 0) {
+        summaryParts.push(`pending ${stats.pendingCount}`);
+    }
+    if (stats.negativeCount > 0) {
+        summaryParts.push(`negative ${stats.negativeCount}`);
+    }
+    if (stats.errorCooldownCount > 0) {
+        summaryParts.push(`error cooldown ${stats.errorCooldownCount}`);
+    }
+    if (stats.queueEnqueuedCount > 0) {
+        summaryParts.push(`queue ${stats.queueEnqueuedCount}`);
+    }
+
+    return summaryParts.length > 0
+        ? ` (${summaryParts.join(', ')})`
+        : '';
 }

@@ -30,7 +30,7 @@ import {
 } from '../features/comment-reflux-collector/scheduler.js';
 import { isValidGalleryId as isValidCommentRefluxCollectorGalleryId } from '../features/comment-reflux-collector/api.js';
 import { Scheduler as PostScheduler } from '../features/post/scheduler.js';
-import { normalizeAttackMode as normalizePostAttackMode } from '../features/post/attack-mode.js';
+import { ATTACK_MODE as POST_ATTACK_MODE, normalizeAttackMode as normalizePostAttackMode } from '../features/post/attack-mode.js';
 import { Scheduler as SemiPostScheduler } from '../features/semi-post/scheduler.js';
 import { Scheduler as IpScheduler } from '../features/ip/scheduler.js';
 import {
@@ -537,6 +537,23 @@ async function handleMessage(message) {
           message.config = {
             ...message.config,
             manualAttackMode: normalizePostManualAttackMode(message.config.manualAttackMode),
+          };
+        }
+
+        if (message.feature === 'post' && message.config.refluxSearchGalleryId !== undefined) {
+          const trimmedSearchGalleryId = normalizePostRefluxSearchGalleryId(message.config.refluxSearchGalleryId);
+          if (trimmedSearchGalleryId && !isValidPostRefluxSearchGalleryId(trimmedSearchGalleryId)) {
+            return {
+              success: false,
+              message: '역류 검색 갤 ID는 영문/숫자/밑줄만 입력하세요.',
+              status: scheduler.getStatus(),
+              statuses: getAllStatuses(),
+            };
+          }
+
+          message.config = {
+            ...message.config,
+            refluxSearchGalleryId: trimmedSearchGalleryId,
           };
         }
 
@@ -1553,6 +1570,9 @@ function resetPostSchedulerState(message) {
     scheduler.cancelPendingRuntimeTransition('게시글 분류 상태 초기화로 모드 전환을 취소했습니다.');
   }
   scheduler.clearRuntimeAttackMode();
+  if (typeof scheduler.resetSearchDuplicateRuntime === 'function') {
+    scheduler.resetSearchDuplicateRuntime();
+  }
   scheduler.config.cutoffPostNo = 0;
   scheduler.logs = [];
   scheduler.log(message);
@@ -1563,9 +1583,42 @@ async function maybeHandleRunningPostModeTransition(scheduler, config) {
   const nextManualAttackMode = config.manualAttackMode === undefined
     ? currentManualAttackMode
     : normalizePostManualAttackMode(config.manualAttackMode);
+  const currentRuntimeAttackMode = normalizePostManualAttackMode(scheduler.currentAttackMode);
+  const currentEffectiveAttackMode = scheduler.currentSource === 'manual'
+    ? currentRuntimeAttackMode
+    : currentManualAttackMode;
+  const nextMergedConfig = {
+    ...scheduler.config,
+    ...config,
+    manualAttackMode: nextManualAttackMode,
+  };
+  const currentSearchGalleryId = resolvePostRefluxSearchGalleryId(scheduler.config);
+  const nextSearchGalleryId = resolvePostRefluxSearchGalleryId(nextMergedConfig);
 
   if (currentManualAttackMode === nextManualAttackMode) {
-    return null;
+    const shouldRestartRunningManualReflux = scheduler.currentSource === 'manual'
+      && currentEffectiveAttackMode === POST_ATTACK_MODE.SEMICONDUCTOR_REFLUX
+      && currentSearchGalleryId !== nextSearchGalleryId;
+    if (!shouldRestartRunningManualReflux) {
+      return null;
+    }
+
+    try {
+      await scheduler.transitionManualRefluxConfigWhileRunning(nextMergedConfig);
+      return {
+        success: true,
+        status: scheduler.getStatus(),
+        config: scheduler.config,
+        statuses: getAllStatuses(),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+      };
+    }
   }
 
   try {
@@ -1587,6 +1640,23 @@ async function maybeHandleRunningPostModeTransition(scheduler, config) {
       statuses: getAllStatuses(),
     };
   }
+}
+
+function normalizePostRefluxSearchGalleryId(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isValidPostRefluxSearchGalleryId(value) {
+  return /^[a-z0-9_]+$/i.test(normalizePostRefluxSearchGalleryId(value));
+}
+
+function resolvePostRefluxSearchGalleryId(config = {}) {
+  const explicitSearchGalleryId = normalizePostRefluxSearchGalleryId(config?.refluxSearchGalleryId);
+  if (explicitSearchGalleryId) {
+    return explicitSearchGalleryId;
+  }
+
+  return normalizeSharedString(config?.galleryId).toLowerCase();
 }
 
 function normalizePostManualAttackMode(value) {
