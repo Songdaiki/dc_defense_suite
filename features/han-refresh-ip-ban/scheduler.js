@@ -13,6 +13,7 @@ import {
 
 const STORAGE_KEY = 'hanRefreshIpBanSchedulerState';
 const MAX_TAIL_EXPANSION_ROUNDS = 10;
+const ZERO_TARGET_EARLY_STOP_THRESHOLD_PAGES = 100;
 const PHASE = {
   IDLE: 'IDLE',
   RUNNING: 'RUNNING',
@@ -101,7 +102,9 @@ class Scheduler {
         continue;
       }
 
+      let cycleStartedAt = 0;
       try {
+        cycleStartedAt = Date.now();
         this.phase = PHASE.RUNNING;
         await this.saveState();
         await this.runCycle();
@@ -111,15 +114,22 @@ class Scheduler {
         }
 
         const completedAt = Date.now();
+        const scheduledNextRunAtMs = cycleStartedAt + getCycleIntervalMs(this.config);
         this.cycleCount += 1;
         this.lastRunAt = new Date(completedAt).toISOString();
-        this.nextRunAt = new Date(completedAt + getCycleIntervalMs(this.config)).toISOString();
+        this.nextRunAt = new Date(
+          scheduledNextRunAtMs > completedAt ? scheduledNextRunAtMs : completedAt,
+        ).toISOString();
         this.phase = PHASE.WAITING;
         this.currentPage = 0;
         this.log(
           `✅ 사이클 #${this.cycleCount} 완료 - 검사 ${this.currentCycleScannedRows}줄 / 대상 ${this.currentCycleMatchedRows}줄 / 성공 ${this.currentCycleBanSuccessCount}건 / 실패 ${this.currentCycleBanFailureCount}건`,
         );
-        this.log(`⏳ 다음 실행 예정: ${formatTimestamp(this.nextRunAt)}`);
+        if (scheduledNextRunAtMs > completedAt) {
+          this.log(`⏳ 다음 실행 예정: ${formatTimestamp(this.nextRunAt)} (사이클 시작 기준 5시간)`);
+        } else {
+          this.log('⚠️ 이번 사이클이 예약 주기를 넘겨서 즉시 다음 실행으로 이어집니다.');
+        }
         await this.saveState();
       } catch (error) {
         this.phase = PHASE.WAITING;
@@ -128,8 +138,18 @@ class Scheduler {
         console.error('[HanRefreshIpBanScheduler] run error:', error);
 
         if (this.isRunning) {
-          this.nextRunAt = new Date(Date.now() + getCycleIntervalMs(this.config)).toISOString();
-          this.log(`⏳ 오류로 이번 사이클 종료 - 다음 실행 예정: ${formatTimestamp(this.nextRunAt)}`);
+          const completedAt = Date.now();
+          const scheduledNextRunAtMs = cycleStartedAt > 0
+            ? cycleStartedAt + getCycleIntervalMs(this.config)
+            : completedAt + getCycleIntervalMs(this.config);
+          this.nextRunAt = new Date(
+            scheduledNextRunAtMs > completedAt ? scheduledNextRunAtMs : completedAt,
+          ).toISOString();
+          if (scheduledNextRunAtMs > completedAt) {
+            this.log(`⏳ 오류로 이번 사이클 종료 - 다음 실행 예정: ${formatTimestamp(this.nextRunAt)} (사이클 시작 기준 5시간)`);
+          } else {
+            this.log('⚠️ 오류가 났지만 예약 주기를 넘겨서 즉시 다음 실행으로 이어집니다.');
+          }
         }
 
         await this.saveState();
@@ -161,10 +181,22 @@ class Scheduler {
     let scanEndPage = this.detectedMaxPage;
     let cachedFirstPageHtml = initialPageResult.html;
     let tailExpansionRounds = 0;
+    let consecutiveZeroTargetPages = 0;
 
     while (this.isRunning && scanStartPage <= scanEndPage) {
-      await this.scanPageRange(scanStartPage, scanEndPage, seenAvoidNos, cachedFirstPageHtml);
+      const scanResult = await this.scanPageRange(
+        scanStartPage,
+        scanEndPage,
+        seenAvoidNos,
+        cachedFirstPageHtml,
+        { consecutiveZeroTargetPages },
+      );
+      consecutiveZeroTargetPages = scanResult.consecutiveZeroTargetPages;
       if (!this.isRunning) {
+        break;
+      }
+
+      if (scanResult.stoppedByZeroTargetTailCutoff) {
         break;
       }
 
@@ -216,13 +248,17 @@ class Scheduler {
 
     if (!this.isRunning) {
       await this.saveState();
-      return;
+      return {
+        actionableRowCount: avoidNos.length,
+      };
     }
 
     if (avoidNos.length === 0) {
       this.log(`📄 ${page}페이지: 검사 ${rows.length}줄, 대상 0줄 (한자 0 / 도배사유 0)`);
       await this.saveState();
-      return;
+      return {
+        actionableRowCount: 0,
+      };
     }
 
     let result = null;
@@ -232,7 +268,9 @@ class Scheduler {
       this.currentCycleBanFailureCount += avoidNos.length;
       this.log(`❌ ${page}페이지 재차단 요청 실패 - ${error.message}`);
       await this.saveState();
-      return;
+      return {
+        actionableRowCount: avoidNos.length,
+      };
     }
 
     const successCount = result.successNos?.length || 0;
@@ -254,9 +292,14 @@ class Scheduler {
     }
 
     await this.saveState();
+    return {
+      actionableRowCount: avoidNos.length,
+    };
   }
 
-  async scanPageRange(startPage, endPage, seenAvoidNos, firstPageHtml = '') {
+  async scanPageRange(startPage, endPage, seenAvoidNos, firstPageHtml = '', options = {}) {
+    let consecutiveZeroTargetPages = Math.max(0, Number(options.consecutiveZeroTargetPages) || 0);
+
     for (let page = startPage; page <= endPage; page += 1) {
       if (!this.isRunning) {
         break;
@@ -273,11 +316,34 @@ class Scheduler {
           pageHtml = await this.fetchManagementBlockHTML(this.config, page, 2);
         } catch (error) {
           this.log(`⚠️ ${page}페이지 로딩 실패 - ${error.message}`);
+          consecutiveZeroTargetPages = 0;
           continue;
         }
       }
 
-      await this.processPage(page, pageHtml, seenAvoidNos);
+      const pageResult = await this.processPage(page, pageHtml, seenAvoidNos);
+      if (!this.isRunning) {
+        break;
+      }
+
+      const actionableRowCount = Number(pageResult?.actionableRowCount) || 0;
+
+      if (actionableRowCount > 0) {
+        consecutiveZeroTargetPages = 0;
+      } else {
+        consecutiveZeroTargetPages += 1;
+        if (consecutiveZeroTargetPages >= ZERO_TARGET_EARLY_STOP_THRESHOLD_PAGES) {
+          const zeroStartPage = Math.max(1, page - ZERO_TARGET_EARLY_STOP_THRESHOLD_PAGES + 1);
+          this.log(
+            `⏭️ ${zeroStartPage}~${page}페이지가 ${ZERO_TARGET_EARLY_STOP_THRESHOLD_PAGES}페이지 연속 대상 0줄이라 이번 사이클을 여기서 종료합니다.`,
+          );
+          await this.saveState();
+          return {
+            stoppedByZeroTargetTailCutoff: true,
+            consecutiveZeroTargetPages,
+          };
+        }
+      }
 
       if (!this.isRunning || page >= endPage) {
         continue;
@@ -288,6 +354,11 @@ class Scheduler {
         await delayWhileRunning(this, requestDelay);
       }
     }
+
+    return {
+      stoppedByZeroTargetTailCutoff: false,
+      consecutiveZeroTargetPages,
+    };
   }
 
   async fetchDetectedMaxPageWithHtml(errorPrefix) {
