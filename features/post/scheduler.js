@@ -32,10 +32,10 @@ import {
     normalizeAttackMode,
 } from './attack-mode.js';
 import {
-    ensureSemiconductorRefluxTitleSetLoaded,
-    hasSemiconductorRefluxTitle,
-    isSemiconductorRefluxTitleSetReady,
-} from './semiconductor-reflux-title-set.js';
+    ensureSemiconductorRefluxPostTitleMatcherLoaded,
+    hasSemiconductorRefluxPostTitle,
+    isSemiconductorRefluxPostTitleMatcherReady,
+} from './semiconductor-reflux-post-title-matcher.js';
 import {
     enqueueRefluxSearchDuplicate,
     ensureRefluxSearchDuplicateBrokerLoaded,
@@ -90,8 +90,10 @@ class Scheduler {
             return;
         }
 
-        await ensureSemiconductorRefluxTitleSetLoaded();
         const normalizedOptions = normalizeStartOptions(options);
+        if (shouldPreloadSemiconductorRefluxPostMatcher(normalizedOptions.attackMode)) {
+            await ensureSemiconductorRefluxPostTitleMatcherLoaded();
+        }
         this.assertManualAttackModeReady(normalizedOptions.source, normalizedOptions.attackMode);
         if (shouldUseSearchDuplicateForCurrentRun(normalizedOptions.source, normalizedOptions.attackMode)) {
             await ensureRefluxSearchDuplicateBrokerLoaded();
@@ -270,7 +272,9 @@ class Scheduler {
         };
         const currentAttackMode = normalizeAttackMode(this.currentAttackMode);
         const nextAttackMode = normalizeAttackMode(normalizedNextConfig.manualAttackMode);
-        await ensureSemiconductorRefluxTitleSetLoaded();
+        if (shouldPreloadSemiconductorRefluxPostMatcher(nextAttackMode)) {
+            await ensureSemiconductorRefluxPostTitleMatcherLoaded();
+        }
         this.assertManualAttackModeReady('manual', nextAttackMode);
         if (shouldUseSearchDuplicateForCurrentRun('manual', nextAttackMode)
             || shouldUseSearchDuplicateForCurrentRun('manual', currentAttackMode)) {
@@ -321,7 +325,7 @@ class Scheduler {
             return false;
         }
 
-        await ensureSemiconductorRefluxTitleSetLoaded();
+        await ensureSemiconductorRefluxPostTitleMatcherLoaded();
         await ensureRefluxSearchDuplicateBrokerLoaded();
         const normalizedNextConfig = {
             ...this.config,
@@ -451,8 +455,8 @@ class Scheduler {
                     const candidatePosts = refluxFilterResult
                         ? refluxFilterResult.candidatePosts
                         : basePosts.filter((post) => isEligibleForAttackMode(post, effectiveAttackMode, {
-                            isSemiconductorRefluxDatasetReady: isSemiconductorRefluxTitleSetReady(),
-                            matchesSemiconductorRefluxTitle: hasSemiconductorRefluxTitle,
+                            isSemiconductorRefluxDatasetReady: isSemiconductorRefluxPostTitleMatcherReady(),
+                            matchesSemiconductorRefluxTitle: hasSemiconductorRefluxPostTitle,
                         }));
                     const filterLabel = shouldUseSearchDuplicate
                         ? '역류기 검색/데이터셋 필터'
@@ -593,8 +597,10 @@ class Scheduler {
                     this.clearRuntimeAttackMode();
                 }
             }
-            await ensureSemiconductorRefluxTitleSetLoaded();
-            if (shouldUseSearchDuplicateForCurrentRun(this.currentSource, this.currentAttackMode)) {
+            if (this.isRunning && shouldPreloadSemiconductorRefluxPostMatcher(this.currentAttackMode)) {
+                await ensureSemiconductorRefluxPostTitleMatcherLoaded();
+            }
+            if (this.isRunning && shouldUseSearchDuplicateForCurrentRun(this.currentSource, this.currentAttackMode)) {
                 await ensureRefluxSearchDuplicateBrokerLoaded();
             }
         } catch (error) {
@@ -734,6 +740,10 @@ function shouldResetRefluxSearchRuntime(currentAttackMode, nextAttackMode) {
         || normalizeAttackMode(nextAttackMode) === ATTACK_MODE.SEMICONDUCTOR_REFLUX;
 }
 
+function shouldPreloadSemiconductorRefluxPostMatcher(attackMode) {
+    return normalizeAttackMode(attackMode) === ATTACK_MODE.SEMICONDUCTOR_REFLUX;
+}
+
 function buildManualRuntimeTransitionLogMessage({
     nextAttackMode,
     nextCutoffPostNo,
@@ -776,7 +786,7 @@ async function filterRefluxCandidatePosts(posts, context = {}) {
             continue;
         }
 
-        if (hasSemiconductorRefluxTitle(title)) {
+        if (hasSemiconductorRefluxPostTitle(title)) {
             immediateMatches.push(post);
             stats.datasetCount += 1;
             continue;

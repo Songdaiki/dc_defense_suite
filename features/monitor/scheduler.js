@@ -11,10 +11,10 @@ import {
   normalizeAttackMode,
 } from '../post/attack-mode.js';
 import {
-  ensureSemiconductorRefluxTitleSetLoaded,
-  hasSemiconductorRefluxTitle,
-  isSemiconductorRefluxTitleSetReady,
-} from '../post/semiconductor-reflux-title-set.js';
+  ensureSemiconductorRefluxPostTitleMatcherLoaded,
+  hasSemiconductorRefluxPostTitle,
+  isSemiconductorRefluxPostTitleMatcherReady,
+} from '../post/semiconductor-reflux-post-title-matcher.js';
 import {
   ensureRefluxSearchDuplicateBrokerLoaded,
   peekRefluxSearchDuplicateDecision,
@@ -105,7 +105,7 @@ class Scheduler {
       throw new Error(startBlockReason);
     }
 
-    await ensureSemiconductorRefluxTitleSetLoaded();
+    await ensureSemiconductorRefluxPostTitleMatcherLoaded();
     this.isRunning = true;
     this.phase = PHASE.SEEDING;
     this.currentPollPage = 0;
@@ -451,7 +451,7 @@ class Scheduler {
     const matchedPosts = [];
     const searchGalleryId = this.getResolvedRefluxSearchGalleryId();
 
-    const missingDatasetPosts = allFluidPosts.filter((post) => !hasSemiconductorRefluxTitle(post?.subject));
+    const missingDatasetPosts = allFluidPosts.filter((post) => !hasSemiconductorRefluxPostTitle(post?.subject));
     if (missingDatasetPosts.length > 0) {
       await ensureRefluxSearchDuplicateBrokerLoaded();
       if (this.isAsyncDecisionStale(operationToken)) {
@@ -468,7 +468,7 @@ class Scheduler {
         continue;
       }
 
-      if (hasSemiconductorRefluxTitle(title)) {
+      if (hasSemiconductorRefluxPostTitle(title)) {
         matchedPosts.push(post);
         continue;
       }
@@ -497,8 +497,8 @@ class Scheduler {
   async decideAttackMode(metrics, { operationToken = this.asyncDecisionToken } = {}) {
     const samplePosts = pickAttackModeSamplePosts(metrics);
     const baseDecision = buildAttackModeDecision(samplePosts, {
-      isSemiconductorRefluxDatasetReady: isSemiconductorRefluxTitleSetReady(),
-      matchesSemiconductorRefluxTitle: hasSemiconductorRefluxTitle,
+      isSemiconductorRefluxDatasetReady: isSemiconductorRefluxPostTitleMatcherReady(),
+      matchesSemiconductorRefluxTitle: hasSemiconductorRefluxPostTitle,
     });
     if (baseDecision.sampleCount < ATTACK_MODE_SAMPLE_POST_LIMIT) {
       return baseDecision;
@@ -524,7 +524,7 @@ class Scheduler {
         continue;
       }
 
-      if (hasSemiconductorRefluxTitle(title)) {
+      if (hasSemiconductorRefluxPostTitle(title)) {
         refluxLikeCount += 1;
         continue;
       }
@@ -555,8 +555,8 @@ class Scheduler {
   buildCheapAttackModeDecision(metrics) {
     const samplePosts = pickAttackModeSamplePosts(metrics);
     const baseDecision = buildAttackModeDecision(samplePosts, {
-      isSemiconductorRefluxDatasetReady: isSemiconductorRefluxTitleSetReady(),
-      matchesSemiconductorRefluxTitle: hasSemiconductorRefluxTitle,
+      isSemiconductorRefluxDatasetReady: isSemiconductorRefluxPostTitleMatcherReady(),
+      matchesSemiconductorRefluxTitle: hasSemiconductorRefluxPostTitle,
     });
     if (baseDecision.sampleCount < ATTACK_MODE_SAMPLE_POST_LIMIT) {
       return baseDecision;
@@ -574,7 +574,7 @@ class Scheduler {
         continue;
       }
 
-      if (hasSemiconductorRefluxTitle(title)) {
+      if (hasSemiconductorRefluxPostTitle(title)) {
         refluxLikeCount += 1;
         continue;
       }
@@ -649,6 +649,10 @@ class Scheduler {
       }
     } else {
       let postStateChanged = false;
+
+      if (this.attackMode === ATTACK_MODE.SEMICONDUCTOR_REFLUX) {
+        await ensureSemiconductorRefluxPostTitleMatcherLoaded();
+      }
 
       if (Number(this.postScheduler.config.cutoffPostNo) !== Number(this.attackCutoffPostNo)) {
         this.postScheduler.config.cutoffPostNo = this.attackCutoffPostNo;
@@ -1061,7 +1065,9 @@ class Scheduler {
         ...this.config,
         ...(schedulerState.config || {}),
       };
-      await ensureSemiconductorRefluxTitleSetLoaded();
+      if (this.isRunning) {
+        await ensureSemiconductorRefluxPostTitleMatcherLoaded();
+      }
       if (this.isRunning && this.attackMode === ATTACK_MODE.SEMICONDUCTOR_REFLUX) {
         await ensureRefluxSearchDuplicateBrokerLoaded();
       }
@@ -1211,8 +1217,8 @@ function buildInitialSweepPosts(snapshot, attackMode = ATTACK_MODE.DEFAULT, init
 
   if (normalizedAttackMode !== ATTACK_MODE.DEFAULT) {
     return allFluidPosts.filter((post) => isEligibleForAttackMode(post, normalizedAttackMode, {
-      isSemiconductorRefluxDatasetReady: isSemiconductorRefluxTitleSetReady(),
-      matchesSemiconductorRefluxTitle: hasSemiconductorRefluxTitle,
+      isSemiconductorRefluxDatasetReady: isSemiconductorRefluxPostTitleMatcherReady(),
+      matchesSemiconductorRefluxTitle: hasSemiconductorRefluxPostTitle,
     }));
   }
 

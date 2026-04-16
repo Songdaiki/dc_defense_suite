@@ -266,6 +266,131 @@ function isRefluxContainmentChunkEligible(
   );
 }
 
+function extractRefluxAllChunksFromNormalizedCompareKey(
+  value,
+  {
+    chunkLengths = [3, 4],
+    minChunkLength = 3,
+    minLatinChunkLength = 4,
+    minHangulChunkLength = 3,
+  } = {},
+) {
+  const chars = Array.from(String(value || '').trim());
+  if (chars.length <= 0) {
+    return [];
+  }
+
+  const normalizedChunkLengths = normalizeRefluxChunkLengths(chunkLengths, minChunkLength);
+  const chunks = [];
+  const seen = new Set();
+
+  for (const chunkLength of normalizedChunkLengths) {
+    if (chars.length < chunkLength) {
+      continue;
+    }
+
+    for (let start = 0; start <= chars.length - chunkLength; start += 1) {
+      const chunk = chars.slice(start, start + chunkLength).join('');
+      if (
+        !isRefluxContainmentChunkEligible(
+          chunk,
+          {
+            minChunkLength,
+            minLatinChunkLength,
+            minHangulChunkLength,
+          },
+        )
+        || seen.has(chunk)
+      ) {
+        continue;
+      }
+
+      seen.add(chunk);
+      chunks.push(chunk);
+    }
+  }
+
+  return chunks;
+}
+
+function extractRefluxRepresentativeChunksFromNormalizedCompareKey(
+  value,
+  {
+    chunkLengths = [3, 4],
+    minChunkLength = 3,
+    minLatinChunkLength = 4,
+    minHangulChunkLength = 3,
+    anchorMode = 'start_mid_end',
+  } = {},
+) {
+  const chars = Array.from(String(value || '').trim());
+  if (chars.length <= 0) {
+    return [];
+  }
+
+  const normalizedChunkLengths = normalizeRefluxChunkLengths(chunkLengths, minChunkLength);
+  const chunks = [];
+  const seen = new Set();
+
+  for (const chunkLength of normalizedChunkLengths) {
+    if (chars.length < chunkLength) {
+      continue;
+    }
+
+    const maxStart = chars.length - chunkLength;
+    const anchorStarts = getRefluxRepresentativeAnchorStarts(maxStart, anchorMode);
+    for (const start of anchorStarts) {
+      const chunk = chars.slice(start, start + chunkLength).join('');
+      if (
+        !isRefluxContainmentChunkEligible(
+          chunk,
+          {
+            minChunkLength,
+            minLatinChunkLength,
+            minHangulChunkLength,
+          },
+        )
+        || seen.has(chunk)
+      ) {
+        continue;
+      }
+
+      seen.add(chunk);
+      chunks.push(chunk);
+    }
+  }
+
+  return chunks;
+}
+
+function normalizeRefluxChunkLengths(chunkLengths, minChunkLength) {
+  const normalizedMinChunkLength = Math.max(1, Math.trunc(Number(minChunkLength) || 0));
+  return [...new Set(
+    (Array.isArray(chunkLengths) ? chunkLengths : [])
+      .map((chunkLength) => Math.trunc(Number(chunkLength) || 0))
+      .filter((chunkLength) => chunkLength >= normalizedMinChunkLength),
+  )].sort((left, right) => left - right);
+}
+
+function getRefluxRepresentativeAnchorStarts(maxStart, anchorMode = 'start_mid_end') {
+  const normalizedMaxStart = Math.max(0, Math.trunc(Number(maxStart) || 0));
+  if (anchorMode === 'start_quarter_mid_threequarter_end') {
+    return [...new Set([
+      0,
+      Math.floor(normalizedMaxStart / 4),
+      Math.floor(normalizedMaxStart / 2),
+      Math.floor((normalizedMaxStart * 3) / 4),
+      normalizedMaxStart,
+    ])];
+  }
+
+  return [...new Set([
+    0,
+    Math.floor(normalizedMaxStart / 2),
+    normalizedMaxStart,
+  ])];
+}
+
 function hashSortedCharsToFnv1a64Hex(chars) {
   let hash = FNV1A64_OFFSET_BASIS;
 
@@ -298,6 +423,10 @@ function hashStringToFnv1a64Hex(value) {
   return hash.toString(16).padStart(16, '0');
 }
 
+function hashRefluxStringToFnv1a64Hex(value) {
+  return hashStringToFnv1a64Hex(value);
+}
+
 export {
   buildRefluxContainmentSignatureFromChunks,
   buildRefluxContainmentSignatures,
@@ -305,7 +434,10 @@ export {
   buildRefluxSearchQuery,
   buildRefluxPermutationSignature,
   buildRefluxPermutationSignatureFromNormalizedCompareKey,
+  extractRefluxAllChunksFromNormalizedCompareKey,
+  extractRefluxRepresentativeChunksFromNormalizedCompareKey,
   getRefluxContainmentChunkMinLength,
+  hashRefluxStringToFnv1a64Hex,
   isRefluxContainmentChunkEligible,
   normalizeRefluxCompareKey,
 };
