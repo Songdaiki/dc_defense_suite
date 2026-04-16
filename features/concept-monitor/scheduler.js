@@ -11,6 +11,7 @@ import {
 import {
   AUTO_CUT_STATE,
   DEFENDING_RECOMMEND_CUT,
+  invalidateKcaptchaRecomCntState,
   NORMAL_RECOMMEND_CUT,
   getConceptRecommendCutCoordinatorStatus,
   syncConceptMonitorRecommendCutState,
@@ -88,7 +89,7 @@ class Scheduler {
     this.log(this.config.testMode
       ? '🟢 개념글 방어 시작! (테스트 모드)'
       : '🟢 개념글 방어 시작! (실행 모드)');
-    await this.syncRecommendCutCoordinator();
+    await this.syncRecommendCutCoordinator({ forceKcaptchaRefresh: true });
     await this.saveState();
     this.ensureRunLoop();
   }
@@ -103,7 +104,7 @@ class Scheduler {
     this.isRunning = false;
     this.currentPostNo = 0;
     this.log('🔴 개념글 방어 중지.');
-    await this.syncRecommendCutCoordinator();
+    await this.syncRecommendCutCoordinator({ forceKcaptchaRefresh: true });
     await this.saveState();
   }
 
@@ -326,8 +327,12 @@ class Scheduler {
     );
   }
 
-  async syncRecommendCutCoordinator() {
+  async syncRecommendCutCoordinator(options = {}) {
     try {
+      if (options?.forceKcaptchaRefresh) {
+        await invalidateKcaptchaRecomCntState();
+      }
+
       if (this.isRunning && this.config.autoCutEnabled && this.lastRecommendSnapshot.length <= 0) {
         const coordinatorStatus = getConceptRecommendCutCoordinatorStatus();
         this.applyRecommendCutCoordinatorStatus(coordinatorStatus);

@@ -113,6 +113,15 @@ async function syncConceptMonitorRecommendCutState(config = {}, autoCutState = {
   return reconcileRecommendCutCoordinator();
 }
 
+async function invalidateKcaptchaRecomCntState() {
+  await initializeConceptRecommendCutCoordinator();
+  state.lastAppliedKcaptchaRecomCnt = UNKNOWN_KCAPTCHA_RECOM_CNT;
+  state.lastKcaptchaApplySucceeded = false;
+  state.lastKcaptchaSettings = null;
+  await saveState();
+  return getConceptRecommendCutCoordinatorStatus();
+}
+
 async function triggerConceptPatrolRecommendCutHold(config = {}, options = {}) {
   await initializeConceptRecommendCutCoordinator();
   state.config = normalizeConfig(config);
@@ -315,6 +324,7 @@ export {
   NORMAL_RECOMMEND_CUT,
   getConceptRecommendCutCoordinatorStatus,
   handleConceptRecommendCutCoordinatorAlarm,
+  invalidateKcaptchaRecomCntState,
   initializeConceptRecommendCutCoordinator,
   reconcileRecommendCutCoordinator,
   resetConceptRecommendCutCoordinator,

@@ -267,7 +267,7 @@ async function resumeAllSchedulers() {
     await resumeUidRatioWarningForActiveTab();
 
     if (typeof schedulers.conceptMonitor.syncRecommendCutCoordinator === 'function') {
-      await schedulers.conceptMonitor.syncRecommendCutCoordinator();
+      await schedulers.conceptMonitor.syncRecommendCutCoordinator({ forceKcaptchaRefresh: true });
       await schedulers.conceptMonitor.saveState();
     }
 
@@ -688,7 +688,7 @@ async function handleMessage(message) {
         scheduler.config = { ...scheduler.config, ...message.config };
         if (message.feature === 'conceptMonitor'
           && typeof scheduler.syncRecommendCutCoordinator === 'function') {
-          await scheduler.syncRecommendCutCoordinator();
+          await scheduler.syncRecommendCutCoordinator({ forceKcaptchaRefresh: true });
         }
         await scheduler.saveState();
       }
@@ -730,7 +730,7 @@ async function handleMessage(message) {
       }
       if (message.feature === 'conceptMonitor'
         && typeof scheduler.syncRecommendCutCoordinator === 'function') {
-        await scheduler.syncRecommendCutCoordinator();
+        await scheduler.syncRecommendCutCoordinator({ forceKcaptchaRefresh: true });
       }
       await scheduler.saveState();
       return {

@@ -1,5 +1,8 @@
 # kcaptcha recom_cnt 자동 연동 구현 계획
 
+> 참고: 이 문서는 초기 계획 문서다.
+> 2026-04-16 현재 구현/검증 기준은 `docs/0416/kcaptcha_recom_cnt_verified_spec.md`를 우선 본다.
+
 > 작성일: 2026-04-16
 > 목적: 개념컷 자동조절에서 DEFENDING/NORMAL 전환 시 kcaptcha 개념글 추천 기준(recom_cnt)을 함께 변경
 

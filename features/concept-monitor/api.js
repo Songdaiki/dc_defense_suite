@@ -27,6 +27,57 @@ const KCAPTCHA_TOGGLE_FIELD_NAMES = new Set([
   'use_recom_n',
 ]);
 
+const KCAPTCHA_MANAGEMENT_FIELD_CANDIDATES = {
+  use_ips: {
+    primary: ['use_ips'],
+    fallback: [],
+  },
+  write_cnt: {
+    primary: ['write_kcaptcha_cnt'],
+    fallback: ['write_cnt'],
+  },
+  comment_cnt: {
+    primary: ['comment_kcaptcha_cnt'],
+    fallback: ['comment_cnt'],
+  },
+  recom_cnt: {
+    primary: ['recom_kcaptcha_cnt'],
+    fallback: ['recom_cnt'],
+  },
+  use_write: {
+    primary: ['use_write_kcaptcha'],
+    fallback: ['use_write'],
+  },
+  use_comment: {
+    primary: ['use_comment_kcaptcha'],
+    fallback: ['use_comment'],
+  },
+  use_recom: {
+    primary: ['use_recom_kcaptcha'],
+    fallback: ['use_recom'],
+  },
+  use_recom_r: {
+    primary: ['chk_recom_use'],
+    fallback: ['use_recom_r'],
+  },
+  use_recom_n: {
+    primary: ['chk_non_recom_use'],
+    fallback: ['use_recom_n'],
+  },
+};
+
+const KCAPTCHA_MANAGEMENT_SELECT_SCRIPT_NAMES = {
+  write_cnt: 'write_kcaptcha_cnt',
+  comment_cnt: 'comment_kcaptcha_cnt',
+  recom_cnt: 'recom_kcaptcha_cnt',
+};
+
+const KCAPTCHA_MANAGEMENT_RESULT_IDS = {
+  write_cnt: 'use_kcaptcha_write',
+  comment_cnt: 'use_kcaptcha_comment',
+  recom_cnt: 'use_kcaptcha_recom',
+};
+
 const KCAPTCHA_SECTION_WINDOW_CHARS = 12000;
 
 function resolveConfig(config = {}) {
@@ -445,7 +496,7 @@ function parseKcaptchaSettings(html) {
 
   const rawSettings = {};
   for (const fieldName of KCAPTCHA_REQUIRED_FIELD_NAMES) {
-    rawSettings[fieldName] = parseFieldValue(sectionHtml, fieldName);
+    rawSettings[fieldName] = parseKcaptchaManagementFieldValue(sectionHtml, fieldName);
   }
 
   return normalizeKcaptchaSettings(rawSettings);
@@ -455,6 +506,16 @@ function extractKcaptchaSectionHtml(htmlText) {
   const normalized = String(htmlText || '');
   if (!normalized) {
     return '';
+  }
+
+  const preventCodeSection = extractNearestFormGroupAroundMarker(normalized, 'set_content prevent_code');
+  if (isLikelyKcaptchaSectionHtml(preventCodeSection)) {
+    return preventCodeSection;
+  }
+
+  const updateButtonSection = extractNearestFormGroupAroundMarker(normalized, 'update_kcaptcha()');
+  if (isLikelyKcaptchaSectionHtml(updateButtonSection)) {
+    return updateButtonSection;
   }
 
   const anchoredForm = extractNearestFormAroundAnchor(normalized, 'update_kcaptcha');
@@ -480,6 +541,41 @@ function extractKcaptchaSectionHtml(htmlText) {
   }
 
   return '';
+}
+
+function extractNearestFormGroupAroundMarker(htmlText, marker) {
+  const normalized = String(htmlText || '');
+  const markerIndex = normalized.indexOf(marker);
+  if (markerIndex < 0) {
+    return '';
+  }
+
+  const formGroupPattern = /<div\b[^>]*\bclass\s*=\s*(?:"[^"]*\bform_group\b[^"]*"|'[^']*\bform_group\b[^']*')[^>]*>/gi;
+  const matches = [...normalized.matchAll(formGroupPattern)];
+
+  let groupStart = -1;
+  let nextGroupStart = -1;
+  for (const match of matches) {
+    const matchIndex = Number(match.index);
+    if (!Number.isFinite(matchIndex)) {
+      continue;
+    }
+
+    if (matchIndex > markerIndex) {
+      nextGroupStart = matchIndex;
+      break;
+    }
+
+    groupStart = matchIndex;
+  }
+
+  if (groupStart < 0) {
+    return '';
+  }
+
+  return nextGroupStart < 0
+    ? normalized.slice(groupStart)
+    : normalized.slice(groupStart, nextGroupStart);
 }
 
 function extractNearestFormAroundAnchor(htmlText, anchor) {
@@ -523,8 +619,12 @@ function scoreKcaptchaSectionHtml(sectionHtml) {
     score += 4;
   }
 
+  if (text.includes('set_content prevent_code')) {
+    score += 4;
+  }
+
   for (const fieldName of KCAPTCHA_REQUIRED_FIELD_NAMES) {
-    if (hasNamedField(text, fieldName)) {
+    if (hasKcaptchaFieldSource(text, fieldName)) {
       score += 1;
     }
   }
@@ -539,17 +639,33 @@ function isLikelyKcaptchaSectionHtml(sectionHtml) {
   }
 
   const matchedFieldCount = KCAPTCHA_REQUIRED_FIELD_NAMES
-    .filter((fieldName) => hasNamedField(text, fieldName))
+    .filter((fieldName) => hasKcaptchaFieldSource(text, fieldName))
     .length;
 
-  return hasNamedField(text, 'recom_cnt')
-    && (text.includes('update_kcaptcha') || matchedFieldCount >= 6);
+  return (text.includes('update_kcaptcha') || text.includes('set_content prevent_code'))
+    && matchedFieldCount >= 6;
 }
 
 function hasNamedField(sectionHtml, fieldName) {
   return findTagMatchesByName(sectionHtml, 'input', fieldName).length > 0
     || findTagMatchesByName(sectionHtml, 'select', fieldName).length > 0
     || findTagMatchesByName(sectionHtml, 'textarea', fieldName).length > 0;
+}
+
+function hasKcaptchaFieldSource(sectionHtml, fieldName) {
+  const candidateNames = getAllKcaptchaManagementFieldNames(fieldName);
+  if (candidateNames.some((candidateName) => hasNamedField(sectionHtml, candidateName))) {
+    return true;
+  }
+
+  const selectScriptName = KCAPTCHA_MANAGEMENT_SELECT_SCRIPT_NAMES[fieldName];
+  if (selectScriptName && hasUlSelectricSelection(sectionHtml, selectScriptName)) {
+    return true;
+  }
+
+  const resultId = KCAPTCHA_MANAGEMENT_RESULT_IDS[fieldName];
+  return Boolean(resultId)
+    && (sectionHtml.includes(`id="${resultId}"`) || sectionHtml.includes(`id='${resultId}'`));
 }
 
 function assertCompleteKcaptchaSettings(settings = {}) {
@@ -601,23 +717,113 @@ function normalizeKcaptchaCountValue(value, fieldName) {
   return String(Number(normalized));
 }
 
-function parseFieldValue(sectionHtml, fieldName) {
-  const selectMatches = findTagMatchesByName(sectionHtml, 'select', fieldName);
+function parseKcaptchaManagementFieldValue(sectionHtml, fieldName) {
+  const primaryFieldNames = getPrimaryKcaptchaManagementFieldNames(fieldName);
+  const directValue = parseFirstAvailableFieldValue(sectionHtml, primaryFieldNames, fieldName);
+  if (directValue !== undefined && directValue !== '') {
+    return directValue;
+  }
+
+  const selectScriptName = KCAPTCHA_MANAGEMENT_SELECT_SCRIPT_NAMES[fieldName];
+  if (selectScriptName) {
+    const selectScriptValue = parseUlSelectricSelectionValue(sectionHtml, selectScriptName);
+    if (selectScriptValue !== undefined && selectScriptValue !== '') {
+      return selectScriptValue;
+    }
+  }
+
+  const resultId = KCAPTCHA_MANAGEMENT_RESULT_IDS[fieldName];
+  if (resultId) {
+    const resultTextValue = parseKcaptchaResultCountValue(sectionHtml, resultId);
+    if (resultTextValue !== undefined && resultTextValue !== '') {
+      return resultTextValue;
+    }
+  }
+
+  const fallbackFieldNames = getFallbackKcaptchaManagementFieldNames(fieldName);
+  const fallbackValue = parseFirstAvailableFieldValue(sectionHtml, fallbackFieldNames, fieldName);
+  if (fallbackValue !== undefined && fallbackValue !== '') {
+    return fallbackValue;
+  }
+
+  return undefined;
+}
+
+function getPrimaryKcaptchaManagementFieldNames(fieldName) {
+  const candidateConfig = KCAPTCHA_MANAGEMENT_FIELD_CANDIDATES[fieldName];
+  return Array.isArray(candidateConfig?.primary) && candidateConfig.primary.length > 0
+    ? candidateConfig.primary
+    : [fieldName];
+}
+
+function getFallbackKcaptchaManagementFieldNames(fieldName) {
+  const candidateConfig = KCAPTCHA_MANAGEMENT_FIELD_CANDIDATES[fieldName];
+  return Array.isArray(candidateConfig?.fallback) ? candidateConfig.fallback : [];
+}
+
+function getAllKcaptchaManagementFieldNames(fieldName) {
+  return [
+    ...getPrimaryKcaptchaManagementFieldNames(fieldName),
+    ...getFallbackKcaptchaManagementFieldNames(fieldName),
+  ];
+}
+
+function parseFirstAvailableFieldValue(sectionHtml, sourceFieldNames, targetFieldName) {
+  for (const sourceFieldName of sourceFieldNames) {
+    const parsedValue = parseFieldValue(sectionHtml, sourceFieldName, targetFieldName);
+    if (parsedValue !== undefined && parsedValue !== '') {
+      return parsedValue;
+    }
+  }
+
+  return undefined;
+}
+
+function parseFieldValue(sectionHtml, sourceFieldName, targetFieldName = sourceFieldName) {
+  const selectMatches = findTagMatchesByName(sectionHtml, 'select', sourceFieldName);
   if (selectMatches.length > 0) {
-    return parseSelectValue(selectMatches[0], fieldName);
+    return parseSelectValue(selectMatches[0], targetFieldName);
   }
 
-  const inputMatches = findTagMatchesByName(sectionHtml, 'input', fieldName);
+  const inputMatches = findTagMatchesByName(sectionHtml, 'input', sourceFieldName);
   if (inputMatches.length > 0) {
-    return parseInputValue(inputMatches, fieldName);
+    return parseInputValue(inputMatches, targetFieldName);
   }
 
-  const textareaMatches = findTagMatchesByName(sectionHtml, 'textarea', fieldName);
+  const textareaMatches = findTagMatchesByName(sectionHtml, 'textarea', sourceFieldName);
   if (textareaMatches.length > 0) {
     return extractTextareaValue(textareaMatches[0]);
   }
 
   return undefined;
+}
+
+function hasUlSelectricSelection(sectionHtml, fieldName) {
+  return parseUlSelectricSelectionValue(sectionHtml, fieldName) !== undefined;
+}
+
+function parseUlSelectricSelectionValue(sectionHtml, fieldName) {
+  const pattern = new RegExp(
+    `ul_selectric\\([\\s\\S]*?['"]${escapeRegExp(fieldName)}['"]\\s*,\\s*['"]([^'"]+)['"]\\s*\\)`,
+    'i',
+  );
+  const match = String(sectionHtml || '').match(pattern);
+  return match ? decodeHtmlEntities(match[1]) : undefined;
+}
+
+function parseKcaptchaResultCountValue(sectionHtml, elementId) {
+  const pattern = new RegExp(
+    `<[^>]+\\bid\\s*=\\s*(?:"${escapeRegExp(elementId)}"|'${escapeRegExp(elementId)}')[^>]*>([\\s\\S]*?)<\\/[^>]+>`,
+    'i',
+  );
+  const match = String(sectionHtml || '').match(pattern);
+  if (!match) {
+    return undefined;
+  }
+
+  const normalizedText = decodeHtmlEntities(match[1]).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const digitsMatch = normalizedText.match(/(\d+)/);
+  return digitsMatch ? digitsMatch[1] : undefined;
 }
 
 function parseSelectValue(selectHtml, fieldName) {
