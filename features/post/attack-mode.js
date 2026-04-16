@@ -12,6 +12,7 @@ const ATTACK_MODE = {
 
 const ATTACK_MODE_SAMPLE_POST_LIMIT = 5;
 const ATTACK_MODE_SAMPLE_MATCH_THRESHOLD = 3;
+
 function normalizeAttackMode(value) {
   if (value === ATTACK_MODE.CJK_NARROW || value === ATTACK_MODE.SEMICONDUCTOR_REFLUX) {
     return value;
@@ -76,6 +77,74 @@ function normalizeSemiconductorRefluxTitle(value) {
   return normalizeRefluxCompareKey(value);
 }
 
+function buildAttackModeDecisionFromCounts({
+  sampleCount = 0,
+  hanLikeCount = 0,
+  refluxLikeCount = 0,
+  sampleTitles = [],
+} = {}) {
+  const normalizedSampleCount = Math.max(0, Number(sampleCount) || 0);
+  const normalizedHanLikeCount = Math.max(0, Number(hanLikeCount) || 0);
+  const normalizedRefluxLikeCount = Math.max(0, Number(refluxLikeCount) || 0);
+  const normalizedSampleTitles = (Array.isArray(sampleTitles) ? sampleTitles : [])
+    .map((title) => String(title || '').trim())
+    .filter(Boolean)
+    .slice(0, ATTACK_MODE_SAMPLE_POST_LIMIT);
+
+  if (normalizedSampleCount < ATTACK_MODE_SAMPLE_POST_LIMIT) {
+    return {
+      attackMode: ATTACK_MODE.DEFAULT,
+      reason: `샘플 유동글이 ${ATTACK_MODE_SAMPLE_POST_LIMIT}개 미만이라 DEFAULT 유지`,
+      sampleCount: normalizedSampleCount,
+      hanLikeCount: normalizedHanLikeCount,
+      refluxLikeCount: normalizedRefluxLikeCount,
+      sampleTitles: normalizedSampleTitles,
+    };
+  }
+
+  if (normalizedHanLikeCount >= ATTACK_MODE_SAMPLE_MATCH_THRESHOLD && normalizedRefluxLikeCount <= 0) {
+    return {
+      attackMode: ATTACK_MODE.CJK_NARROW,
+      reason: `새 유동글 샘플 ${normalizedSampleCount}개 중 ${normalizedHanLikeCount}개가 Han/CJK 제목`,
+      sampleCount: normalizedSampleCount,
+      hanLikeCount: normalizedHanLikeCount,
+      refluxLikeCount: normalizedRefluxLikeCount,
+      sampleTitles: normalizedSampleTitles,
+    };
+  }
+
+  if (normalizedRefluxLikeCount >= ATTACK_MODE_SAMPLE_MATCH_THRESHOLD && normalizedHanLikeCount <= 0) {
+    return {
+      attackMode: ATTACK_MODE.SEMICONDUCTOR_REFLUX,
+      reason: `새 유동글 샘플 ${normalizedSampleCount}개 중 ${normalizedRefluxLikeCount}개가 역류기 제목`,
+      sampleCount: normalizedSampleCount,
+      hanLikeCount: normalizedHanLikeCount,
+      refluxLikeCount: normalizedRefluxLikeCount,
+      sampleTitles: normalizedSampleTitles,
+    };
+  }
+
+  if (normalizedHanLikeCount > 0 && normalizedRefluxLikeCount > 0) {
+    return {
+      attackMode: ATTACK_MODE.DEFAULT,
+      reason: `새 유동글 샘플 ${normalizedSampleCount}개에 Han/CJK 제목과 역류기 제목이 섞여 있어 DEFAULT 유지`,
+      sampleCount: normalizedSampleCount,
+      hanLikeCount: normalizedHanLikeCount,
+      refluxLikeCount: normalizedRefluxLikeCount,
+      sampleTitles: normalizedSampleTitles,
+    };
+  }
+
+  return {
+    attackMode: ATTACK_MODE.DEFAULT,
+    reason: `새 유동글 샘플 ${normalizedSampleCount}개 중 어느 쪽도 ${ATTACK_MODE_SAMPLE_MATCH_THRESHOLD}개에 못 미쳐 DEFAULT 유지`,
+    sampleCount: normalizedSampleCount,
+    hanLikeCount: normalizedHanLikeCount,
+    refluxLikeCount: normalizedRefluxLikeCount,
+    sampleTitles: normalizedSampleTitles,
+  };
+}
+
 function buildAttackModeDecision(
   samplePosts,
   {
@@ -93,58 +162,12 @@ function buildAttackModeDecision(
     ? normalizedSamplePosts.filter((post) => matchesSemiconductorRefluxTitle(post?.subject)).length
     : 0;
 
-  if (normalizedSamplePosts.length < ATTACK_MODE_SAMPLE_POST_LIMIT) {
-    return {
-      attackMode: ATTACK_MODE.DEFAULT,
-      reason: `샘플 유동글이 ${ATTACK_MODE_SAMPLE_POST_LIMIT}개 미만이라 DEFAULT 유지`,
-      sampleCount: normalizedSamplePosts.length,
-      hanLikeCount,
-      refluxLikeCount,
-      sampleTitles,
-    };
-  }
-
-  if (hanLikeCount >= ATTACK_MODE_SAMPLE_MATCH_THRESHOLD && refluxLikeCount <= 0) {
-    return {
-      attackMode: ATTACK_MODE.CJK_NARROW,
-      reason: `새 유동글 샘플 ${normalizedSamplePosts.length}개 중 ${hanLikeCount}개가 Han/CJK 제목`,
-      sampleCount: normalizedSamplePosts.length,
-      hanLikeCount,
-      refluxLikeCount,
-      sampleTitles,
-    };
-  }
-
-  if (refluxLikeCount >= ATTACK_MODE_SAMPLE_MATCH_THRESHOLD && hanLikeCount <= 0) {
-    return {
-      attackMode: ATTACK_MODE.SEMICONDUCTOR_REFLUX,
-      reason: `새 유동글 샘플 ${normalizedSamplePosts.length}개 중 ${refluxLikeCount}개가 역류기 제목`,
-      sampleCount: normalizedSamplePosts.length,
-      hanLikeCount,
-      refluxLikeCount,
-      sampleTitles,
-    };
-  }
-
-  if (hanLikeCount > 0 && refluxLikeCount > 0) {
-    return {
-      attackMode: ATTACK_MODE.DEFAULT,
-      reason: `새 유동글 샘플 ${normalizedSamplePosts.length}개에 Han/CJK 제목과 역류기 제목이 섞여 있어 DEFAULT 유지`,
-      sampleCount: normalizedSamplePosts.length,
-      hanLikeCount,
-      refluxLikeCount,
-      sampleTitles,
-    };
-  }
-
-  return {
-    attackMode: ATTACK_MODE.DEFAULT,
-    reason: `새 유동글 샘플 ${normalizedSamplePosts.length}개 중 어느 쪽도 ${ATTACK_MODE_SAMPLE_MATCH_THRESHOLD}개에 못 미쳐 DEFAULT 유지`,
+  return buildAttackModeDecisionFromCounts({
     sampleCount: normalizedSamplePosts.length,
     hanLikeCount,
     refluxLikeCount,
     sampleTitles,
-  };
+  });
 }
 
 function isEligibleForAttackMode(
@@ -191,6 +214,7 @@ export {
   ATTACK_MODE_SAMPLE_MATCH_THRESHOLD,
   ATTACK_MODE_SAMPLE_POST_LIMIT,
   buildAttackModeDecision,
+  buildAttackModeDecisionFromCounts,
   buildSemiconductorRefluxSearchQuery,
   formatAttackModeLabel,
   getAttackModeFilterLabel,

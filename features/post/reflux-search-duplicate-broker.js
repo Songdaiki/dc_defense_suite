@@ -19,7 +19,6 @@ const runtimeState = {
   loaded: false,
   loadPromise: null,
   cacheMap: new Map(),
-  positiveHotset: new Set(),
   pendingMap: new Map(),
   queue: [],
   workerPromise: null,
@@ -55,7 +54,6 @@ async function ensureRefluxSearchDuplicateBrokerLoaded() {
 
 function hydrateStoredCacheState(storedState) {
   runtimeState.cacheMap = new Map();
-  runtimeState.positiveHotset = new Set();
 
   const entries = Array.isArray(storedState?.entries) ? storedState.entries : [];
   for (const rawEntry of entries) {
@@ -65,9 +63,6 @@ function hydrateStoredCacheState(storedState) {
     }
 
     runtimeState.cacheMap.set(normalizedEntry.cacheKey, normalizedEntry);
-    if (normalizedEntry.result === 'positive') {
-      runtimeState.positiveHotset.add(normalizedEntry.cacheKey);
-    }
   }
 }
 
@@ -78,104 +73,148 @@ function setRefluxSearchDuplicateBrokerLogger(logger) {
 function resetRefluxSearchDuplicateBrokerRuntime() {
   runtimeState.generation += 1;
   runtimeState.queue = [];
+
+  const pendingEntries = [...runtimeState.pendingMap.values()];
   runtimeState.pendingMap = new Map();
-  runtimeState.positiveHotset = new Set();
+  pendingEntries.forEach((pendingEntry) => {
+    settlePendingEntry(pendingEntry, {
+      result: 'cancelled',
+      rows: [],
+      errorMessage: '',
+    });
+  });
 }
 
-function getRefluxSearchDuplicatePositiveDecision({ searchGalleryId, title }) {
-  const cacheKey = buildCacheKey(searchGalleryId, title);
-  if (!cacheKey) {
-    return 'miss';
+function peekRefluxSearchDuplicateDecision(context = {}) {
+  const normalizedContext = normalizeDecisionContext(context);
+  if (!normalizedContext) {
+    return buildDecision({
+      result: 'negative',
+      source: 'invalid',
+      matchedRow: null,
+      errorMessage: '',
+    });
   }
 
-  if (runtimeState.positiveHotset.has(cacheKey)) {
-    return 'positive';
+  const pendingEntry = getCurrentPendingEntry(normalizedContext.cacheKey);
+  if (pendingEntry) {
+    return buildDecision({
+      result: 'pending',
+      source: 'search_pending',
+      matchedRow: null,
+      errorMessage: '',
+    });
   }
 
-  const cacheEntry = getUsablePersistentCacheEntry(cacheKey);
-  if (cacheEntry?.result === 'positive') {
-    runtimeState.positiveHotset.add(cacheKey);
-    return 'positive';
-  }
-
-  return 'miss';
-}
-
-function getRefluxSearchDuplicateDecision({ searchGalleryId, title }) {
-  const cacheKey = buildCacheKey(searchGalleryId, title);
-  if (!cacheKey) {
-    return 'miss';
-  }
-
-  const pendingGeneration = runtimeState.pendingMap.get(cacheKey);
-  if (pendingGeneration === runtimeState.generation) {
-    return 'pending';
-  }
-
-  if (runtimeState.positiveHotset.has(cacheKey)) {
-    return 'positive';
-  }
-
-  const cacheEntry = getUsablePersistentCacheEntry(cacheKey);
+  const cacheEntry = getUsablePersistentCacheEntry(normalizedContext.cacheKey);
   if (!cacheEntry) {
-    return 'miss';
+    return buildDecision({
+      result: 'miss',
+      source: 'search_miss',
+      matchedRow: null,
+      errorMessage: '',
+    });
   }
 
-  if (cacheEntry.result === 'positive') {
-    runtimeState.positiveHotset.add(cacheKey);
-    return 'positive';
-  }
-
-  return cacheEntry.result;
+  return buildDecisionFromCacheEntry(cacheEntry, normalizedContext, 'search_cache');
 }
 
-function shouldEnqueueRefluxSearchDuplicate({ searchGalleryId, title }) {
-  const cacheKey = buildCacheKey(searchGalleryId, title);
-  if (!cacheKey) {
-    return false;
+async function resolveRefluxSearchDuplicateDecision(context = {}) {
+  const normalizedContext = normalizeDecisionContext(context);
+  if (!normalizedContext) {
+    return buildDecision({
+      result: 'negative',
+      source: 'invalid',
+      matchedRow: null,
+      errorMessage: '',
+    });
   }
 
-  const pendingGeneration = runtimeState.pendingMap.get(cacheKey);
-  if (pendingGeneration === runtimeState.generation) {
-    return false;
+  const cacheEntry = getUsablePersistentCacheEntry(normalizedContext.cacheKey);
+  if (cacheEntry) {
+    return buildDecisionFromCacheEntry(cacheEntry, normalizedContext, 'search_cache');
   }
 
-  return getRefluxSearchDuplicateDecision({ searchGalleryId, title }) === 'miss';
+  let pendingEntry = getCurrentPendingEntry(normalizedContext.cacheKey);
+  if (!pendingEntry) {
+    pendingEntry = createPendingEntry(runtimeState.generation);
+    runtimeState.pendingMap.set(normalizedContext.cacheKey, pendingEntry);
+    runtimeState.queue.push({
+      cacheKey: normalizedContext.cacheKey,
+      searchGalleryId: normalizedContext.searchGalleryId,
+      normalizedTitle: normalizedContext.normalizedTitle,
+      searchQuery: normalizedContext.searchQuery,
+      labelText: normalizedContext.labelText,
+      generation: runtimeState.generation,
+    });
+    ensureWorkerRunning();
+  }
+
+  const fetchResult = await pendingEntry.promise;
+  return buildDecisionFromFetchResult(fetchResult, normalizedContext);
 }
 
-function enqueueRefluxSearchDuplicate({ deleteGalleryId, searchGalleryId, postNo, title }) {
-  const normalizedTitle = normalizeSemiconductorRefluxTitle(title);
-  const searchQuery = buildSemiconductorRefluxSearchQuery(title);
-  const normalizedSearchGalleryId = normalizeGalleryId(searchGalleryId);
-  const normalizedDeleteGalleryId = normalizeGalleryId(deleteGalleryId);
-  const normalizedPostNo = normalizePostNo(postNo);
-  const cacheKey = buildCacheKey(normalizedSearchGalleryId, title);
-  if (!cacheKey || !normalizedSearchGalleryId || !normalizedDeleteGalleryId || !normalizedTitle || !searchQuery) {
+function getRefluxSearchDuplicatePositiveDecision(context = {}) {
+  const decision = peekRefluxSearchDuplicateDecision(context);
+  return decision.result === 'positive' ? 'positive' : 'miss';
+}
+
+function getRefluxSearchDuplicateDecision(context = {}) {
+  return peekRefluxSearchDuplicateDecision(context).result;
+}
+
+function shouldEnqueueRefluxSearchDuplicate(context = {}) {
+  return peekRefluxSearchDuplicateDecision(context).result === 'miss';
+}
+
+function enqueueRefluxSearchDuplicate(context = {}) {
+  const normalizedContext = normalizeDecisionContext(context);
+  if (!normalizedContext) {
     return false;
   }
 
-  if (!shouldEnqueueRefluxSearchDuplicate({
-    searchGalleryId: normalizedSearchGalleryId,
-    title,
-  })) {
+  if (getUsablePersistentCacheEntry(normalizedContext.cacheKey)) {
     return false;
   }
 
-  const generation = runtimeState.generation;
-  runtimeState.pendingMap.set(cacheKey, generation);
+  if (getCurrentPendingEntry(normalizedContext.cacheKey)) {
+    return false;
+  }
+
+  const pendingEntry = createPendingEntry(runtimeState.generation);
+  runtimeState.pendingMap.set(normalizedContext.cacheKey, pendingEntry);
   runtimeState.queue.push({
-    cacheKey,
-    deleteGalleryId: normalizedDeleteGalleryId,
-    searchGalleryId: normalizedSearchGalleryId,
-    normalizedTitle,
-    searchQuery,
-    title: String(title || '').trim(),
-    postNo: normalizedPostNo,
-    generation,
-    enqueuedAt: new Date().toISOString(),
+    cacheKey: normalizedContext.cacheKey,
+    searchGalleryId: normalizedContext.searchGalleryId,
+    normalizedTitle: normalizedContext.normalizedTitle,
+    searchQuery: normalizedContext.searchQuery,
+    labelText: normalizedContext.labelText,
+    generation: runtimeState.generation,
   });
   ensureWorkerRunning();
   return true;
+}
+
+function createPendingEntry(generation) {
+  const deferred = createDeferred();
+  return {
+    generation,
+    settled: false,
+    promise: deferred.promise,
+    resolve: deferred.resolve,
+  };
+}
+
+function createDeferred() {
+  let resolve;
+  const promise = new Promise((innerResolve) => {
+    resolve = innerResolve;
+  });
+
+  return {
+    promise,
+    resolve,
+  };
 }
 
 function ensureWorkerRunning() {
@@ -199,14 +238,11 @@ async function runWorker() {
     }
 
     if (queueItem.generation !== runtimeState.generation) {
-      clearPendingEntry(queueItem.cacheKey, queueItem.generation);
       continue;
     }
 
     await sleepWithJitter(SEARCH_REQUEST_BASE_DELAY_MS, SEARCH_REQUEST_JITTER_MS);
-
     if (queueItem.generation !== runtimeState.generation) {
-      clearPendingEntry(queueItem.cacheKey, queueItem.generation);
       continue;
     }
 
@@ -218,70 +254,59 @@ async function processQueueItem(queueItem) {
   try {
     const searchRows = await fetchSearchRows(queueItem);
     if (queueItem.generation !== runtimeState.generation) {
-      clearPendingEntry(queueItem.cacheKey, queueItem.generation);
       return;
     }
 
-    const duplicateMatch = findDuplicateMatch(searchRows, queueItem);
-    if (duplicateMatch) {
-      runtimeState.positiveHotset.add(queueItem.cacheKey);
-      runtimeState.cacheMap.set(queueItem.cacheKey, {
-        cacheKey: queueItem.cacheKey,
-        normalizedTitle: queueItem.normalizedTitle,
-        searchTargetGalleryId: queueItem.searchGalleryId,
-        result: 'positive',
-        checkedAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + POSITIVE_TTL_MS).toISOString(),
-        retryAt: '',
-        matchedGalleryId: duplicateMatch.boardId,
-        matchedPostNo: duplicateMatch.postNo,
-        matchedHref: duplicateMatch.href,
-        source: 'getSearch',
-        errorMessage: '',
-      });
-      await persistCurrentCacheStateSafely();
-      emitLog(`🔎 검색 중복 확인: ${queueItem.title} -> ${duplicateMatch.boardId} #${duplicateMatch.postNo}`);
+    const matchedRows = extractMatchedRows(searchRows, queueItem);
+    const checkedAt = new Date().toISOString();
+    runtimeState.cacheMap.set(queueItem.cacheKey, {
+      cacheKey: queueItem.cacheKey,
+      searchTargetGalleryId: queueItem.searchGalleryId,
+      normalizedTitle: queueItem.normalizedTitle,
+      result: 'success',
+      checkedAt,
+      expiresAt: new Date(
+        Date.now() + (matchedRows.length > 0 ? POSITIVE_TTL_MS : NEGATIVE_TTL_MS),
+      ).toISOString(),
+      retryAt: '',
+      rows: matchedRows,
+      errorMessage: '',
+    });
+    await persistCurrentCacheStateSafely();
+    settlePendingEntryByKey(queueItem.cacheKey, queueItem.generation, {
+      result: 'success',
+      rows: matchedRows,
+      errorMessage: '',
+    });
+
+    if (matchedRows.length > 0) {
+      emitLog(`🔎 검색 중복 확인: ${queueItem.labelText} -> ${matchedRows[0].boardId} #${matchedRows[0].postNo}`);
     } else {
-      runtimeState.positiveHotset.delete(queueItem.cacheKey);
-      runtimeState.cacheMap.set(queueItem.cacheKey, {
-        cacheKey: queueItem.cacheKey,
-        normalizedTitle: queueItem.normalizedTitle,
-        searchTargetGalleryId: queueItem.searchGalleryId,
-        result: 'negative',
-        checkedAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + NEGATIVE_TTL_MS).toISOString(),
-        retryAt: '',
-        matchedGalleryId: '',
-        matchedPostNo: 0,
-        matchedHref: '',
-        source: 'getSearch',
-        errorMessage: '',
-      });
-      await persistCurrentCacheStateSafely();
-      emitLog(`🔎 검색 미확인: ${queueItem.title}`);
+      emitLog(`🔎 검색 미확인: ${queueItem.labelText}`);
     }
   } catch (error) {
-    if (queueItem.generation === runtimeState.generation) {
-      runtimeState.positiveHotset.delete(queueItem.cacheKey);
-      runtimeState.cacheMap.set(queueItem.cacheKey, {
-        cacheKey: queueItem.cacheKey,
-        normalizedTitle: queueItem.normalizedTitle,
-        searchTargetGalleryId: queueItem.searchGalleryId,
-        result: 'error',
-        checkedAt: new Date().toISOString(),
-        expiresAt: '',
-        retryAt: new Date(Date.now() + ERROR_RETRY_COOLDOWN_MS).toISOString(),
-        matchedGalleryId: '',
-        matchedPostNo: 0,
-        matchedHref: '',
-        source: 'getSearch',
-        errorMessage: String(error?.message || 'unknown error'),
-      });
-      await persistCurrentCacheStateSafely();
-      emitLog(`⚠️ 검색 확인 실패: ${queueItem.title} - ${error.message}`);
+    if (queueItem.generation !== runtimeState.generation) {
+      return;
     }
-  } finally {
-    clearPendingEntry(queueItem.cacheKey, queueItem.generation);
+
+    runtimeState.cacheMap.set(queueItem.cacheKey, {
+      cacheKey: queueItem.cacheKey,
+      searchTargetGalleryId: queueItem.searchGalleryId,
+      normalizedTitle: queueItem.normalizedTitle,
+      result: 'error',
+      checkedAt: new Date().toISOString(),
+      expiresAt: '',
+      retryAt: new Date(Date.now() + ERROR_RETRY_COOLDOWN_MS).toISOString(),
+      rows: [],
+      errorMessage: String(error?.message || 'unknown error'),
+    });
+    await persistCurrentCacheStateSafely();
+    settlePendingEntryByKey(queueItem.cacheKey, queueItem.generation, {
+      result: 'error',
+      rows: [],
+      errorMessage: String(error?.message || 'unknown error'),
+    });
+    emitLog(`⚠️ 검색 확인 실패: ${queueItem.labelText} - ${error.message}`);
   }
 }
 
@@ -308,12 +333,114 @@ async function fetchSearchRows(queueItem) {
   });
 }
 
-function findDuplicateMatch(searchRows, queueItem) {
-  const deleteTargetGalleryId = queueItem.deleteGalleryId;
-  const currentPostNo = normalizePostNo(queueItem.postNo);
+function extractMatchedRows(searchRows, queueItem) {
+  const dedupedRows = new Map();
 
   for (const row of Array.isArray(searchRows) ? searchRows : []) {
     if (!row || row.normalizedTitle !== queueItem.normalizedTitle) {
+      continue;
+    }
+
+    const normalizedRow = normalizeMatchedRow(row, queueItem.normalizedTitle);
+    if (!normalizedRow) {
+      continue;
+    }
+
+    const rowKey = `${normalizedRow.boardId}::${normalizedRow.postNo}::${normalizedRow.href}`;
+    if (!dedupedRows.has(rowKey)) {
+      dedupedRows.set(rowKey, normalizedRow);
+    }
+  }
+
+  return [...dedupedRows.values()];
+}
+
+function normalizeMatchedRow(row, fallbackNormalizedTitle = '') {
+  const boardId = normalizeGalleryId(row?.boardId);
+  const postNo = normalizePostNo(row?.postNo);
+  const href = String(row?.href || '').trim();
+  const normalizedTitle = normalizeSemiconductorRefluxTitle(
+    row?.normalizedTitle || row?.title || fallbackNormalizedTitle,
+  );
+  if (!boardId || !href || !normalizedTitle) {
+    return null;
+  }
+
+  return {
+    boardId,
+    postNo,
+    href,
+    normalizedTitle,
+  };
+}
+
+function buildDecisionFromCacheEntry(cacheEntry, context, source) {
+  if (cacheEntry.result === 'error') {
+    return buildDecision({
+      result: 'error',
+      source: 'search_error',
+      matchedRow: null,
+      errorMessage: cacheEntry.errorMessage,
+    });
+  }
+
+  const matchedRow = findApplicableDuplicateMatch(cacheEntry.rows, context);
+  return buildDecision({
+    result: matchedRow ? 'positive' : 'negative',
+    source,
+    matchedRow,
+    errorMessage: '',
+  });
+}
+
+function buildDecisionFromFetchResult(fetchResult, context) {
+  if (!fetchResult || fetchResult.result === 'cancelled') {
+    return buildDecision({
+      result: 'cancelled',
+      source: 'cancelled',
+      matchedRow: null,
+      errorMessage: '',
+    });
+  }
+
+  if (fetchResult.result === 'error') {
+    return buildDecision({
+      result: 'error',
+      source: 'search_error',
+      matchedRow: null,
+      errorMessage: fetchResult.errorMessage,
+    });
+  }
+
+  const matchedRow = findApplicableDuplicateMatch(fetchResult.rows, context);
+  return buildDecision({
+    result: matchedRow ? 'positive' : 'negative',
+    source: 'search_queue',
+    matchedRow,
+    errorMessage: '',
+  });
+}
+
+function buildDecision({
+  result = 'negative',
+  source = 'search_cache',
+  matchedRow = null,
+  errorMessage = '',
+} = {}) {
+  return {
+    result,
+    source,
+    matchedRow,
+    errorMessage,
+  };
+}
+
+function findApplicableDuplicateMatch(rows, context) {
+  const deleteTargetGalleryId = normalizeGalleryId(context.deleteGalleryId);
+  const currentPostNo = normalizePostNo(context.currentPostNo);
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!row || row.normalizedTitle !== context.normalizedTitle) {
       continue;
     }
 
@@ -336,10 +463,70 @@ function findDuplicateMatch(searchRows, queueItem) {
   return null;
 }
 
-function clearPendingEntry(cacheKey, generation) {
-  if (runtimeState.pendingMap.get(cacheKey) === generation) {
-    runtimeState.pendingMap.delete(cacheKey);
+function normalizeDecisionContext(context = {}) {
+  const title = String(context.title || '').trim();
+  const normalizedTitle = String(
+    context.normalizedTitle || normalizeSemiconductorRefluxTitle(title),
+  ).trim();
+  const searchQuery = String(
+    context.searchQuery || buildSemiconductorRefluxSearchQuery(title),
+  ).trim();
+  const searchGalleryId = normalizeGalleryId(context.searchGalleryId);
+  const deleteGalleryId = normalizeGalleryId(context.deleteGalleryId);
+  const currentPostNo = normalizePostNo(context.currentPostNo || context.postNo);
+  const cacheKey = buildCacheKey(searchGalleryId, normalizedTitle);
+  if (!title || !normalizedTitle || !searchQuery || !searchGalleryId || !cacheKey) {
+    return null;
   }
+
+  return {
+    title,
+    labelText: title,
+    normalizedTitle,
+    searchQuery,
+    searchGalleryId,
+    deleteGalleryId,
+    currentPostNo,
+    cacheKey,
+  };
+}
+
+function buildCacheKey(searchGalleryId, normalizedTitle) {
+  const normalizedSearchGalleryId = normalizeGalleryId(searchGalleryId);
+  const title = normalizeSemiconductorRefluxTitle(normalizedTitle);
+  if (!normalizedSearchGalleryId || !title) {
+    return '';
+  }
+
+  return `${normalizedSearchGalleryId}::${title}`;
+}
+
+function getCurrentPendingEntry(cacheKey) {
+  const pendingEntry = runtimeState.pendingMap.get(cacheKey);
+  if (!pendingEntry || pendingEntry.generation !== runtimeState.generation) {
+    return null;
+  }
+
+  return pendingEntry;
+}
+
+function settlePendingEntryByKey(cacheKey, generation, result) {
+  const pendingEntry = runtimeState.pendingMap.get(cacheKey);
+  if (!pendingEntry || pendingEntry.generation !== generation) {
+    return;
+  }
+
+  runtimeState.pendingMap.delete(cacheKey);
+  settlePendingEntry(pendingEntry, result);
+}
+
+function settlePendingEntry(pendingEntry, result) {
+  if (!pendingEntry || pendingEntry.settled) {
+    return;
+  }
+
+  pendingEntry.settled = true;
+  pendingEntry.resolve(result);
 }
 
 function encodeSearchKeywordPath(value) {
@@ -354,16 +541,6 @@ function encodeSearchKeywordPath(value) {
   ).join('');
 }
 
-function buildCacheKey(searchGalleryId, title) {
-  const normalizedSearchGalleryId = normalizeGalleryId(searchGalleryId);
-  const normalizedTitle = normalizeSemiconductorRefluxTitle(title);
-  if (!normalizedSearchGalleryId || !normalizedTitle) {
-    return '';
-  }
-
-  return `${normalizedSearchGalleryId}::${normalizedTitle}`;
-}
-
 function normalizeGalleryId(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -373,6 +550,7 @@ function normalizePostNo(value) {
   if (!/^\d+$/.test(normalizedValue)) {
     return 0;
   }
+
   return Number(normalizedValue);
 }
 
@@ -384,7 +562,6 @@ function getUsablePersistentCacheEntry(cacheKey) {
 
   if (isPersistentEntryExpired(cacheEntry)) {
     runtimeState.cacheMap.delete(cacheKey);
-    runtimeState.positiveHotset.delete(cacheKey);
     void persistCurrentCacheStateSafely();
     return null;
   }
@@ -397,7 +574,7 @@ function isPersistentEntryExpired(cacheEntry) {
     return true;
   }
 
-  if (cacheEntry.result === 'positive' || cacheEntry.result === 'negative') {
+  if (cacheEntry.result === 'success') {
     return isIsoTimestampExpired(cacheEntry.expiresAt);
   }
 
@@ -413,34 +590,52 @@ function isIsoTimestampExpired(isoTimestamp) {
   if (!Number.isFinite(timestamp)) {
     return true;
   }
+
   return timestamp <= Date.now();
 }
 
 function normalizePersistentCacheEntry(rawEntry) {
   const searchTargetGalleryId = normalizeGalleryId(rawEntry?.searchTargetGalleryId);
-  const normalizedTitle = normalizeSemiconductorRefluxTitle(rawEntry?.normalizedTitle);
+  const normalizedTitle = normalizeSemiconductorRefluxTitle(
+    rawEntry?.normalizedTitle || rawEntry?.title,
+  );
   const cacheKey = searchTargetGalleryId && normalizedTitle
     ? `${searchTargetGalleryId}::${normalizedTitle}`
     : String(rawEntry?.cacheKey || '').trim();
   const result = String(rawEntry?.result || '').trim();
-  if (!cacheKey || !['positive', 'negative', 'error'].includes(result)) {
+  if (!cacheKey || !['success', 'error'].includes(result)) {
     return null;
   }
 
   return {
     cacheKey,
-    normalizedTitle,
     searchTargetGalleryId,
+    normalizedTitle,
     result,
     checkedAt: String(rawEntry?.checkedAt || '').trim(),
     expiresAt: String(rawEntry?.expiresAt || '').trim(),
     retryAt: String(rawEntry?.retryAt || '').trim(),
-    matchedGalleryId: normalizeGalleryId(rawEntry?.matchedGalleryId),
-    matchedPostNo: normalizePostNo(rawEntry?.matchedPostNo),
-    matchedHref: String(rawEntry?.matchedHref || '').trim(),
-    source: String(rawEntry?.source || 'getSearch').trim(),
+    rows: normalizeStoredRows(rawEntry?.rows, normalizedTitle),
     errorMessage: String(rawEntry?.errorMessage || '').trim(),
   };
+}
+
+function normalizeStoredRows(rows, fallbackNormalizedTitle = '') {
+  const dedupedRows = new Map();
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const normalizedRow = normalizeMatchedRow(row, fallbackNormalizedTitle);
+    if (!normalizedRow) {
+      continue;
+    }
+
+    const rowKey = `${normalizedRow.boardId}::${normalizedRow.postNo}::${normalizedRow.href}`;
+    if (!dedupedRows.has(rowKey)) {
+      dedupedRows.set(rowKey, normalizedRow);
+    }
+  }
+
+  return [...dedupedRows.values()];
 }
 
 async function persistCurrentCacheState() {
@@ -451,12 +646,8 @@ async function persistCurrentCacheState() {
     .slice(0, MAX_CACHE_ENTRY_COUNT);
 
   runtimeState.cacheMap = new Map();
-  runtimeState.positiveHotset = new Set();
   for (const entry of normalizedEntries) {
     runtimeState.cacheMap.set(entry.cacheKey, entry);
-    if (entry.result === 'positive') {
-      runtimeState.positiveHotset.add(entry.cacheKey);
-    }
   }
 
   await chrome.storage.local.set({
@@ -503,7 +694,9 @@ export {
   ensureRefluxSearchDuplicateBrokerLoaded,
   getRefluxSearchDuplicateDecision,
   getRefluxSearchDuplicatePositiveDecision,
+  peekRefluxSearchDuplicateDecision,
   resetRefluxSearchDuplicateBrokerRuntime,
+  resolveRefluxSearchDuplicateDecision,
   setRefluxSearchDuplicateBrokerLogger,
   shouldEnqueueRefluxSearchDuplicate,
 };

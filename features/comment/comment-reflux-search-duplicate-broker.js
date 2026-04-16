@@ -390,24 +390,8 @@ function buildDecision({
 }
 
 function findApplicableDuplicateMatch(rows, context) {
-  const deleteTargetGalleryId = normalizeGalleryId(context.deleteGalleryId);
-  const currentPostNo = normalizePostNo(context.currentPostNo);
-
   for (const row of Array.isArray(rows) ? rows : []) {
     if (!row || row.normalizedTitle !== context.normalizedCompareKey) {
-      continue;
-    }
-
-    const rowGalleryId = normalizeGalleryId(row.boardId);
-    const rowPostNo = normalizePostNo(row.postNo);
-    if (
-      rowGalleryId
-      && deleteTargetGalleryId
-      && rowGalleryId === deleteTargetGalleryId
-      && currentPostNo > 0
-      && rowPostNo > 0
-      && rowPostNo === currentPostNo
-    ) {
       continue;
     }
 

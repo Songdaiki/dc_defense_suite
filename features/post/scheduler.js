@@ -39,12 +39,11 @@ import {
 import {
     enqueueRefluxSearchDuplicate,
     ensureRefluxSearchDuplicateBrokerLoaded,
-    getRefluxSearchDuplicateDecision,
-    getRefluxSearchDuplicatePositiveDecision,
+    peekRefluxSearchDuplicateDecision,
     resetRefluxSearchDuplicateBrokerRuntime,
     setRefluxSearchDuplicateBrokerLogger,
-    shouldEnqueueRefluxSearchDuplicate,
 } from './reflux-search-duplicate-broker.js';
+import { resolveRefluxSearchGalleryId } from '../reflux-search-gallery-id.js';
 
 const STORAGE_KEY = 'postSchedulerState';
 
@@ -709,21 +708,12 @@ function dedupePostNos(postNos) {
 }
 
 function shouldUseSearchDuplicateForCurrentRun(source, attackMode) {
-    return source === 'manual' && normalizeAttackMode(attackMode) === ATTACK_MODE.SEMICONDUCTOR_REFLUX;
+    return normalizeAttackMode(attackMode) === ATTACK_MODE.SEMICONDUCTOR_REFLUX;
 }
 
 function shouldResetRefluxSearchRuntime(currentAttackMode, nextAttackMode) {
     return normalizeAttackMode(currentAttackMode) === ATTACK_MODE.SEMICONDUCTOR_REFLUX
         || normalizeAttackMode(nextAttackMode) === ATTACK_MODE.SEMICONDUCTOR_REFLUX;
-}
-
-function resolveRefluxSearchGalleryId(config = {}) {
-    const explicitGalleryId = String(config?.refluxSearchGalleryId || '').trim().toLowerCase();
-    if (explicitGalleryId) {
-        return explicitGalleryId;
-    }
-
-    return String(config?.galleryId || '').trim().toLowerCase();
 }
 
 function buildManualRuntimeTransitionLogMessage({
@@ -750,7 +740,6 @@ async function filterRefluxCandidatePosts(posts, context = {}) {
 
     const immediateMatches = [];
     const stats = {
-        positiveHotsetCount: 0,
         datasetCount: 0,
         positiveCacheCount: 0,
         negativeCount: 0,
@@ -765,52 +754,36 @@ async function filterRefluxCandidatePosts(posts, context = {}) {
             continue;
         }
 
-        const hotsetDecision = getRefluxSearchDuplicatePositiveDecision({
-            searchGalleryId: context.searchGalleryId,
-            title,
-        });
-        if (hotsetDecision === 'positive') {
-            immediateMatches.push(post);
-            stats.positiveHotsetCount += 1;
-            continue;
-        }
-
         if (hasSemiconductorRefluxTitle(title)) {
             immediateMatches.push(post);
             stats.datasetCount += 1;
             continue;
         }
 
-        const cacheDecision = getRefluxSearchDuplicateDecision({
+        const cacheDecision = peekRefluxSearchDuplicateDecision({
+            deleteGalleryId: context.deleteGalleryId,
             searchGalleryId: context.searchGalleryId,
+            postNo: post?.no,
             title,
         });
-        if (cacheDecision === 'positive') {
+        if (cacheDecision.result === 'positive') {
             immediateMatches.push(post);
             stats.positiveCacheCount += 1;
             continue;
         }
 
-        if (cacheDecision === 'negative') {
+        if (cacheDecision.result === 'negative') {
             stats.negativeCount += 1;
             continue;
         }
 
-        if (cacheDecision === 'pending') {
+        if (cacheDecision.result === 'pending') {
             stats.pendingCount += 1;
             continue;
         }
 
-        if (cacheDecision === 'error') {
+        if (cacheDecision.result === 'error') {
             stats.errorCooldownCount += 1;
-            continue;
-        }
-
-        const canEnqueue = shouldEnqueueRefluxSearchDuplicate({
-            searchGalleryId: context.searchGalleryId,
-            title,
-        });
-        if (!canEnqueue) {
             continue;
         }
 
@@ -833,9 +806,6 @@ async function filterRefluxCandidatePosts(posts, context = {}) {
 
 function buildRefluxFilterSummary(stats = {}) {
     const summaryParts = [];
-    if (stats.positiveHotsetCount > 0) {
-        summaryParts.push(`search hotset ${stats.positiveHotsetCount}`);
-    }
     if (stats.positiveCacheCount > 0) {
         summaryParts.push(`search cache ${stats.positiveCacheCount}`);
     }

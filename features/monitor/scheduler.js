@@ -4,6 +4,7 @@ import {
   ATTACK_MODE,
   ATTACK_MODE_SAMPLE_POST_LIMIT,
   buildAttackModeDecision,
+  buildAttackModeDecisionFromCounts,
   formatAttackModeLabel,
   getAttackModeFilterLabel,
   isEligibleForAttackMode,
@@ -14,6 +15,12 @@ import {
   hasSemiconductorRefluxTitle,
   isSemiconductorRefluxTitleSetReady,
 } from '../post/semiconductor-reflux-title-set.js';
+import {
+  ensureRefluxSearchDuplicateBrokerLoaded,
+  peekRefluxSearchDuplicateDecision,
+  resolveRefluxSearchDuplicateDecision,
+} from '../post/reflux-search-duplicate-broker.js';
+import { resolveRefluxSearchGalleryId } from '../reflux-search-gallery-id.js';
 
 const STORAGE_KEY = 'monitorSchedulerState';
 
@@ -60,6 +67,7 @@ class Scheduler {
     this.totalAttackDetected = 0;
     this.totalAttackReleased = 0;
     this.logs = [];
+    this.asyncDecisionToken = 0;
 
     this.config = {
       galleryId: 'thesingularity',
@@ -119,6 +127,7 @@ class Scheduler {
     this.managedIpStarted = false;
     this.managedIpDeleteEnabled = true;
     this.managedUidWarningAutoBanSuspended = false;
+    this.asyncDecisionToken += 1;
     this.log('🟢 자동 감시 시작!');
     await this.saveState();
     this.ensureRunLoop();
@@ -132,6 +141,7 @@ class Scheduler {
     }
 
     const shouldResumeUidWarningAutoBan = this.managedUidWarningAutoBanSuspended;
+    this.asyncDecisionToken += 1;
     this.isRunning = false;
     await this.stopManagedDefenses();
     this.clearAttackSession();
@@ -311,21 +321,37 @@ class Scheduler {
   }
 
   async enterAttackMode(metrics, currentSnapshot) {
+    const asyncDecisionToken = this.asyncDecisionToken;
     const attackSnapshot = await this.resolveAttackCutoffSnapshot(currentSnapshot);
+    if (this.isAsyncDecisionStale(asyncDecisionToken)) {
+      return;
+    }
     const attackCutoffPostNo = getMaxPostNo(attackSnapshot);
     if (attackCutoffPostNo <= 0) {
       throw new Error('공격 cutoff snapshot 추출에 실패했습니다.');
     }
 
-    const attackModeDecision = this.decideAttackMode(metrics);
+    const attackModeDecision = await this.decideAttackMode(metrics, {
+      operationToken: asyncDecisionToken,
+    });
+    if (attackModeDecision?.stale || this.isAsyncDecisionStale(asyncDecisionToken)) {
+      return;
+    }
     const initialSweepPages = getNormalizedInitialSweepPages(this.config, attackModeDecision.attackMode);
     const initialSweepSnapshot = await this.resolveInitialSweepSnapshot(currentSnapshot, attackModeDecision.attackMode);
+    if (this.isAsyncDecisionStale(asyncDecisionToken)) {
+      return;
+    }
     const initialSweepAllFluidPosts = buildAllFluidSnapshotPosts(initialSweepSnapshot);
-    const initialSweepTargetPosts = buildInitialSweepPosts(
+    const initialSweepTargetPosts = await this.resolveInitialSweepTargetPosts(
       initialSweepSnapshot,
       attackModeDecision.attackMode,
       initialSweepPages,
+      asyncDecisionToken,
     );
+    if (initialSweepTargetPosts?.stale || this.isAsyncDecisionStale(asyncDecisionToken)) {
+      return;
+    }
 
     this.phase = PHASE.ATTACKING;
     this.attackSessionId = `attack_${Date.now()}`;
@@ -334,7 +360,7 @@ class Scheduler {
     this.attackModeReason = attackModeDecision.reason;
     this.attackModeSampleTitles = attackModeDecision.sampleTitles;
     this.initialSweepCompleted = false;
-    this.pendingInitialSweepPosts = initialSweepTargetPosts;
+    this.pendingInitialSweepPosts = initialSweepTargetPosts.posts;
     this.pendingInitialSweepPostNos = buildInitialSweepPostNos(this.pendingInitialSweepPosts);
     this.pendingManagedIpBanOnlyPosts = [];
     this.attackHitCount = 0;
@@ -348,12 +374,15 @@ class Scheduler {
     }
     if (this.attackMode !== ATTACK_MODE.DEFAULT) {
       this.log(
-        `🧹 initial sweep 대상 ${formatInitialSweepSnapshotScope(initialSweepPages)} 유동 ${initialSweepAllFluidPosts.length}개 -> ${getAttackModeFilterLabel(this.attackMode)} 후 ${initialSweepTargetPosts.length}개`,
+        `🧹 initial sweep 대상 ${formatInitialSweepSnapshotScope(initialSweepPages)} 유동 ${initialSweepAllFluidPosts.length}개 -> ${getAttackModeFilterLabel(this.attackMode)} 후 ${initialSweepTargetPosts.posts.length}개`,
       );
     } else {
-      this.log(`🧹 initial sweep 대상 ${formatInitialSweepSnapshotScope(initialSweepPages)} 유동 ${initialSweepTargetPosts.length}개`);
+      this.log(`🧹 initial sweep 대상 ${formatInitialSweepSnapshotScope(initialSweepPages)} 유동 ${initialSweepTargetPosts.posts.length}개`);
     }
     await this.suspendUidWarningAutoBanForAttack();
+    if (this.isAsyncDecisionStale(asyncDecisionToken) || this.phase !== PHASE.ATTACKING) {
+      return;
+    }
     await this.ensureManagedDefensesStarted();
   }
 
@@ -386,11 +415,183 @@ class Scheduler {
     return await this.fetchBoardSnapshotPages(initialSweepPages, { trackProgress: false });
   }
 
-  decideAttackMode(metrics) {
+  isAsyncDecisionStale(operationToken) {
+    return !this.isRunning || operationToken !== this.asyncDecisionToken;
+  }
+
+  getResolvedRefluxSearchGalleryId() {
+    return resolveRefluxSearchGalleryId(this.postScheduler?.config || {});
+  }
+
+  buildRefluxSearchDecisionContext(post, searchGalleryId = this.getResolvedRefluxSearchGalleryId()) {
+    return {
+      deleteGalleryId: this.config.galleryId,
+      searchGalleryId,
+      postNo: post?.no,
+      title: String(post?.subject || '').trim(),
+    };
+  }
+
+  async resolveInitialSweepTargetPosts(
+    snapshot,
+    attackMode = ATTACK_MODE.DEFAULT,
+    initialSweepPages = 1,
+    operationToken = this.asyncDecisionToken,
+  ) {
+    const normalizedAttackMode = normalizeAttackMode(attackMode);
+    if (normalizedAttackMode !== ATTACK_MODE.SEMICONDUCTOR_REFLUX) {
+      return {
+        stale: false,
+        posts: buildInitialSweepPosts(snapshot, normalizedAttackMode, initialSweepPages),
+      };
+    }
+
+    const limitedSnapshot = filterSnapshotByMaxSourcePage(snapshot, initialSweepPages);
+    const allFluidPosts = buildAllFluidSnapshotPosts(limitedSnapshot);
+    const matchedPosts = [];
+    const searchGalleryId = this.getResolvedRefluxSearchGalleryId();
+
+    const missingDatasetPosts = allFluidPosts.filter((post) => !hasSemiconductorRefluxTitle(post?.subject));
+    if (missingDatasetPosts.length > 0) {
+      await ensureRefluxSearchDuplicateBrokerLoaded();
+      if (this.isAsyncDecisionStale(operationToken)) {
+        return {
+          stale: true,
+          posts: [],
+        };
+      }
+    }
+
+    for (const post of allFluidPosts) {
+      const title = String(post?.subject || '').trim();
+      if (!title) {
+        continue;
+      }
+
+      if (hasSemiconductorRefluxTitle(title)) {
+        matchedPosts.push(post);
+        continue;
+      }
+
+      const searchDecision = await resolveRefluxSearchDuplicateDecision(
+        this.buildRefluxSearchDecisionContext(post, searchGalleryId),
+      );
+      if (this.isAsyncDecisionStale(operationToken)) {
+        return {
+          stale: true,
+          posts: [],
+        };
+      }
+
+      if (searchDecision.result === 'positive') {
+        matchedPosts.push(post);
+      }
+    }
+
+    return {
+      stale: false,
+      posts: dedupePostsByNo(matchedPosts),
+    };
+  }
+
+  async decideAttackMode(metrics, { operationToken = this.asyncDecisionToken } = {}) {
     const samplePosts = pickAttackModeSamplePosts(metrics);
-    return buildAttackModeDecision(samplePosts, {
+    const baseDecision = buildAttackModeDecision(samplePosts, {
       isSemiconductorRefluxDatasetReady: isSemiconductorRefluxTitleSetReady(),
       matchesSemiconductorRefluxTitle: hasSemiconductorRefluxTitle,
+    });
+    if (baseDecision.sampleCount < ATTACK_MODE_SAMPLE_POST_LIMIT) {
+      return baseDecision;
+    }
+
+    const searchGalleryId = this.getResolvedRefluxSearchGalleryId();
+    if (!searchGalleryId) {
+      return baseDecision;
+    }
+
+    await ensureRefluxSearchDuplicateBrokerLoaded();
+    if (this.isAsyncDecisionStale(operationToken)) {
+      return {
+        ...baseDecision,
+        stale: true,
+      };
+    }
+
+    let refluxLikeCount = 0;
+    for (const post of samplePosts) {
+      const title = String(post?.subject || '').trim();
+      if (!title) {
+        continue;
+      }
+
+      if (hasSemiconductorRefluxTitle(title)) {
+        refluxLikeCount += 1;
+        continue;
+      }
+
+      const searchDecision = await resolveRefluxSearchDuplicateDecision(
+        this.buildRefluxSearchDecisionContext(post, searchGalleryId),
+      );
+      if (this.isAsyncDecisionStale(operationToken)) {
+        return {
+          ...baseDecision,
+          stale: true,
+        };
+      }
+
+      if (searchDecision.result === 'positive') {
+        refluxLikeCount += 1;
+      }
+    }
+
+    return buildAttackModeDecisionFromCounts({
+      sampleCount: baseDecision.sampleCount,
+      hanLikeCount: baseDecision.hanLikeCount,
+      refluxLikeCount,
+      sampleTitles: baseDecision.sampleTitles,
+    });
+  }
+
+  buildCheapAttackModeDecision(metrics) {
+    const samplePosts = pickAttackModeSamplePosts(metrics);
+    const baseDecision = buildAttackModeDecision(samplePosts, {
+      isSemiconductorRefluxDatasetReady: isSemiconductorRefluxTitleSetReady(),
+      matchesSemiconductorRefluxTitle: hasSemiconductorRefluxTitle,
+    });
+    if (baseDecision.sampleCount < ATTACK_MODE_SAMPLE_POST_LIMIT) {
+      return baseDecision;
+    }
+
+    const searchGalleryId = this.getResolvedRefluxSearchGalleryId();
+    if (!searchGalleryId) {
+      return baseDecision;
+    }
+
+    let refluxLikeCount = 0;
+    for (const post of samplePosts) {
+      const title = String(post?.subject || '').trim();
+      if (!title) {
+        continue;
+      }
+
+      if (hasSemiconductorRefluxTitle(title)) {
+        refluxLikeCount += 1;
+        continue;
+      }
+
+      const searchDecision = peekRefluxSearchDuplicateDecision(
+        this.buildRefluxSearchDecisionContext(post, searchGalleryId),
+      );
+      if (searchDecision.result === 'positive') {
+        refluxLikeCount += 1;
+      }
+    }
+
+    return buildAttackModeDecisionFromCounts({
+      sampleCount: baseDecision.sampleCount,
+      hanLikeCount: baseDecision.hanLikeCount,
+      refluxLikeCount,
+      sampleTitles: baseDecision.sampleTitles,
     });
   }
 
@@ -399,7 +600,7 @@ class Scheduler {
       return false;
     }
 
-    const attackModeDecision = this.decideAttackMode(metrics);
+    const attackModeDecision = this.buildCheapAttackModeDecision(metrics);
     if (attackModeDecision.sampleCount < ATTACK_MODE_SAMPLE_POST_LIMIT) {
       return false;
     }
@@ -412,7 +613,7 @@ class Scheduler {
     this.attackMode = ATTACK_MODE.DEFAULT;
     this.attackModeReason = attackModeDecision.attackMode === ATTACK_MODE.DEFAULT
       ? attackModeDecision.reason
-      : `공격 중 최신 샘플 3개가 ${formatAttackModeLabel(attackModeDecision.attackMode)} 패턴으로 바뀌어 DEFAULT로 확장`;
+      : `공격 중 최신 샘플 ${ATTACK_MODE_SAMPLE_POST_LIMIT}개가 ${formatAttackModeLabel(attackModeDecision.attackMode)} 패턴으로 바뀌어 DEFAULT로 확장`;
     this.attackModeSampleTitles = attackModeDecision.sampleTitles;
     this.log(`↔️ 공격 모드 확장: ${previousAttackModeLabel} -> DEFAULT (${this.attackModeReason})`);
     if (this.attackModeSampleTitles.length > 0) {
@@ -428,6 +629,10 @@ class Scheduler {
 
     if (!this.initialSweepCompleted) {
       await this.performInitialSweep();
+    }
+
+    if (!this.isRunning || this.phase !== PHASE.ATTACKING) {
+      return;
     }
 
     this.syncManagedIpDeleteModeFromChild();
@@ -463,6 +668,10 @@ class Scheduler {
       if (postStateChanged) {
         await this.postScheduler.saveState();
       }
+    }
+
+    if (!this.isRunning || this.phase !== PHASE.ATTACKING) {
+      return;
     }
 
     if (this.postScheduler.isRunning && !this.managedPostStarted) {
@@ -503,6 +712,10 @@ class Scheduler {
       }
     }
 
+    if (!this.isRunning || this.phase !== PHASE.ATTACKING) {
+      return;
+    }
+
     if (this.ipScheduler.isRunning) {
       await this.flushPendingManagedIpBanOnlyPosts();
 
@@ -530,6 +743,10 @@ class Scheduler {
       await performClassifyOnce(this.postScheduler, targetPostNos);
     } catch (error) {
       this.log(`⚠️ 감시 자동화 initial sweep 실패 - ${error.message}`);
+    }
+
+    if (!this.isRunning || this.phase !== PHASE.ATTACKING) {
+      return;
     }
 
     try {
@@ -560,6 +777,10 @@ class Scheduler {
         ]);
         this.activateManagedIpBanOnly(error.message);
       }
+    }
+
+    if (!this.isRunning || this.phase !== PHASE.ATTACKING) {
+      return;
     }
 
     this.pendingInitialSweepPostNos = [];
@@ -841,6 +1062,9 @@ class Scheduler {
         ...(schedulerState.config || {}),
       };
       await ensureSemiconductorRefluxTitleSetLoaded();
+      if (this.isRunning && this.attackMode === ATTACK_MODE.SEMICONDUCTOR_REFLUX) {
+        await ensureRefluxSearchDuplicateBrokerLoaded();
+      }
     } catch (error) {
       console.error('[MonitorScheduler] 상태 복원 실패:', error.message);
     }

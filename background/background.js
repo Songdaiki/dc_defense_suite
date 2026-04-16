@@ -31,6 +31,11 @@ import {
 import { isValidGalleryId as isValidCommentRefluxCollectorGalleryId } from '../features/comment-reflux-collector/api.js';
 import { Scheduler as PostScheduler } from '../features/post/scheduler.js';
 import { ATTACK_MODE as POST_ATTACK_MODE, normalizeAttackMode as normalizePostAttackMode } from '../features/post/attack-mode.js';
+import {
+  isValidRefluxSearchGalleryId,
+  normalizeRefluxSearchGalleryId,
+  resolveRefluxSearchGalleryId,
+} from '../features/reflux-search-gallery-id.js';
 import { Scheduler as SemiPostScheduler } from '../features/semi-post/scheduler.js';
 import { Scheduler as IpScheduler } from '../features/ip/scheduler.js';
 import {
@@ -1653,23 +1658,6 @@ async function maybeHandleRunningPostModeTransition(scheduler, config) {
       statuses: getAllStatuses(),
     };
   }
-}
-
-function normalizeRefluxSearchGalleryId(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function isValidRefluxSearchGalleryId(value) {
-  return /^[a-z0-9_]+$/i.test(normalizeRefluxSearchGalleryId(value));
-}
-
-function resolveRefluxSearchGalleryId(config = {}) {
-  const explicitSearchGalleryId = normalizeRefluxSearchGalleryId(config?.refluxSearchGalleryId);
-  if (explicitSearchGalleryId) {
-    return explicitSearchGalleryId;
-  }
-
-  return normalizeSharedString(config?.galleryId).toLowerCase();
 }
 
 function normalizePostManualAttackMode(value) {
