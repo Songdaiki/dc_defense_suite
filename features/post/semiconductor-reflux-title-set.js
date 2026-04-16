@@ -1,6 +1,16 @@
 import { normalizeSemiconductorRefluxTitle } from './attack-mode.js';
+import {
+  buildRefluxContainmentSignatureFromChunks,
+  buildRefluxContainmentSignaturesFromNormalizedCompareKey,
+  buildRefluxPermutationSignatureFromNormalizedCompareKey,
+} from '../reflux-normalization.js';
 
 const STORAGE_KEY = 'semiconductorRefluxTitleSetState';
+const PERMUTATION_SIGNATURE_MIN_LENGTH = 7;
+const CONTAINMENT_SIGNATURE_MIN_LENGTH = 12;
+const CONTAINMENT_CHUNK_MIN_LENGTH = 4;
+const CONTAINMENT_CHUNK_MAX_LENGTH = 6;
+const CONTAINMENT_MAX_COMBINATION_COUNT = 12000;
 // 번들 dataset은 모든 관리자에게 같이 배포되는 원본이다.
 // 이름이 `reflux-title-set-unified.json`인 이유는,
 // 수집 원본(reflux-title-set-<gallery>-<version>.json)과
@@ -22,7 +32,11 @@ const BUNDLED_DATASET_PATH = 'data/reflux-title-set-unified.json';
 const runtimeState = {
   loaded: false,
   titleSet: new Set(),
+  permutationSignatureSet: new Set(),
+  containmentSignatureSet: new Set(),
   titleCount: 0,
+  permutationSignatureCount: 0,
+  containmentSignatureCount: 0,
   updatedAt: '',
   sourceGalleryId: '',
   sourceGalleryIds: [],
@@ -135,11 +149,17 @@ function hydrateSemiconductorRefluxTitleSetState(storedState, options = {}) {
     ? normalizePreNormalizedSemiconductorRefluxTitleSetState(storedState)
     : normalizeSemiconductorRefluxTitleSetState(storedState);
   const normalizedTitles = normalizedState.titles;
+  const permutationSignatureSet = buildPermutationSignatureSet(normalizedTitles);
+  const containmentSignatureSet = buildContainmentSignatureSet(normalizedTitles);
   runtimeState.loaded = true;
   runtimeState.titleSet = new Set(normalizedTitles);
+  runtimeState.permutationSignatureSet = permutationSignatureSet;
+  runtimeState.containmentSignatureSet = containmentSignatureSet;
   runtimeState.titleCount = normalizedTitles.length > 0
     ? normalizedTitles.length
     : normalizeTitleCount(normalizedState.titleCount);
+  runtimeState.permutationSignatureCount = permutationSignatureSet.size;
+  runtimeState.containmentSignatureCount = containmentSignatureSet.size;
   runtimeState.updatedAt = normalizedState.updatedAt;
   runtimeState.sourceGalleryId = normalizedState.sourceGalleryId;
   runtimeState.sourceGalleryIds = normalizedState.sourceGalleryIds;
@@ -152,6 +172,8 @@ function getSemiconductorRefluxTitleSetStatus() {
     loaded: runtimeState.loaded,
     ready: isSemiconductorRefluxTitleSetReady(),
     titleCount: runtimeState.titleCount,
+    permutationSignatureCount: runtimeState.permutationSignatureCount,
+    containmentSignatureCount: runtimeState.containmentSignatureCount,
     updatedAt: runtimeState.updatedAt,
     sourceGalleryId: runtimeState.sourceGalleryId,
     sourceGalleryIds: [...runtimeState.sourceGalleryIds],
@@ -179,7 +201,25 @@ function hasNormalizedSemiconductorRefluxTitle(normalizedTitle) {
     return false;
   }
 
-  return runtimeState.titleSet.has(normalizedValue);
+  if (runtimeState.titleSet.has(normalizedValue)) {
+    return true;
+  }
+
+  // exact miss일 때만 "순서무시 signature"를 본다.
+  // 7글자 이상 긴 문구만 대상으로 해서 짧은 문구 오탐을 줄인다.
+  const permutationSignature = buildRefluxPermutationSignatureFromNormalizedCompareKey(
+    normalizedValue,
+    { minLength: PERMUTATION_SIGNATURE_MIN_LENGTH },
+  );
+  if (!permutationSignature) {
+    return hasNormalizedSemiconductorRefluxContainmentTitle(normalizedValue);
+  }
+
+  if (runtimeState.permutationSignatureSet.has(permutationSignature)) {
+    return true;
+  }
+
+  return hasNormalizedSemiconductorRefluxContainmentTitle(normalizedValue);
 }
 
 async function replaceSemiconductorRefluxTitleSet(titles, options = {}) {
@@ -232,6 +272,112 @@ function dedupePreNormalizedTitles(titles) {
       .map((title) => normalizeSemiconductorRefluxTitle(title))
       .filter(Boolean),
   )];
+}
+
+function buildPermutationSignatureSet(titles) {
+  const permutationSignatures = new Set();
+
+  for (const title of Array.isArray(titles) ? titles : []) {
+    const permutationSignature = buildRefluxPermutationSignatureFromNormalizedCompareKey(
+      title,
+      { minLength: PERMUTATION_SIGNATURE_MIN_LENGTH },
+    );
+    if (!permutationSignature) {
+      continue;
+    }
+
+    permutationSignatures.add(permutationSignature);
+  }
+
+  return permutationSignatures;
+}
+
+function buildContainmentSignatureSet(titles) {
+  const containmentSignatures = new Set();
+
+  for (const title of Array.isArray(titles) ? titles : []) {
+    const signatures = buildRefluxContainmentSignaturesFromNormalizedCompareKey(
+      title,
+      {
+        minLength: CONTAINMENT_SIGNATURE_MIN_LENGTH,
+        minChunkLength: CONTAINMENT_CHUNK_MIN_LENGTH,
+        maxChunkLength: CONTAINMENT_CHUNK_MAX_LENGTH,
+      },
+    );
+    for (const signature of signatures) {
+      containmentSignatures.add(signature);
+    }
+  }
+
+  return containmentSignatures;
+}
+
+function hasNormalizedSemiconductorRefluxContainmentTitle(normalizedTitle) {
+  if (runtimeState.containmentSignatureSet.size <= 0) {
+    return false;
+  }
+
+  const chars = Array.from(String(normalizedTitle || '').trim());
+  if (chars.length < CONTAINMENT_SIGNATURE_MIN_LENGTH) {
+    return false;
+  }
+
+  const maxChunkLength = Math.min(
+    CONTAINMENT_CHUNK_MAX_LENGTH,
+    Math.floor(chars.length / 3),
+  );
+  if (maxChunkLength < CONTAINMENT_CHUNK_MIN_LENGTH) {
+    return false;
+  }
+
+  let combinationCount = 0;
+  for (let chunkLength = maxChunkLength; chunkLength >= CONTAINMENT_CHUNK_MIN_LENGTH; chunkLength -= 1) {
+    const substrings = extractUniqueContainmentSubstrings(chars, chunkLength);
+    if (substrings.length < 3) {
+      continue;
+    }
+
+    for (let firstIndex = 0; firstIndex < substrings.length - 2; firstIndex += 1) {
+      for (let secondIndex = firstIndex + 1; secondIndex < substrings.length - 1; secondIndex += 1) {
+        for (let thirdIndex = secondIndex + 1; thirdIndex < substrings.length; thirdIndex += 1) {
+          const signature = buildRefluxContainmentSignatureFromChunks(
+            [
+              substrings[firstIndex],
+              substrings[secondIndex],
+              substrings[thirdIndex],
+            ],
+            { chunkLength },
+          );
+          combinationCount += 1;
+          if (signature && runtimeState.containmentSignatureSet.has(signature)) {
+            return true;
+          }
+          if (combinationCount >= CONTAINMENT_MAX_COMBINATION_COUNT) {
+            return false;
+          }
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+function extractUniqueContainmentSubstrings(chars, chunkLength) {
+  const substrings = [];
+  const seen = new Set();
+
+  for (let start = 0; start <= chars.length - chunkLength; start += 1) {
+    const chunk = chars.slice(start, start + chunkLength).join('');
+    if (!chunk || seen.has(chunk)) {
+      continue;
+    }
+
+    seen.add(chunk);
+    substrings.push(chunk);
+  }
+
+  return substrings;
 }
 
 function normalizeSourceGalleryIds(storedState) {
