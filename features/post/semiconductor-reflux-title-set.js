@@ -3,12 +3,15 @@ import {
   buildRefluxContainmentSignatureFromChunks,
   buildRefluxContainmentSignaturesFromNormalizedCompareKey,
   buildRefluxPermutationSignatureFromNormalizedCompareKey,
+  isRefluxContainmentChunkEligible,
 } from '../reflux-normalization.js';
 
 const STORAGE_KEY = 'semiconductorRefluxTitleSetState';
 const PERMUTATION_SIGNATURE_MIN_LENGTH = 7;
 const CONTAINMENT_SIGNATURE_MIN_LENGTH = 12;
 const CONTAINMENT_CHUNK_MIN_LENGTH = 4;
+const CONTAINMENT_LATIN_CHUNK_MIN_LENGTH = 5;
+const CONTAINMENT_HANGUL_CHUNK_MIN_LENGTH = 4;
 const CONTAINMENT_CHUNK_MAX_LENGTH = 6;
 const CONTAINMENT_MAX_COMBINATION_COUNT = 12000;
 // 번들 dataset은 모든 관리자에게 같이 배포되는 원본이다.
@@ -301,6 +304,8 @@ function buildContainmentSignatureSet(titles) {
       {
         minLength: CONTAINMENT_SIGNATURE_MIN_LENGTH,
         minChunkLength: CONTAINMENT_CHUNK_MIN_LENGTH,
+        minLatinChunkLength: CONTAINMENT_LATIN_CHUNK_MIN_LENGTH,
+        minHangulChunkLength: CONTAINMENT_HANGUL_CHUNK_MIN_LENGTH,
         maxChunkLength: CONTAINMENT_CHUNK_MAX_LENGTH,
       },
     );
@@ -346,7 +351,12 @@ function hasNormalizedSemiconductorRefluxContainmentTitle(normalizedTitle) {
               substrings[secondIndex],
               substrings[thirdIndex],
             ],
-            { chunkLength },
+            {
+              chunkLength,
+              minChunkLength: CONTAINMENT_CHUNK_MIN_LENGTH,
+              minLatinChunkLength: CONTAINMENT_LATIN_CHUNK_MIN_LENGTH,
+              minHangulChunkLength: CONTAINMENT_HANGUL_CHUNK_MIN_LENGTH,
+            },
           );
           combinationCount += 1;
           if (signature && runtimeState.containmentSignatureSet.has(signature)) {
@@ -369,7 +379,17 @@ function extractUniqueContainmentSubstrings(chars, chunkLength) {
 
   for (let start = 0; start <= chars.length - chunkLength; start += 1) {
     const chunk = chars.slice(start, start + chunkLength).join('');
-    if (!chunk || seen.has(chunk)) {
+    if (
+      !isRefluxContainmentChunkEligible(
+        chunk,
+        {
+          minChunkLength: CONTAINMENT_CHUNK_MIN_LENGTH,
+          minLatinChunkLength: CONTAINMENT_LATIN_CHUNK_MIN_LENGTH,
+          minHangulChunkLength: CONTAINMENT_HANGUL_CHUNK_MIN_LENGTH,
+        },
+      )
+      || seen.has(chunk)
+    ) {
       continue;
     }
 

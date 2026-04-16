@@ -11,6 +11,10 @@
 const REFLUX_INVISIBLE_DELIMITER_REGEX = /[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u2800\u3164\uffa0\ufeff\uFE00-\uFE0F\uFFF9-\uFFFB]|\p{Extended_Pictographic}|\p{M}|[\u{1F1E0}-\u{1F1FF}]|[\u{E0001}-\u{E007F}]|[\u{E0100}-\u{E01EF}]/gu;
 const REFLUX_WHITESPACE_REGEX = /\s+/gu;
 const REFLUX_PERMUTATION_CORE_CHAR_REGEX = /[^\p{L}\p{N}]+/gu;
+const REFLUX_LATIN_CHAR_REGEX = /\p{Script=Latin}/u;
+const REFLUX_HANGUL_CHAR_REGEX = /\p{Script=Hangul}/u;
+const REFLUX_HANGUL_SYLLABLE_CHAR_REGEX = /[\uAC00-\uD7A3]/u;
+const REFLUX_HANGUL_JAMO_ONLY_REGEX = /^[\u1100-\u11FF\u3130-\u318F\uA960-\uA97F\uD7B0-\uD7FF]+$/u;
 const FNV1A64_OFFSET_BASIS = 0xcbf29ce484222325n;
 const FNV1A64_PRIME = 0x100000001b3n;
 const FNV1A64_MASK = 0xffffffffffffffffn;
@@ -74,12 +78,22 @@ function buildRefluxContainmentSignaturesFromNormalizedCompareKey(
   {
     minLength = 12,
     minChunkLength = 4,
+    minLatinChunkLength = 5,
+    minHangulChunkLength = 4,
     maxChunkLength = 6,
   } = {},
 ) {
   const chars = Array.from(String(value || '').trim());
   const normalizedMinLength = Math.max(1, Math.trunc(Number(minLength) || 0));
   const normalizedMinChunkLength = Math.max(2, Math.trunc(Number(minChunkLength) || 0));
+  const normalizedMinLatinChunkLength = Math.max(
+    normalizedMinChunkLength,
+    Math.trunc(Number(minLatinChunkLength) || 0),
+  );
+  const normalizedMinHangulChunkLength = Math.max(
+    normalizedMinChunkLength,
+    Math.trunc(Number(minHangulChunkLength) || 0),
+  );
   const normalizedMaxChunkLength = Math.max(
     normalizedMinChunkLength,
     Math.trunc(Number(maxChunkLength) || 0),
@@ -107,18 +121,39 @@ function buildRefluxContainmentSignaturesFromNormalizedCompareKey(
   ])];
   const anchorChunks = anchorStarts
     .map((start) => chars.slice(start, start + chunkLength).join(''))
-    .filter(Boolean);
+    .filter((chunk) => isRefluxContainmentChunkEligible(
+      chunk,
+      {
+        minChunkLength: normalizedMinChunkLength,
+        minLatinChunkLength: normalizedMinLatinChunkLength,
+        minHangulChunkLength: normalizedMinHangulChunkLength,
+      },
+    ));
 
   for (let firstIndex = 0; firstIndex < anchorChunks.length - 2; firstIndex += 1) {
     for (let secondIndex = firstIndex + 1; secondIndex < anchorChunks.length - 1; secondIndex += 1) {
       for (let thirdIndex = secondIndex + 1; thirdIndex < anchorChunks.length; thirdIndex += 1) {
+        // prefix만 겹치는 영문 제목 오탐을 줄이기 위해,
+        // anchor가 4개 이상일 때는 "앞 + 뒤 + 중간 1개" 조합만 시그니처로 인정한다.
+        if (
+          anchorChunks.length >= 4
+          && (firstIndex !== 0 || thirdIndex !== anchorChunks.length - 1)
+        ) {
+          continue;
+        }
+
         const signature = buildRefluxContainmentSignatureFromChunks(
           [
             anchorChunks[firstIndex],
             anchorChunks[secondIndex],
             anchorChunks[thirdIndex],
           ],
-          { chunkLength },
+          {
+            chunkLength,
+            minChunkLength: normalizedMinChunkLength,
+            minLatinChunkLength: normalizedMinLatinChunkLength,
+            minHangulChunkLength: normalizedMinHangulChunkLength,
+          },
         );
         if (signature) {
           signatures.add(signature);
@@ -130,10 +165,25 @@ function buildRefluxContainmentSignaturesFromNormalizedCompareKey(
   return [...signatures];
 }
 
-function buildRefluxContainmentSignatureFromChunks(chunks, { chunkLength = 0 } = {}) {
+function buildRefluxContainmentSignatureFromChunks(
+  chunks,
+  {
+    chunkLength = 0,
+    minChunkLength = 4,
+    minLatinChunkLength = 5,
+    minHangulChunkLength = 4,
+  } = {},
+) {
   const normalizedChunks = (Array.isArray(chunks) ? chunks : [])
     .map((chunk) => String(chunk || '').trim())
-    .filter(Boolean);
+    .filter((chunk) => isRefluxContainmentChunkEligible(
+      chunk,
+      {
+        minChunkLength,
+        minLatinChunkLength,
+        minHangulChunkLength,
+      },
+    ));
   if (normalizedChunks.length < 3) {
     return '';
   }
@@ -148,6 +198,72 @@ function buildRefluxContainmentSignatureFromChunks(chunks, { chunkLength = 0 } =
   const payload = sortedChunks.join('\u001f');
   const totalChars = dedupedChunks.reduce((sum, chunk) => sum + Array.from(chunk).length, 0);
   return `rc1:${normalizedChunkLength}:${totalChars}:${hashStringToFnv1a64Hex(payload)}`;
+}
+
+function getRefluxContainmentChunkMinLength(
+  chunk,
+  {
+    minChunkLength = 4,
+    minLatinChunkLength = 5,
+    minHangulChunkLength = 4,
+  } = {},
+) {
+  const normalizedMinChunkLength = Math.max(1, Math.trunc(Number(minChunkLength) || 0));
+  const normalizedMinLatinChunkLength = Math.max(
+    normalizedMinChunkLength,
+    Math.trunc(Number(minLatinChunkLength) || 0),
+  );
+  const normalizedMinHangulChunkLength = Math.max(
+    normalizedMinChunkLength,
+    Math.trunc(Number(minHangulChunkLength) || 0),
+  );
+  const normalizedChunk = String(chunk || '').trim();
+  if (!normalizedChunk) {
+    return normalizedMinChunkLength;
+  }
+
+  let requiredMinLength = normalizedMinChunkLength;
+  if (REFLUX_HANGUL_CHAR_REGEX.test(normalizedChunk)) {
+    requiredMinLength = Math.max(requiredMinLength, normalizedMinHangulChunkLength);
+  }
+  if (REFLUX_LATIN_CHAR_REGEX.test(normalizedChunk)) {
+    requiredMinLength = Math.max(requiredMinLength, normalizedMinLatinChunkLength);
+  }
+
+  return requiredMinLength;
+}
+
+function isRefluxContainmentChunkEligible(
+  chunk,
+  {
+    minChunkLength = 4,
+    minLatinChunkLength = 5,
+    minHangulChunkLength = 4,
+  } = {},
+) {
+  const normalizedChunk = String(chunk || '').trim();
+  if (!normalizedChunk) {
+    return false;
+  }
+
+  const chunkLength = Array.from(normalizedChunk).length;
+  if (
+    REFLUX_HANGUL_JAMO_ONLY_REGEX.test(normalizedChunk)
+    && !REFLUX_HANGUL_SYLLABLE_CHAR_REGEX.test(normalizedChunk)
+  ) {
+    // `ㅋㅋㅋㅋ`, `ㄷㄷㄷㄷ`, `ㅅㅂㅅㅂ`, `ㅇㅇㅇㅇ`처럼
+    // 자모만 반복되는 조각은 너무 흔해서 containment 공통조각으로 쓰면 오탐이 커진다.
+    return false;
+  }
+
+  return chunkLength >= getRefluxContainmentChunkMinLength(
+    normalizedChunk,
+    {
+      minChunkLength,
+      minLatinChunkLength,
+      minHangulChunkLength,
+    },
+  );
 }
 
 function hashSortedCharsToFnv1a64Hex(chars) {
@@ -189,5 +305,7 @@ export {
   buildRefluxSearchQuery,
   buildRefluxPermutationSignature,
   buildRefluxPermutationSignatureFromNormalizedCompareKey,
+  getRefluxContainmentChunkMinLength,
+  isRefluxContainmentChunkEligible,
   normalizeRefluxCompareKey,
 };

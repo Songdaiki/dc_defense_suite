@@ -2,22 +2,22 @@
   "_comment": "JSON은 일반 주석을 지원하지 않아서 안내를 _comment 필드로 남긴다.",
   "_comment_update_rule": "shard 구조라도 dataset 내용을 바꿨다면 version도 반드시 같이 올려야 한다.",
   "_comment_scope": "manifest는 작은 메타만 들고, 실제 제목은 shard 파일들에 나뉘어 저장된다.",
-  "version": "2026-04-16-102108",
-  "updatedAt": "2026-04-16T01:21:08.000Z",
+  "version": "2026-04-16-222009",
+  "updatedAt": "2026-04-16T13:20:09.000Z",
   "sourceGalleryIds": [
     "galaxy",
     "thesingularity",
     "tsmcsamsungskhynix"
   ],
-  "titleCount": 2504000,
+  "titleCount": 2503996,
   "shards": [
     {
       "path": "data/reflux-title-set-unified.part01.json",
-      "titleCount": 897073
+      "titleCount": 897072
     },
     {
       "path": "data/reflux-title-set-unified.part02.json",
-      "titleCount": 879318
+      "titleCount": 879315
     },
     {
       "path": "data/reflux-title-set-unified.part03.json",
