@@ -118,6 +118,8 @@ class Scheduler {
         this.isRunning = true;
         if (shouldApplyCutoff) {
             this.log(`🧷 ${getCutoffSourceLabel(normalizedOptions.source)} cutoff 저장 (#${cutoffPostNo})`);
+        } else if (shouldForcePageOneOnlyForSource(normalizedOptions.source, normalizedOptions.attackMode)) {
+            this.log('🧷 수동 게시글 분류 cutoff 미사용 (1페이지 전체 검사 수동 모드, 1페이지 고정)');
         } else {
             this.log(`🧷 수동 게시글 분류 cutoff 미사용 (${getAttackModeHumanLabel(normalizedOptions.attackMode)} 수동 모드)`);
         }
@@ -401,7 +403,11 @@ class Scheduler {
                     continue;
                 }
 
-                const [minPage, maxPage] = getNormalizedPageRange(this.config);
+                const [minPage, maxPage] = getRuntimePageRange(
+                    this.config,
+                    this.currentSource,
+                    this.getEffectiveAttackMode(),
+                );
                 const startPage = this.currentPage > 0 ? this.currentPage : minPage;
                 let shouldRestartFromFirstPage = false;
 
@@ -685,10 +691,22 @@ function shouldApplyCutoffForSource(source, attackMode) {
     return !isNarrowAttackMode(attackMode);
 }
 
+function shouldForcePageOneOnlyForSource(source, attackMode) {
+    return source === 'manual' && normalizeAttackMode(attackMode) === ATTACK_MODE.PAGE1_NO_CUTOFF;
+}
+
 function getNormalizedPageRange(config = {}) {
     const minPage = Math.max(1, Number(config.minPage) || 1);
     const maxPage = Math.max(minPage, Number(config.maxPage) || minPage);
     return [minPage, maxPage];
+}
+
+function getRuntimePageRange(config = {}, source, attackMode) {
+    if (shouldForcePageOneOnlyForSource(source, attackMode)) {
+        return [1, 1];
+    }
+
+    return getNormalizedPageRange(config);
 }
 
 function getMaxPostNo(posts) {
@@ -726,6 +744,10 @@ function buildManualRuntimeTransitionLogMessage({
         const searchGalleryId = resolveRefluxSearchGalleryId(nextConfig);
         const messagePrefix = modeChangeOnly ? '모드 적용' : '설정 적용';
         return `🔁 수동 역류기 공격 ${messagePrefix} - 첫 페이지부터 다시 스캔합니다. (검색 갤: ${searchGalleryId || '-'}, cutoff 미사용)`;
+    }
+
+    if (normalizeAttackMode(nextAttackMode) === ATTACK_MODE.PAGE1_NO_CUTOFF) {
+        return '🔁 수동 1페이지 전체 검사 모드 적용 - 1페이지만 다시 스캔합니다. (cutoff 미사용, 1페이지 고정)';
     }
 
     if (isNarrowAttackMode(nextAttackMode)) {

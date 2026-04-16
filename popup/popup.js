@@ -269,6 +269,7 @@ const FEATURE_DOM = {
     refluxSearchGalleryIdInput: document.getElementById('postRefluxSearchGalleryId'),
     cjkModeToggleInput: document.getElementById('postCjkModeToggle'),
     semiconductorRefluxModeToggleInput: document.getElementById('postSemiconductorRefluxModeToggle'),
+    page1NoCutoffModeToggleInput: document.getElementById('postPage1NoCutoffModeToggle'),
     saveConfigBtn: document.getElementById('postSaveConfigBtn'),
     resetBtn: document.getElementById('postResetBtn'),
   },
@@ -1474,6 +1475,7 @@ function bindPostEvents() {
 
   bindPostQuickAttackModeToggle(dom.cjkModeToggleInput, 'cjk_narrow', '중국어/한자 공격');
   bindPostQuickAttackModeToggle(dom.semiconductorRefluxModeToggleInput, 'semiconductor_reflux', '역류기 공격');
+  bindPostQuickAttackModeToggle(dom.page1NoCutoffModeToggleInput, 'page1_no_cutoff', '1페이지 전체 검사');
 
   dom.saveConfigBtn.addEventListener('click', async () => {
     const refluxSearchGalleryId = normalizeRefluxSearchGalleryIdInputValue(dom.refluxSearchGalleryIdInput.value);
@@ -2485,6 +2487,11 @@ function updatePostUI(status) {
     && status.currentSource === 'manual'
     && status.currentAttackMode === 'semiconductor_reflux',
   );
+  dom.page1NoCutoffModeToggleInput.checked = Boolean(
+    status.isRunning
+    && status.currentSource === 'manual'
+    && status.currentAttackMode === 'page1_no_cutoff',
+  );
   updateLogList(dom.logList, status.logs);
 }
 
@@ -2690,6 +2697,7 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uid
   setDisabled(postDom.toggleBtn, postIpLocked);
   setDisabled(postDom.cjkModeToggleInput, postIpLocked);
   setDisabled(postDom.semiconductorRefluxModeToggleInput, postIpLocked);
+  setDisabled(postDom.page1NoCutoffModeToggleInput, postIpLocked);
   setDisabled(postDom.saveConfigBtn, postIpLocked);
   setDisabled(postDom.resetBtn, postIpLocked);
   setDisabled(semiPostDom.toggleBtn, postIpLocked);
@@ -4032,6 +4040,10 @@ function formatAttackModeLabel(value) {
 
   if (value === 'semiconductor_reflux') {
     return 'SEMICONDUCTOR_REFLUX';
+  }
+
+  if (value === 'page1_no_cutoff') {
+    return 'PAGE1_NO_CUTOFF';
   }
 
   return 'DEFAULT';

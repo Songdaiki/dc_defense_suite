@@ -8,13 +8,18 @@ const ATTACK_MODE = {
   DEFAULT: 'default',
   CJK_NARROW: 'cjk_narrow',
   SEMICONDUCTOR_REFLUX: 'semiconductor_reflux',
+  PAGE1_NO_CUTOFF: 'page1_no_cutoff',
 };
 
 const ATTACK_MODE_SAMPLE_POST_LIMIT = 5;
 const ATTACK_MODE_SAMPLE_MATCH_THRESHOLD = 3;
 
 function normalizeAttackMode(value) {
-  if (value === ATTACK_MODE.CJK_NARROW || value === ATTACK_MODE.SEMICONDUCTOR_REFLUX) {
+  if (
+    value === ATTACK_MODE.CJK_NARROW
+    || value === ATTACK_MODE.SEMICONDUCTOR_REFLUX
+    || value === ATTACK_MODE.PAGE1_NO_CUTOFF
+  ) {
     return value;
   }
 
@@ -31,6 +36,8 @@ function formatAttackModeLabel(value) {
       return 'CJK_NARROW';
     case ATTACK_MODE.SEMICONDUCTOR_REFLUX:
       return 'SEMICONDUCTOR_REFLUX';
+    case ATTACK_MODE.PAGE1_NO_CUTOFF:
+      return 'PAGE1_NO_CUTOFF';
     default:
       return 'DEFAULT';
   }
@@ -42,6 +49,8 @@ function getAttackModeHumanLabel(value) {
       return '중국어/한자 공격';
     case ATTACK_MODE.SEMICONDUCTOR_REFLUX:
       return '역류기 공격';
+    case ATTACK_MODE.PAGE1_NO_CUTOFF:
+      return '1페이지 전체 검사';
     default:
       return '일반 공격';
   }
@@ -53,6 +62,8 @@ function getAttackModeFilterLabel(value) {
       return '한자/CJK 필터';
     case ATTACK_MODE.SEMICONDUCTOR_REFLUX:
       return '역류기 제목 필터';
+    case ATTACK_MODE.PAGE1_NO_CUTOFF:
+      return '전체 유동';
     default:
       return '전체 유동';
   }
@@ -64,6 +75,8 @@ function getAttackModeSubjectLabel(value) {
       return '한자/CJK 제목';
     case ATTACK_MODE.SEMICONDUCTOR_REFLUX:
       return '역류기 제목';
+    case ATTACK_MODE.PAGE1_NO_CUTOFF:
+      return '전체 유동';
     default:
       return '일반 제목';
   }
@@ -180,7 +193,7 @@ function isEligibleForAttackMode(
 ) {
   const normalizedAttackMode = normalizeAttackMode(attackMode);
 
-  if (normalizedAttackMode === ATTACK_MODE.DEFAULT) {
+  if (normalizedAttackMode === ATTACK_MODE.DEFAULT || normalizedAttackMode === ATTACK_MODE.PAGE1_NO_CUTOFF) {
     return true;
   }
 
