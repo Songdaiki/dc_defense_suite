@@ -9,6 +9,7 @@ const DIRTY_FEATURES = {
   hanRefreshIpBan: false,
   bumpPost: false,
   refluxDatasetCollector: false,
+  refluxOverlayCollector: false,
   commentRefluxCollector: false,
   commentMonitor: false,
   comment: false,
@@ -28,6 +29,9 @@ let latestUidRatioWarningStatus = null;
 let latestUidWarningAutoBanStatus = null;
 let latestBumpPostStatus = null;
 let latestRefluxDatasetCollectorStatus = null;
+let latestRefluxOverlayCollectorStatus = null;
+let latestRefluxOverlayCollectorOverlays = [];
+let latestRefluxOverlayCollectorOverlaysLoaded = false;
 let latestCommentRefluxCollectorStatus = null;
 
 const SESSION_FALLBACK_DOM = {
@@ -176,6 +180,34 @@ const FEATURE_DOM = {
     saveConfigBtn: document.getElementById('refluxDatasetCollectorSaveConfigBtn'),
     downloadBtn: document.getElementById('refluxDatasetCollectorDownloadBtn'),
     resetBtn: document.getElementById('refluxDatasetCollectorResetBtn'),
+  },
+  refluxOverlayCollector: {
+    toggleBtn: document.getElementById('refluxOverlayCollectorToggleBtn'),
+    toggleLabel: document.getElementById('refluxOverlayCollectorToggleLabel'),
+    statusText: document.getElementById('refluxOverlayCollectorStatusText'),
+    phaseText: document.getElementById('refluxOverlayCollectorPhaseText'),
+    galleryIdText: document.getElementById('refluxOverlayCollectorGalleryIdText'),
+    targetPostNoText: document.getElementById('refluxOverlayCollectorTargetPostNoText'),
+    foundPageText: document.getElementById('refluxOverlayCollectorFoundPageText'),
+    progressText: document.getElementById('refluxOverlayCollectorProgressText'),
+    normalizedTitleCountText: document.getElementById('refluxOverlayCollectorNormalizedTitleCountText'),
+    appliedOverlayIdText: document.getElementById('refluxOverlayCollectorAppliedOverlayIdText'),
+    startedAtText: document.getElementById('refluxOverlayCollectorStartedAtText'),
+    finishedAtText: document.getElementById('refluxOverlayCollectorFinishedAtText'),
+    lastErrorText: document.getElementById('refluxOverlayCollectorLastErrorText'),
+    metaText: document.getElementById('refluxOverlayCollectorMetaText'),
+    logList: document.getElementById('refluxOverlayCollectorLogList'),
+    overlayList: document.getElementById('refluxOverlayCollectorOverlayList'),
+    viewUrlInput: document.getElementById('refluxOverlayCollectorViewUrl'),
+    beforePagesInput: document.getElementById('refluxOverlayCollectorBeforePages'),
+    afterPagesInput: document.getElementById('refluxOverlayCollectorAfterPages'),
+    requestDelayMsInput: document.getElementById('refluxOverlayCollectorRequestDelayMs'),
+    jitterMsInput: document.getElementById('refluxOverlayCollectorJitterMs'),
+    transportModeInput: document.getElementById('refluxOverlayCollectorTransportMode'),
+    proxyWorkerCountInput: document.getElementById('refluxOverlayCollectorProxyWorkerCount'),
+    saveConfigBtn: document.getElementById('refluxOverlayCollectorSaveConfigBtn'),
+    resetBtn: document.getElementById('refluxOverlayCollectorResetBtn'),
+    clearOverlaysBtn: document.getElementById('refluxOverlayCollectorClearOverlaysBtn'),
   },
   commentRefluxCollector: {
     toggleBtn: document.getElementById('commentRefluxCollectorToggleBtn'),
@@ -398,6 +430,9 @@ function bindTabEvents() {
     button.addEventListener('click', () => {
       const nextFeature = button.dataset.tab;
       setActiveTab(nextFeature);
+      if (nextFeature === 'refluxOverlayCollector') {
+        void refreshRefluxOverlayCollectorOverlays();
+      }
     });
   });
 }
@@ -408,6 +443,7 @@ function bindFeatureEvents() {
   bindConfigDirtyTracking('hanRefreshIpBan');
   bindConfigDirtyTracking('bumpPost');
   bindConfigDirtyTracking('refluxDatasetCollector');
+  bindConfigDirtyTracking('refluxOverlayCollector');
   bindConfigDirtyTracking('commentRefluxCollector');
   bindConfigDirtyTracking('commentMonitor');
   bindConfigDirtyTracking('comment');
@@ -420,6 +456,7 @@ function bindFeatureEvents() {
   bindHanRefreshIpBanEvents();
   bindBumpPostEvents();
   bindRefluxDatasetCollectorEvents();
+  bindRefluxOverlayCollectorEvents();
   bindCommentRefluxCollectorEvents();
   bindCommentMonitorEvents();
   bindCommentEvents();
@@ -940,7 +977,7 @@ function bindRefluxDatasetCollectorEvents() {
     const action = dom.toggleBtn.checked ? 'start' : 'stop';
 
     if (action === 'start' && DIRTY_FEATURES.refluxDatasetCollector) {
-      alert('역류기글 수집 설정을 먼저 저장하세요.');
+      alert('Local 수집 설정을 먼저 저장하세요.');
       await refreshAllStatuses();
       return;
     }
@@ -1070,7 +1107,7 @@ function bindRefluxDatasetCollectorEvents() {
   });
 
   dom.resetBtn.addEventListener('click', async () => {
-    if (!confirm('역류기글 수집 통계와 로그, 다운로드 대기 데이터를 초기화하시겠습니까?')) {
+    if (!confirm('Local 수집 통계와 로그, 다운로드 대기 데이터를 초기화하시겠습니까?')) {
       return;
     }
 
@@ -1087,6 +1124,170 @@ function bindRefluxDatasetCollectorEvents() {
       applyStatuses(response.statuses);
     } else {
       await refreshAllStatuses();
+    }
+  });
+}
+
+function bindRefluxOverlayCollectorEvents() {
+  const dom = FEATURE_DOM.refluxOverlayCollector;
+
+  dom.toggleBtn.addEventListener('change', async () => {
+    const action = dom.toggleBtn.checked ? 'start' : 'stop';
+
+    if (action === 'start' && DIRTY_FEATURES.refluxOverlayCollector) {
+      alert('임시 overlay 설정을 먼저 저장하세요.');
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (action === 'start') {
+      const viewUrl = normalizeRefluxOverlayCollectorViewUrl(dom.viewUrlInput.value);
+      if (!viewUrl) {
+        alert('URL 입력을 해주세요.');
+        dom.viewUrlInput.focus();
+        await refreshAllStatuses();
+        return;
+      }
+    }
+
+    const response = await sendFeatureMessage('refluxOverlayCollector', { action });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (action === 'start') {
+      latestRefluxOverlayCollectorOverlaysLoaded = false;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.saveConfigBtn.addEventListener('click', async () => {
+    const config = {
+      viewUrl: normalizeRefluxOverlayCollectorViewUrl(dom.viewUrlInput.value),
+      beforePages: Math.max(0, parseOptionalInt(dom.beforePagesInput.value, 30)),
+      afterPages: Math.max(0, parseOptionalInt(dom.afterPagesInput.value, 30)),
+      requestDelayMs: Math.max(500, parseOptionalInt(dom.requestDelayMsInput.value, 500)),
+      jitterMs: Math.max(0, parseOptionalInt(dom.jitterMsInput.value, 100)),
+      transportMode: normalizeRefluxOverlayCollectorTransportMode(dom.transportModeInput.value),
+      proxyWorkerCount: Math.min(10, Math.max(1, parseOptionalInt(dom.proxyWorkerCountInput.value, 10))),
+    };
+
+    const response = await sendFeatureMessage('refluxOverlayCollector', { action: 'updateConfig', config });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    DIRTY_FEATURES.refluxOverlayCollector = false;
+    flashSaved(dom.saveConfigBtn);
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.resetBtn.addEventListener('click', async () => {
+    if (!confirm('임시 overlay 수집 로그와 상태 카운트를 초기화하시겠습니까? 저장된 overlay 데이터는 유지됩니다.')) {
+      return;
+    }
+
+    const response = await sendFeatureMessage('refluxOverlayCollector', { action: 'resetStats' });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.clearOverlaysBtn.addEventListener('click', async () => {
+    if (!confirm('저장된 overlay를 전부 삭제하시겠습니까? base dataset은 유지되고 local overlay만 지워집니다.')) {
+      return;
+    }
+
+    const response = await sendFeatureMessage('refluxOverlayCollector', { action: 'clearAllOverlays' });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+
+    if (Array.isArray(response.overlays)) {
+      latestRefluxOverlayCollectorOverlays = response.overlays;
+      latestRefluxOverlayCollectorOverlaysLoaded = true;
+      renderRefluxOverlayCollectorOverlayList(response.overlays);
+    } else {
+      await refreshRefluxOverlayCollectorOverlays();
+    }
+  });
+
+  dom.overlayList.addEventListener('click', async (event) => {
+    const deleteButton = event.target.closest('[data-overlay-id]');
+    if (!deleteButton) {
+      return;
+    }
+
+    const overlayId = String(deleteButton.dataset.overlayId || '').trim();
+    if (!overlayId) {
+      return;
+    }
+
+    if (!confirm(`overlay ${overlayId}를 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    const response = await sendFeatureMessage('refluxOverlayCollector', {
+      action: 'deleteOverlay',
+      overlayId,
+    });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+
+    if (Array.isArray(response.overlays)) {
+      latestRefluxOverlayCollectorOverlays = response.overlays;
+      latestRefluxOverlayCollectorOverlaysLoaded = true;
+      renderRefluxOverlayCollectorOverlayList(response.overlays);
+    } else {
+      await refreshRefluxOverlayCollectorOverlays();
     }
   });
 }
@@ -2006,6 +2207,7 @@ function applyStatuses(statuses) {
   updateHanRefreshIpBanUI(statuses.hanRefreshIpBan);
   updateBumpPostUI(statuses.bumpPost);
   updateRefluxDatasetCollectorUI(statuses.refluxDatasetCollector);
+  updateRefluxOverlayCollectorUI(statuses.refluxOverlayCollector);
   updateCommentRefluxCollectorUI(statuses.commentRefluxCollector);
   updateCommentMonitorUI(statuses.commentMonitor);
   updateMonitorUI(statuses.monitor);
@@ -2334,6 +2536,122 @@ function updateRefluxDatasetCollectorUI(status) {
   setDisabled(dom.downloadBtn, isLocked || !nextStatus.downloadReady);
   setDisabled(dom.resetBtn, isLocked);
   setDisabled(dom.toggleBtn, false);
+}
+
+function updateRefluxOverlayCollectorUI(status) {
+  const dom = FEATURE_DOM.refluxOverlayCollector;
+  if (!dom?.toggleBtn) {
+    return;
+  }
+
+  const nextStatus = status || buildDefaultRefluxOverlayCollectorStatus();
+  latestRefluxOverlayCollectorStatus = nextStatus;
+
+  updateToggle(dom, nextStatus.isRunning);
+  updateStatusText(
+    dom.statusText,
+    getRefluxOverlayCollectorStatusLabel(nextStatus),
+    getRefluxOverlayCollectorStatusClassName(nextStatus),
+  );
+  dom.phaseText.textContent = nextStatus.phase || 'IDLE';
+  dom.galleryIdText.textContent = nextStatus.galleryId || '-';
+  dom.targetPostNoText.textContent = nextStatus.targetPostNo > 0
+    ? `#${nextStatus.targetPostNo}`
+    : '-';
+  dom.foundPageText.textContent = nextStatus.foundPage > 0
+    ? `${nextStatus.foundPage} / ${nextStatus.totalPageCount || nextStatus.foundPage}`
+    : '-';
+  dom.progressText.textContent = buildRefluxOverlayCollectorProgressText(nextStatus);
+  dom.normalizedTitleCountText.textContent = `${nextStatus.normalizedTitleCount ?? 0}개`;
+  dom.appliedOverlayIdText.textContent = nextStatus.appliedOverlayId || '-';
+  dom.startedAtText.textContent = formatTimestamp(nextStatus.startedAt);
+  dom.finishedAtText.textContent = formatTimestamp(nextStatus.finishedAt);
+  dom.lastErrorText.textContent = nextStatus.lastError || '-';
+  dom.metaText.textContent = buildRefluxOverlayCollectorMetaText(nextStatus);
+  syncFeatureConfigInputs('refluxOverlayCollector', [
+    [dom.viewUrlInput, nextStatus.config?.viewUrl ?? ''],
+    [dom.beforePagesInput, nextStatus.config?.beforePages ?? 30],
+    [dom.afterPagesInput, nextStatus.config?.afterPages ?? 30],
+    [dom.requestDelayMsInput, nextStatus.config?.requestDelayMs ?? 500],
+    [dom.jitterMsInput, nextStatus.config?.jitterMs ?? 100],
+    [dom.transportModeInput, nextStatus.config?.transportMode ?? 'direct'],
+    [dom.proxyWorkerCountInput, nextStatus.config?.proxyWorkerCount ?? 10],
+  ]);
+  updateLogList(dom.logList, nextStatus.logs);
+  renderRefluxOverlayCollectorOverlayList(latestRefluxOverlayCollectorOverlays);
+  if (
+    !latestRefluxOverlayCollectorOverlaysLoaded
+    && !nextStatus.isRunning
+    && nextStatus.appliedOverlayId
+    && !latestRefluxOverlayCollectorOverlays.some((overlay) => overlay?.overlayId === nextStatus.appliedOverlayId)
+  ) {
+    void refreshRefluxOverlayCollectorOverlays();
+  }
+
+  const isLocked = Boolean(nextStatus.isRunning);
+  getFeatureConfigInputs('refluxOverlayCollector').forEach((input) => setDisabled(input, isLocked));
+  setDisabled(dom.saveConfigBtn, isLocked);
+  setDisabled(dom.resetBtn, isLocked);
+  setDisabled(dom.clearOverlaysBtn, isLocked || latestRefluxOverlayCollectorOverlays.length <= 0);
+  setDisabled(dom.toggleBtn, false);
+}
+
+async function refreshRefluxOverlayCollectorOverlays() {
+  const response = await sendFeatureMessage('refluxOverlayCollector', { action: 'listOverlays' });
+  if (!response?.success) {
+    return;
+  }
+
+  latestRefluxOverlayCollectorOverlays = Array.isArray(response.overlays)
+    ? response.overlays
+    : [];
+  latestRefluxOverlayCollectorOverlaysLoaded = true;
+  renderRefluxOverlayCollectorOverlayList(latestRefluxOverlayCollectorOverlays);
+
+  if (response.statuses) {
+    applyStatuses(response.statuses);
+  }
+}
+
+function renderRefluxOverlayCollectorOverlayList(overlays = []) {
+  const dom = FEATURE_DOM.refluxOverlayCollector;
+  if (!dom?.overlayList) {
+    return;
+  }
+
+  dom.overlayList.innerHTML = '';
+  if (!Array.isArray(overlays) || overlays.length <= 0) {
+    dom.overlayList.innerHTML = '<div class="log-empty">저장된 overlay가 없습니다.</div>';
+    return;
+  }
+
+  const isLocked = Boolean(latestRefluxOverlayCollectorStatus?.isRunning);
+  overlays.forEach((overlay) => {
+    const row = document.createElement('div');
+    row.className = 'log-item';
+
+    const title = document.createElement('div');
+    const galleryId = String(overlay?.galleryId || '').trim() || '-';
+    const anchorPostNo = Number(overlay?.anchorPostNo) || 0;
+    const startPage = Number(overlay?.startPage) || 0;
+    const endPage = Number(overlay?.endPage) || 0;
+    const titleCount = Number(overlay?.titleCount) || 0;
+    const createdAt = formatTimestamp(overlay?.createdAt);
+    const failedPageCount = Array.isArray(overlay?.failedPages)
+      ? overlay.failedPages.length
+      : 0;
+    title.textContent = `${galleryId} #${anchorPostNo} / ${startPage}~${endPage} / ${titleCount}개 / ${createdAt}${failedPageCount > 0 ? ` / 실패 ${failedPageCount}p` : ''}`;
+
+    const button = document.createElement('button');
+    button.className = 'btn btn-secondary';
+    button.textContent = '삭제';
+    button.dataset.overlayId = String(overlay?.overlayId || '');
+    button.disabled = isLocked;
+
+    row.appendChild(title);
+    row.appendChild(button);
+    dom.overlayList.appendChild(row);
+  });
 }
 
 function updateCommentRefluxCollectorUI(status) {
@@ -2775,6 +3093,40 @@ function buildDefaultRefluxDatasetCollectorStatus() {
   };
 }
 
+function buildDefaultRefluxOverlayCollectorStatus() {
+  return {
+    isRunning: false,
+    phase: 'IDLE',
+    currentPage: 0,
+    galleryId: '',
+    targetPostNo: 0,
+    foundPage: 0,
+    totalPageCount: 0,
+    targetPageCount: 0,
+    completedPageCount: 0,
+    failedPageCount: 0,
+    failedPages: [],
+    rawTitleCount: 0,
+    normalizedTitleCount: 0,
+    appliedOverlayId: '',
+    startedAt: '',
+    finishedAt: '',
+    lastError: '',
+    logs: [],
+    interrupted: false,
+    config: {
+      viewUrl: '',
+      beforePages: 30,
+      afterPages: 30,
+      requestDelayMs: 500,
+      jitterMs: 100,
+      transportMode: 'direct',
+      proxyWorkerCount: 10,
+      maxRetriesPerPage: 5,
+    },
+  };
+}
+
 function buildDefaultCommentRefluxCollectorStatus() {
   return {
     isRunning: false,
@@ -2902,6 +3254,56 @@ function getRefluxDatasetCollectorStatusClassName(status = {}) {
   return 'status-off';
 }
 
+function getRefluxOverlayCollectorStatusLabel(status = {}) {
+  if (status.isRunning && status.phase === 'LOCATING') {
+    return '🟠 anchor 탐색 중';
+  }
+
+  if (status.isRunning && status.phase === 'FETCHING') {
+    return '🟢 페이지 수집 중';
+  }
+
+  if (status.isRunning && status.phase === 'SAVING') {
+    return '🟠 overlay 저장 중';
+  }
+
+  if (status.isRunning) {
+    return '🟢 실행 중';
+  }
+
+  if (status.interrupted || status.phase === 'INTERRUPTED') {
+    return '🟠 중단됨';
+  }
+
+  if (status.lastError || status.phase === 'FAILED') {
+    return '🔴 정지 (최근 오류)';
+  }
+
+  if (status.appliedOverlayId) {
+    return '🟢 적용 완료';
+  }
+
+  return '🔴 정지';
+}
+
+function getRefluxOverlayCollectorStatusClassName(status = {}) {
+  if (status.isRunning) {
+    return status.phase === 'SAVING' || status.phase === 'LOCATING'
+      ? 'status-warn'
+      : 'status-on';
+  }
+
+  if (status.interrupted || status.phase === 'INTERRUPTED' || status.lastError || status.phase === 'FAILED') {
+    return 'status-warn';
+  }
+
+  if (status.appliedOverlayId) {
+    return 'status-on';
+  }
+
+  return 'status-off';
+}
+
 function getCommentRefluxCollectorStatusLabel(status = {}) {
   if (status.isRunning && status.phase === 'WAITING') {
     return '🟡 다음 페이지 대기 중';
@@ -2952,6 +3354,23 @@ function buildRefluxDatasetCollectorProgressText(status = {}) {
   return `${currentPage} / ${endPage}`;
 }
 
+function buildRefluxOverlayCollectorProgressText(status = {}) {
+  const completedPageCount = Number(status.completedPageCount) || 0;
+  const targetPageCount = Number(status.targetPageCount) || 0;
+  const currentPage = Number(status.currentPage) || 0;
+  if (targetPageCount <= 0) {
+    return currentPage > 0
+      ? `${currentPage}페이지`
+      : '-';
+  }
+
+  if (currentPage > 0 && status.isRunning && status.phase === 'FETCHING') {
+    return `${completedPageCount} / ${targetPageCount} (현재 ${currentPage})`;
+  }
+
+  return `${completedPageCount} / ${targetPageCount}`;
+}
+
 function buildCommentRefluxCollectorProgressText(status = {}) {
   const currentPage = Number(status.currentPage) || 0;
   const endPage = Number(status.config?.endPage) || 0;
@@ -2985,6 +3404,33 @@ function buildRefluxDatasetCollectorMetaText(status = {}) {
   return '정지 상태입니다. 수집 시작 후 완료되면 JSON 다운로드가 활성화됩니다.';
 }
 
+function buildRefluxOverlayCollectorMetaText(status = {}) {
+  const galleryId = status.galleryId
+    ? String(status.galleryId)
+    : '미지정';
+  if (status.lastError) {
+    return `최근 오류: ${status.lastError}`;
+  }
+
+  if (status.interrupted || status.phase === 'INTERRUPTED') {
+    return '이전 overlay 수집 작업이 중간에 끊겨 자동 복원을 건너뛰었습니다. 설정을 확인한 뒤 다시 시작하세요.';
+  }
+
+  if (status.appliedOverlayId) {
+    const failedPageCount = Number(status.failedPageCount) || 0;
+    if (failedPageCount > 0) {
+      return `${galleryId} overlay가 적용되었습니다. 일부 실패 페이지 ${failedPageCount}개는 제외된 상태로 로컬 matcher에 반영됐습니다.`;
+    }
+    return `${galleryId} overlay가 적용되었습니다. 다음 게시물/댓글 사이클부터 local matcher가 바로 이 overlay를 같이 봅니다.`;
+  }
+
+  if (status.isRunning) {
+    return `${galleryId || '대상 미지정'} anchor 주변 페이지를 수집해 local overlay dataset으로 저장하는 중입니다.`;
+  }
+
+  return '정지 상태입니다. 수집이 끝나면 overlay가 즉시 로컬 matcher에 반영됩니다.';
+}
+
 function buildCommentRefluxCollectorMetaText(status = {}) {
   const galleryId = status.collectedGalleryId
     ? String(status.collectedGalleryId)
@@ -3010,6 +3456,16 @@ function buildCommentRefluxCollectorMetaText(status = {}) {
 
 function normalizeRefluxDatasetCollectorGalleryId(value) {
   return String(value || '').trim();
+}
+
+function normalizeRefluxOverlayCollectorViewUrl(value) {
+  return String(value || '').trim();
+}
+
+function normalizeRefluxOverlayCollectorTransportMode(value) {
+  return value === 'proxy_bridge'
+    ? 'proxy_bridge'
+    : 'direct';
 }
 
 function isValidRefluxDatasetCollectorGalleryId(value) {
@@ -3292,9 +3748,11 @@ function syncSharedConfigInputs(statuses) {
 
 function bindConfigDirtyTracking(feature) {
   getFeatureConfigInputs(feature).forEach((input) => {
-    input.addEventListener('input', () => {
+    const markDirty = () => {
       DIRTY_FEATURES[feature] = true;
-    });
+    };
+    input.addEventListener('input', markDirty);
+    input.addEventListener('change', markDirty);
   });
 }
 
@@ -3327,6 +3785,18 @@ function getFeatureConfigInputs(feature) {
       dom.endPageInput,
       dom.requestDelayMsInput,
       dom.jitterMsInput,
+    ];
+  }
+
+  if (feature === 'refluxOverlayCollector') {
+    return [
+      dom.viewUrlInput,
+      dom.beforePagesInput,
+      dom.afterPagesInput,
+      dom.requestDelayMsInput,
+      dom.jitterMsInput,
+      dom.transportModeInput,
+      dom.proxyWorkerCountInput,
     ];
   }
 

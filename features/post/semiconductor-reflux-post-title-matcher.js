@@ -20,6 +20,14 @@ const TWO_PARENT_MIN_SIDE_MATCH_COUNT = 2;
 const TWO_PARENT_MAX_CANDIDATES_PER_SIDE = 40;
 const TWO_PARENT_MAX_OPPOSITE_LEAK_COUNT = 1;
 const TWO_PARENT_BUCKET_LOAD_CONCURRENCY = 4;
+const SEMICONDUCTOR_REFLUX_TWO_PARENT_POLICY = Object.freeze({
+  minTitleLength: TWO_PARENT_MIN_TITLE_LENGTH,
+  minSideLength: TWO_PARENT_MIN_SIDE_LENGTH,
+  minSideMatchCount: TWO_PARENT_MIN_SIDE_MATCH_COUNT,
+  maxCandidatesPerSide: TWO_PARENT_MAX_CANDIDATES_PER_SIDE,
+  maxOppositeLeakCount: TWO_PARENT_MAX_OPPOSITE_LEAK_COUNT,
+  chunkLengths: [...DEFAULT_CHUNK_LENGTHS],
+});
 
 const runtimeState = {
   loaded: false,
@@ -207,9 +215,19 @@ function selectTopTwoParentCandidates(candidateCounts) {
       if (right[1] !== left[1]) {
         return right[1] - left[1];
       }
-      return left[0] - right[0];
+      return compareTwoParentCandidateKeys(left[0], right[0]);
     })
     .slice(0, TWO_PARENT_MAX_CANDIDATES_PER_SIDE);
+}
+
+function compareTwoParentCandidateKeys(leftKey, rightKey) {
+  const leftNumber = Number(leftKey);
+  const rightNumber = Number(rightKey);
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+    return leftNumber - rightNumber;
+  }
+
+  return String(leftKey).localeCompare(String(rightKey), 'ko');
 }
 
 function hasTwoParentCandidatePair(leftCandidates, rightCandidates, leftCandidateCounts, rightCandidateCounts) {
@@ -519,8 +537,22 @@ function getSemiconductorRefluxTwoParentBucketIndex(chunk, bucketCount = runtime
   return Number(BigInt(`0x${chunkHashHex}`) % BigInt(normalizedBucketCount));
 }
 
+function getSemiconductorRefluxBundledTwoParentIndexSnapshot() {
+  return {
+    ready: Boolean(runtimeState.twoParentIndexReady),
+    datasetVersion: runtimeState.twoParentIndexDatasetVersion,
+    titleCount: runtimeState.twoParentIndexTitleCount,
+    bucketCount: runtimeState.twoParentBucketCount,
+    chunkLengths: [...runtimeState.twoParentChunkLengths],
+    postingEncoding: runtimeState.postingEncoding,
+    chunkPostingMap: runtimeState.chunkPostingMap,
+  };
+}
+
 export {
+  SEMICONDUCTOR_REFLUX_TWO_PARENT_POLICY,
   ensureSemiconductorRefluxPostTitleMatcherLoaded,
+  getSemiconductorRefluxBundledTwoParentIndexSnapshot,
   getSemiconductorRefluxPostTitleMatcherStatus,
   getSemiconductorRefluxTwoParentBucketIndex,
   hasNormalizedSemiconductorRefluxTwoParentMixTitle,

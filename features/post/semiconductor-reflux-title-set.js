@@ -157,20 +157,19 @@ function hydrateSemiconductorRefluxTitleSetState(storedState, options = {}) {
     ? normalizePreNormalizedSemiconductorRefluxTitleSetState(storedState)
     : normalizeSemiconductorRefluxTitleSetState(storedState);
   const normalizedTitles = normalizedState.titles;
-  const permutationSignatureSet = buildPermutationSignatureSet(normalizedTitles);
-  const containmentSignatureSet = buildContainmentSignatureSet(normalizedTitles);
+  const matchRuntime = createSemiconductorRefluxTitleMatchRuntimeFromNormalizedTitles(normalizedTitles);
   runtimeState.loaded = true;
-  runtimeState.titleSet = new Set(normalizedTitles);
-  runtimeState.permutationSignatureSet = permutationSignatureSet;
-  runtimeState.containmentSignatureSet = containmentSignatureSet;
+  runtimeState.titleSet = matchRuntime.titleSet;
+  runtimeState.permutationSignatureSet = matchRuntime.permutationSignatureSet;
+  runtimeState.containmentSignatureSet = matchRuntime.containmentSignatureSet;
   runtimeState.titleCount = normalizedTitles.length > 0
     ? normalizedTitles.length
     : normalizeTitleCount(normalizedState.titleCount);
   runtimeState.sourceTitleCount = normalizeTitleCount(normalizedState.sourceTitleCount) > 0
     ? normalizeTitleCount(normalizedState.sourceTitleCount)
     : runtimeState.titleCount;
-  runtimeState.permutationSignatureCount = permutationSignatureSet.size;
-  runtimeState.containmentSignatureCount = containmentSignatureSet.size;
+  runtimeState.permutationSignatureCount = matchRuntime.permutationSignatureSet.size;
+  runtimeState.containmentSignatureCount = matchRuntime.containmentSignatureSet.size;
   runtimeState.updatedAt = normalizedState.updatedAt;
   runtimeState.sourceGalleryId = normalizedState.sourceGalleryId;
   runtimeState.sourceGalleryIds = normalizedState.sourceGalleryIds;
@@ -208,12 +207,16 @@ function hasSemiconductorRefluxTitle(title) {
 }
 
 function hasNormalizedSemiconductorRefluxTitle(normalizedTitle) {
+  return hasNormalizedSemiconductorRefluxTitleInRuntime(normalizedTitle, runtimeState);
+}
+
+function hasNormalizedSemiconductorRefluxTitleInRuntime(normalizedTitle, matchRuntime = runtimeState) {
   const normalizedValue = normalizeSemiconductorRefluxTitle(normalizedTitle);
   if (!normalizedValue) {
     return false;
   }
 
-  if (runtimeState.titleSet.has(normalizedValue)) {
+  if (matchRuntime?.titleSet instanceof Set && matchRuntime.titleSet.has(normalizedValue)) {
     return true;
   }
 
@@ -224,14 +227,17 @@ function hasNormalizedSemiconductorRefluxTitle(normalizedTitle) {
     { minLength: PERMUTATION_SIGNATURE_MIN_LENGTH },
   );
   if (!permutationSignature) {
-    return hasNormalizedSemiconductorRefluxContainmentTitle(normalizedValue);
+    return hasNormalizedSemiconductorRefluxContainmentTitleInRuntime(normalizedValue, matchRuntime);
   }
 
-  if (runtimeState.permutationSignatureSet.has(permutationSignature)) {
+  if (
+    matchRuntime?.permutationSignatureSet instanceof Set
+    && matchRuntime.permutationSignatureSet.has(permutationSignature)
+  ) {
     return true;
   }
 
-  return hasNormalizedSemiconductorRefluxContainmentTitle(normalizedValue);
+  return hasNormalizedSemiconductorRefluxContainmentTitleInRuntime(normalizedValue, matchRuntime);
 }
 
 async function replaceSemiconductorRefluxTitleSet(titles, options = {}) {
@@ -287,6 +293,18 @@ function dedupePreNormalizedTitles(titles) {
   )];
 }
 
+function createSemiconductorRefluxTitleMatchRuntimeFromNormalizedTitles(titles) {
+  const normalizedTitles = dedupePreNormalizedTitles(titles);
+  const permutationSignatureSet = buildPermutationSignatureSet(normalizedTitles);
+  const containmentSignatureSet = buildContainmentSignatureSet(normalizedTitles);
+  return {
+    titleSet: new Set(normalizedTitles),
+    permutationSignatureSet,
+    containmentSignatureSet,
+    titleCount: normalizedTitles.length,
+  };
+}
+
 function buildPermutationSignatureSet(titles) {
   const permutationSignatures = new Set();
 
@@ -328,7 +346,11 @@ function buildContainmentSignatureSet(titles) {
 }
 
 function hasNormalizedSemiconductorRefluxContainmentTitle(normalizedTitle) {
-  if (runtimeState.containmentSignatureSet.size <= 0) {
+  return hasNormalizedSemiconductorRefluxContainmentTitleInRuntime(normalizedTitle, runtimeState);
+}
+
+function hasNormalizedSemiconductorRefluxContainmentTitleInRuntime(normalizedTitle, matchRuntime = runtimeState) {
+  if (!(matchRuntime?.containmentSignatureSet instanceof Set) || matchRuntime.containmentSignatureSet.size <= 0) {
     return false;
   }
 
@@ -369,7 +391,7 @@ function hasNormalizedSemiconductorRefluxContainmentTitle(normalizedTitle) {
             },
           );
           combinationCount += 1;
-          if (signature && runtimeState.containmentSignatureSet.has(signature)) {
+          if (signature && matchRuntime.containmentSignatureSet.has(signature)) {
             return true;
           }
           if (combinationCount >= CONTAINMENT_MAX_COMBINATION_COUNT) {
@@ -499,8 +521,11 @@ async function loadBundledSemiconductorRefluxShardTitles(shards) {
 }
 
 export {
+  createSemiconductorRefluxTitleMatchRuntimeFromNormalizedTitles,
   ensureSemiconductorRefluxTitleSetLoaded,
   getSemiconductorRefluxTitleSetStatus,
+  hasNormalizedSemiconductorRefluxContainmentTitleInRuntime,
+  hasNormalizedSemiconductorRefluxTitleInRuntime,
   hasNormalizedSemiconductorRefluxTitle,
   hasSemiconductorRefluxTitle,
   isSemiconductorRefluxTitleSetReady,

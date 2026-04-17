@@ -2,14 +2,12 @@ import { normalizeCommentRefluxMemo } from './parser.js';
 import {
   ensureSemiconductorRefluxTitleSetLoaded,
   getSemiconductorRefluxTitleSetStatus,
-  hasNormalizedSemiconductorRefluxTitle,
-  isSemiconductorRefluxTitleSetReady,
 } from '../post/semiconductor-reflux-title-set.js';
 import {
-  ensureSemiconductorRefluxPostTitleMatcherLoaded,
-  getSemiconductorRefluxPostTitleMatcherStatus,
-  hasNormalizedSemiconductorRefluxTwoParentMixTitle,
-} from '../post/semiconductor-reflux-post-title-matcher.js';
+  ensureSemiconductorRefluxEffectiveMatcherLoaded,
+  getSemiconductorRefluxEffectiveMatcherStatus,
+  hasNormalizedSemiconductorRefluxEffectiveTitle,
+} from '../post/semiconductor-reflux-effective-matcher.js';
 
 const STORAGE_KEY = 'commentRefluxDatasetState';
 
@@ -24,18 +22,14 @@ const runtimeState = {
 };
 
 async function ensureCommentRefluxDatasetLoaded() {
-  if (
-    runtimeState.loaded
-    && runtimeState.sourceType === 'bundled_shared_title_set'
-    && isSemiconductorRefluxTitleSetReady()
-  ) {
+  if (runtimeState.loaded && runtimeState.memoCount > 0) {
     return getCommentRefluxDatasetStatus();
   }
 
   const sharedDatasetState = await loadSharedCommentRefluxDatasetState();
   if (!sharedDatasetState) {
-    resetRuntimeState();
-    throw new Error('역류기 공용 dataset(reflux-title-set-unified.json) 로드 실패');
+    hydrateCommentRefluxDatasetState(buildFallbackCommentRefluxDatasetState());
+    return getCommentRefluxDatasetStatus();
   }
 
   hydrateCommentRefluxDatasetState(sharedDatasetState);
@@ -45,7 +39,7 @@ async function ensureCommentRefluxDatasetLoaded() {
 
 async function ensureCommentRefluxMatcherLoaded() {
   await ensureCommentRefluxDatasetLoaded();
-  await ensureSemiconductorRefluxPostTitleMatcherLoaded();
+  await ensureSemiconductorRefluxEffectiveMatcherLoaded();
   return getCommentRefluxMatcherStatus();
 }
 
@@ -77,16 +71,6 @@ function hydrateCommentRefluxDatasetState(nextState = {}) {
   runtimeState.sourceType = String(nextState.sourceType || '').trim();
 }
 
-function resetRuntimeState() {
-  runtimeState.loaded = false;
-  runtimeState.memoCount = 0;
-  runtimeState.updatedAt = '';
-  runtimeState.sourceGalleryId = '';
-  runtimeState.sourceGalleryIds = [];
-  runtimeState.version = '';
-  runtimeState.sourceType = '';
-}
-
 function getCommentRefluxDatasetStatus() {
   return {
     loaded: runtimeState.loaded,
@@ -102,39 +86,39 @@ function getCommentRefluxDatasetStatus() {
 
 function getCommentRefluxMatcherStatus() {
   const datasetStatus = getCommentRefluxDatasetStatus();
-  const postMatcherStatus = getSemiconductorRefluxPostTitleMatcherStatus();
-  const datasetReady = Boolean(datasetStatus.ready);
-  const twoParentIndexReady = Boolean(datasetReady && postMatcherStatus.twoParentIndexReady);
+  const effectiveMatcherStatus = getSemiconductorRefluxEffectiveMatcherStatus();
+  const matcherReady = Boolean(effectiveMatcherStatus.ready);
+  const twoParentIndexReady = Boolean(matcherReady && effectiveMatcherStatus.twoParentIndexReady);
 
   return {
-    loaded: Boolean(datasetStatus.loaded || postMatcherStatus.loaded),
-    ready: datasetReady,
-    datasetReady,
+    loaded: Boolean(datasetStatus.loaded || effectiveMatcherStatus.loaded),
+    ready: matcherReady,
+    datasetReady: Boolean(datasetStatus.ready),
     memoCount: datasetStatus.memoCount,
     updatedAt: datasetStatus.updatedAt,
     sourceGalleryId: datasetStatus.sourceGalleryId,
     sourceGalleryIds: [...datasetStatus.sourceGalleryIds],
     version: datasetStatus.version,
     sourceType: datasetStatus.sourceType,
+    overlayActiveCount: Math.max(0, Number(effectiveMatcherStatus.overlayActiveCount) || 0),
+    overlayTitleCount: Math.max(0, Number(effectiveMatcherStatus.overlayTitleCount) || 0),
     twoParentIndexReady,
-    twoParentIndexVersionMatch: Boolean(datasetReady && postMatcherStatus.twoParentIndexVersionMatch),
-    twoParentIndexDatasetVersion: String(postMatcherStatus.twoParentIndexDatasetVersion || '').trim(),
-    twoParentBucketCount: Math.max(0, Number(postMatcherStatus.twoParentBucketCount) || 0),
-    twoParentChunkLengths: Array.isArray(postMatcherStatus.twoParentChunkLengths)
-      ? [...postMatcherStatus.twoParentChunkLengths]
+    twoParentIndexVersionMatch: Boolean(effectiveMatcherStatus.baseTwoParentIndexReady),
+    twoParentIndexDatasetVersion: String(datasetStatus.version || '').trim(),
+    twoParentBucketCount: 0,
+    twoParentChunkLengths: Array.isArray(effectiveMatcherStatus.twoParentChunkLengths)
+      ? [...effectiveMatcherStatus.twoParentChunkLengths]
       : [],
-    reason: buildCommentRefluxMatcherReason(datasetStatus, postMatcherStatus),
+    reason: buildCommentRefluxMatcherReason(datasetStatus, effectiveMatcherStatus),
   };
 }
 
 function isCommentRefluxDatasetReady() {
-  return runtimeState.loaded
-    && runtimeState.sourceType === 'bundled_shared_title_set'
-    && isSemiconductorRefluxTitleSetReady();
+  return Boolean(runtimeState.loaded && runtimeState.memoCount > 0);
 }
 
 function isCommentRefluxMatcherReady() {
-  return isCommentRefluxDatasetReady();
+  return Boolean(getCommentRefluxMatcherStatus().ready);
 }
 
 function isCommentRefluxTwoParentReady() {
@@ -152,15 +136,7 @@ function hasCommentRefluxMemo(memo) {
     return false;
   }
 
-  if (hasNormalizedSemiconductorRefluxTitle(normalizedMemo)) {
-    return true;
-  }
-
-  if (!isCommentRefluxTwoParentReady()) {
-    return false;
-  }
-
-  return hasNormalizedSemiconductorRefluxTwoParentMixTitle(normalizedMemo);
+  return hasNormalizedSemiconductorRefluxEffectiveTitle(normalizedMemo);
 }
 
 async function replaceCommentRefluxDataset() {
@@ -194,17 +170,32 @@ function normalizeSourceGalleryIds(value) {
   return [...new Set(normalizedSourceGalleryIds)];
 }
 
-function buildCommentRefluxMatcherReason(datasetStatus = {}, postMatcherStatus = {}) {
-  if (!datasetStatus.loaded) {
-    return '역류기 공용 dataset이 아직 로드되지 않았습니다.';
+function buildFallbackCommentRefluxDatasetState() {
+  return {
+    memoCount: 0,
+    updatedAt: '',
+    sourceGalleryId: '',
+    sourceGalleryIds: [],
+    version: '',
+    sourceType: 'bundled_shared_title_set',
+  };
+}
+
+function buildCommentRefluxMatcherReason(datasetStatus = {}, effectiveMatcherStatus = {}) {
+  if (!effectiveMatcherStatus.loaded) {
+    return '역류기 effective matcher가 아직 로드되지 않았습니다.';
   }
 
-  if (!datasetStatus.ready) {
-    return '역류기 공용 dataset이 비어 있습니다.';
+  if (!effectiveMatcherStatus.ready) {
+    if (!datasetStatus.ready && (Number(effectiveMatcherStatus.overlayActiveCount) || 0) <= 0) {
+      return '역류기 공용 dataset과 overlay가 모두 비어 있습니다.';
+    }
+
+    return String(effectiveMatcherStatus.reason || '').trim() || '역류기 effective matcher를 사용할 수 없습니다.';
   }
 
-  if (!postMatcherStatus.twoParentIndexReady) {
-    return String(postMatcherStatus.reason || '').trim() || '댓글 2-parent matcher를 사용할 수 없습니다.';
+  if (!effectiveMatcherStatus.twoParentIndexReady) {
+    return String(effectiveMatcherStatus.reason || '').trim() || '댓글 2-parent matcher를 사용할 수 없습니다.';
   }
 
   return '';

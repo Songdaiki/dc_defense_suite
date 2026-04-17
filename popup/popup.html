@@ -28,8 +28,8 @@
       <button class="tab-button" data-tab="ip"><span class="tab-label">IP차단<br>삭제</span></button>
       <button class="tab-button tab-warning" data-tab="uidRatioWarning"><span class="tab-label">분탕<br>경고</span></button>
       <button class="tab-button" data-tab="bumpPost"><span class="tab-label">끌올<br>자동</span></button>
-      <button class="tab-button" data-tab="refluxDatasetCollector"><span class="tab-label">역류기글<br>수집</span></button>
-      <button class="tab-button" data-tab="commentRefluxCollector"><span class="tab-label">역류댓글<br>수집</span></button>
+      <button class="tab-button" data-tab="refluxDatasetCollector"><span class="tab-label">Local<br>수집</span></button>
+      <button class="tab-button" data-tab="refluxOverlayCollector"><span class="tab-label">Dataset<br>수집</span></button>
     </nav>
 
     <main class="panels">
@@ -716,8 +716,8 @@
       <section class="panel" data-feature="refluxDatasetCollector">
         <div class="feature-header feature-bump-post">
           <div>
-            <h2>역류기글 수집</h2>
-            <p>입력한 갤 ID의 목록 제목을 순차 수집해 배포용 역류기 dataset JSON을 만듭니다</p>
+            <h2>Local 수집</h2>
+            <p>입력한 갤 ID의 목록 제목을 순차 수집해 로컬 dataset JSON을 만듭니다</p>
           </div>
           <div class="toggle-section">
             <label class="toggle-switch">
@@ -812,6 +812,124 @@
         <section class="log-section">
           <h3>최근 로그</h3>
           <div id="refluxDatasetCollectorLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+      </section>
+
+      <section class="panel" data-feature="refluxOverlayCollector">
+        <div class="feature-header feature-bump-post">
+          <div>
+            <h2>Dataset 수집</h2>
+            <p>원본 글 URL을 기준으로 주변 페이지를 수집해 로컬 overlay dataset으로 바로 반영합니다</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="refluxOverlayCollectorToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="refluxOverlayCollectorToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="refluxOverlayCollectorStatusText" class="status-value status-off">🔴 정지</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 단계</span>
+            <span id="refluxOverlayCollectorPhaseText" class="status-value">IDLE</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">대상 갤 ID</span>
+            <span id="refluxOverlayCollectorGalleryIdText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">대상 글 번호</span>
+            <span id="refluxOverlayCollectorTargetPostNoText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">anchor 페이지</span>
+            <span id="refluxOverlayCollectorFoundPageText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">수집 진행</span>
+            <span id="refluxOverlayCollectorProgressText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">정규화 고유 제목</span>
+            <span id="refluxOverlayCollectorNormalizedTitleCountText" class="status-value">0개</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">적용 overlay ID</span>
+            <span id="refluxOverlayCollectorAppliedOverlayIdText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">시작 시각</span>
+            <span id="refluxOverlayCollectorStartedAtText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">종료 시각</span>
+            <span id="refluxOverlayCollectorFinishedAtText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 오류</span>
+            <span id="refluxOverlayCollectorLastErrorText" class="status-value">-</span>
+          </div>
+        </div>
+
+        <p id="refluxOverlayCollectorMetaText" class="manual-utility-meta">정지 상태입니다. 수집이 끝나면 overlay가 즉시 로컬 matcher에 반영됩니다.</p>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label for="refluxOverlayCollectorViewUrl">URL 입력</label>
+              <input type="text" id="refluxOverlayCollectorViewUrl" placeholder="https://gall.dcinside.com/mgallery/board/view/?id=war&no=3147472" spellcheck="false">
+            </div>
+            <div class="setting-item">
+              <label for="refluxOverlayCollectorBeforePages">이전 페이지 수</label>
+              <input type="number" id="refluxOverlayCollectorBeforePages" min="0" value="30">
+            </div>
+            <div class="setting-item">
+              <label for="refluxOverlayCollectorAfterPages">이후 페이지 수</label>
+              <input type="number" id="refluxOverlayCollectorAfterPages" min="0" value="30">
+            </div>
+            <div class="setting-item">
+              <label for="refluxOverlayCollectorRequestDelayMs">요청 간격 (ms)</label>
+              <input type="number" id="refluxOverlayCollectorRequestDelayMs" min="500" step="100" value="500">
+            </div>
+            <div class="setting-item">
+              <label for="refluxOverlayCollectorJitterMs">지터 (ms)</label>
+              <input type="number" id="refluxOverlayCollectorJitterMs" min="0" step="50" value="100">
+            </div>
+            <div class="setting-item">
+              <label for="refluxOverlayCollectorTransportMode">transport</label>
+              <select id="refluxOverlayCollectorTransportMode">
+                <option value="direct">direct</option>
+                <option value="proxy_bridge">proxy_bridge</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <label for="refluxOverlayCollectorProxyWorkerCount">proxy worker 수</label>
+              <input type="number" id="refluxOverlayCollectorProxyWorkerCount" min="1" max="10" value="10">
+            </div>
+            <button id="refluxOverlayCollectorSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          </div>
+        </details>
+
+        <div class="action-row">
+          <button id="refluxOverlayCollectorResetBtn" class="btn btn-secondary">최근 로그 초기화</button>
+          <button id="refluxOverlayCollectorClearOverlaysBtn" class="btn btn-secondary">overlay 전체 삭제</button>
+        </div>
+
+        <section class="log-section">
+          <h3>저장된 Overlay</h3>
+          <div id="refluxOverlayCollectorOverlayList" class="log-list"><div class="log-empty">저장된 overlay가 없습니다.</div></div>
+        </section>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="refluxOverlayCollectorLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
         </section>
       </section>
 

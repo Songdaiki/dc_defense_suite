@@ -25,6 +25,17 @@ import {
 } from '../features/reflux-dataset-collector/scheduler.js';
 import { isValidGalleryId as isValidRefluxCollectorGalleryId } from '../features/reflux-dataset-collector/api.js';
 import {
+  Scheduler as RefluxOverlayCollectorScheduler,
+  normalizeConfig as normalizeRefluxOverlayCollectorConfig,
+} from '../features/reflux-overlay-collector/scheduler.js';
+import {
+  clearAllOverlays as clearSemiconductorRefluxOverlays,
+  deleteOverlay as deleteSemiconductorRefluxOverlay,
+  listOverlayMetas as listSemiconductorRefluxOverlayMetas,
+} from '../features/post/semiconductor-reflux-overlay-store.js';
+import { parseValidatedViewUrl } from '../features/reflux-overlay-collector/api.js';
+import { reloadSemiconductorRefluxEffectiveMatcher } from '../features/post/semiconductor-reflux-effective-matcher.js';
+import {
   Scheduler as CommentRefluxCollectorScheduler,
   normalizeConfig as normalizeCommentRefluxCollectorConfig,
 } from '../features/comment-reflux-collector/scheduler.js';
@@ -72,6 +83,7 @@ const conceptPatrolScheduler = new ConceptPatrolScheduler({
 const hanRefreshIpBanScheduler = new HanRefreshIpBanScheduler();
 const bumpPostScheduler = new BumpPostScheduler();
 const refluxDatasetCollectorScheduler = new RefluxDatasetCollectorScheduler();
+const refluxOverlayCollectorScheduler = new RefluxOverlayCollectorScheduler();
 const commentRefluxCollectorScheduler = new CommentRefluxCollectorScheduler();
 const postScheduler = new PostScheduler();
 const semiPostScheduler = new SemiPostScheduler();
@@ -91,6 +103,7 @@ const schedulers = {
   hanRefreshIpBan: hanRefreshIpBanScheduler,
   bumpPost: bumpPostScheduler,
   refluxDatasetCollector: refluxDatasetCollectorScheduler,
+  refluxOverlayCollector: refluxOverlayCollectorScheduler,
   commentRefluxCollector: commentRefluxCollectorScheduler,
   post: postScheduler,
   semiPost: semiPostScheduler,
@@ -204,6 +217,7 @@ async function resumeAllSchedulers() {
     await loadSchedulerStateIfIdle(schedulers.hanRefreshIpBan);
     await loadSchedulerStateIfIdle(schedulers.bumpPost);
     await loadSchedulerStateIfIdle(schedulers.refluxDatasetCollector);
+    await loadSchedulerStateIfIdle(schedulers.refluxOverlayCollector);
     await loadSchedulerStateIfIdle(schedulers.commentRefluxCollector);
     await loadSchedulerStateIfIdle(schedulers.post);
     await loadSchedulerStateIfIdle(schedulers.semiPost);
@@ -314,6 +328,7 @@ function getAllStatuses() {
     hanRefreshIpBan: schedulers.hanRefreshIpBan.getStatus(),
     bumpPost: schedulers.bumpPost.getStatus(),
     refluxDatasetCollector: schedulers.refluxDatasetCollector.getStatus(),
+    refluxOverlayCollector: schedulers.refluxOverlayCollector.getStatus(),
     commentRefluxCollector: schedulers.commentRefluxCollector.getStatus(),
     post: schedulers.post.getStatus(),
     semiPost: schedulers.semiPost.getStatus(),
@@ -626,6 +641,27 @@ async function handleMessage(message) {
           });
         }
 
+        if (message.feature === 'refluxOverlayCollector') {
+          const rawViewUrl = String(message.config.viewUrl ?? '').trim();
+          if (rawViewUrl) {
+            try {
+              parseValidatedViewUrl(rawViewUrl);
+            } catch (error) {
+              return {
+                success: false,
+                message: error.message,
+                status: scheduler.getStatus(),
+                statuses: getAllStatuses(),
+              };
+            }
+          }
+
+          message.config = normalizeRefluxOverlayCollectorConfig({
+            ...scheduler.config,
+            ...message.config,
+          });
+        }
+
         if (message.feature === 'commentRefluxCollector') {
           const rawGalleryId = message.config.galleryId;
           if (rawGalleryId !== undefined) {
@@ -706,7 +742,7 @@ async function handleMessage(message) {
       if (message.feature === 'refluxDatasetCollector' && scheduler.isRunning) {
         return {
           success: false,
-          message: '역류기글 수집 실행 중에는 통계와 로그를 초기화할 수 없습니다.',
+          message: 'Local 수집 실행 중에는 통계와 로그를 초기화할 수 없습니다.',
           status: scheduler.getStatus(),
           statuses: getAllStatuses(),
         };
@@ -715,6 +751,14 @@ async function handleMessage(message) {
         return {
           success: false,
           message: '역류댓글 수집 실행 중에는 통계와 로그를 초기화할 수 없습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+      if (message.feature === 'refluxOverlayCollector' && (scheduler.isRunning || scheduler.startAbortController)) {
+        return {
+          success: false,
+          message: '임시 overlay 수집 실행 중에는 통계와 로그를 초기화할 수 없습니다.',
           status: scheduler.getStatus(),
           statuses: getAllStatuses(),
         };
@@ -765,6 +809,68 @@ async function handleMessage(message) {
         status: scheduler.getStatus(),
         statuses: getAllStatuses(),
         sessionFallbackStatus: getDcSessionBrokerStatus(),
+      };
+
+    case 'listOverlays':
+      if (message.feature !== 'refluxOverlayCollector') {
+        return { success: false, message: 'overlay 목록 조회는 임시 overlay 기능에서만 지원합니다.' };
+      }
+      return {
+        success: true,
+        overlays: await listSemiconductorRefluxOverlayMetas(),
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+      };
+
+    case 'deleteOverlay':
+      if (message.feature !== 'refluxOverlayCollector') {
+        return { success: false, message: 'overlay 삭제는 임시 overlay 기능에서만 지원합니다.' };
+      }
+      if (scheduler.isRunning || scheduler.startAbortController) {
+        return {
+          success: false,
+          message: '임시 overlay 수집 실행 중에는 저장된 overlay를 삭제할 수 없습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+      await deleteSemiconductorRefluxOverlay(message.overlayId);
+      const remainingOverlays = await listSemiconductorRefluxOverlayMetas();
+      if (String(scheduler.appliedOverlayId || '').trim() === String(message.overlayId || '').trim()) {
+        scheduler.appliedOverlayId = remainingOverlays[0]?.overlayId
+          ? String(remainingOverlays[0].overlayId).trim()
+          : '';
+        await scheduler.saveState();
+      }
+      await reloadSemiconductorRefluxEffectiveMatcher();
+      return {
+        success: true,
+        overlays: remainingOverlays,
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+      };
+
+    case 'clearAllOverlays':
+      if (message.feature !== 'refluxOverlayCollector') {
+        return { success: false, message: 'overlay 전체 삭제는 임시 overlay 기능에서만 지원합니다.' };
+      }
+      if (scheduler.isRunning || scheduler.startAbortController) {
+        return {
+          success: false,
+          message: '임시 overlay 수집 실행 중에는 overlay 전체 삭제를 할 수 없습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+      await clearSemiconductorRefluxOverlays();
+      scheduler.appliedOverlayId = '';
+      await scheduler.saveState();
+      await reloadSemiconductorRefluxEffectiveMatcher();
+      return {
+        success: true,
+        overlays: await listSemiconductorRefluxOverlayMetas(),
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
       };
 
     default:
@@ -912,6 +1018,27 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.exportVersion = '';
     scheduler.interrupted = false;
     scheduler.collectedGalleryId = '';
+    return;
+  }
+
+  if (feature === 'refluxOverlayCollector') {
+    scheduler.phase = scheduler.isRunning ? 'FETCHING' : 'IDLE';
+    scheduler.currentPage = 0;
+    scheduler.galleryId = '';
+    scheduler.targetPostNo = 0;
+    scheduler.foundPage = 0;
+    scheduler.totalPageCount = 0;
+    scheduler.targetPageCount = 0;
+    scheduler.completedPageCount = 0;
+    scheduler.failedPageCount = 0;
+    scheduler.failedPages = [];
+    scheduler.rawTitleCount = 0;
+    scheduler.normalizedTitleCount = 0;
+    scheduler.startedAt = '';
+    scheduler.finishedAt = '';
+    scheduler.lastError = '';
+    scheduler.logs = [];
+    scheduler.interrupted = false;
     return;
   }
 
@@ -1182,15 +1309,19 @@ function getBusyFeatures() {
     busyFeatures.push('감시 자동화');
   }
 
+  if (isSchedulerBusy(schedulers.refluxOverlayCollector)) {
+    busyFeatures.push('임시 Overlay 수집');
+  }
+
   return busyFeatures;
 }
 
 function isSchedulerBusy(scheduler) {
-  return Boolean(scheduler?.isRunning || scheduler?.runPromise);
+  return Boolean(scheduler?.isRunning || scheduler?.runPromise || scheduler?.startAbortController);
 }
 
 function getConfigUpdateBlockMessage(feature, scheduler, config) {
-  if (!scheduler.isRunning) {
+  if (!scheduler.isRunning && !scheduler.startAbortController) {
     return '';
   }
 
@@ -1258,7 +1389,38 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
     const jitterChanged = config.jitterMs !== undefined
       && Number(config.jitterMs) !== Number(scheduler.config.jitterMs);
     if (galleryIdChanged || startPageChanged || endPageChanged || requestDelayChanged || jitterChanged) {
-      return '역류기글 수집 설정은 기능을 정지한 뒤 변경하세요.';
+      return 'Local 수집 설정은 기능을 정지한 뒤 변경하세요.';
+    }
+  }
+
+  if (feature === 'refluxOverlayCollector') {
+    const viewUrlChanged = config.viewUrl !== undefined
+      && String(config.viewUrl || '') !== String(scheduler.config.viewUrl || '');
+    const beforePagesChanged = config.beforePages !== undefined
+      && Number(config.beforePages) !== Number(scheduler.config.beforePages);
+    const afterPagesChanged = config.afterPages !== undefined
+      && Number(config.afterPages) !== Number(scheduler.config.afterPages);
+    const requestDelayChanged = config.requestDelayMs !== undefined
+      && Number(config.requestDelayMs) !== Number(scheduler.config.requestDelayMs);
+    const jitterChanged = config.jitterMs !== undefined
+      && Number(config.jitterMs) !== Number(scheduler.config.jitterMs);
+    const transportModeChanged = config.transportMode !== undefined
+      && String(config.transportMode || '') !== String(scheduler.config.transportMode || '');
+    const proxyWorkerCountChanged = config.proxyWorkerCount !== undefined
+      && Number(config.proxyWorkerCount) !== Number(scheduler.config.proxyWorkerCount);
+    const maxRetriesPerPageChanged = config.maxRetriesPerPage !== undefined
+      && Number(config.maxRetriesPerPage) !== Number(scheduler.config.maxRetriesPerPage);
+    if (
+      viewUrlChanged
+      || beforePagesChanged
+      || afterPagesChanged
+      || requestDelayChanged
+      || jitterChanged
+      || transportModeChanged
+      || proxyWorkerCountChanged
+      || maxRetriesPerPageChanged
+    ) {
+      return '임시 overlay 수집 설정은 기능을 정지한 뒤 변경하세요.';
     }
   }
 

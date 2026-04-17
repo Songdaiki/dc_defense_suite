@@ -32,10 +32,10 @@ import {
     normalizeAttackMode,
 } from './attack-mode.js';
 import {
-    ensureSemiconductorRefluxPostTitleMatcherLoaded,
-    hasSemiconductorRefluxPostTitle,
-    isSemiconductorRefluxPostTitleMatcherReady,
-} from './semiconductor-reflux-post-title-matcher.js';
+    ensureSemiconductorRefluxEffectiveMatcherLoaded,
+    hasSemiconductorRefluxEffectivePostTitle,
+    isSemiconductorRefluxEffectiveMatcherReady,
+} from './semiconductor-reflux-effective-matcher.js';
 import {
     enqueueRefluxSearchDuplicate,
     ensureRefluxSearchDuplicateBrokerLoaded,
@@ -96,7 +96,7 @@ class Scheduler {
 
         const normalizedOptions = normalizeStartOptions(options);
         if (shouldPreloadSemiconductorRefluxPostMatcher(normalizedOptions.attackMode)) {
-            await ensureSemiconductorRefluxPostTitleMatcherLoaded();
+            await ensureSemiconductorRefluxEffectiveMatcherLoaded();
         }
         this.assertManualAttackModeReady(normalizedOptions.source, normalizedOptions.attackMode);
         if (shouldUseSearchDuplicateForCurrentRun(normalizedOptions.source, normalizedOptions.attackMode)) {
@@ -277,7 +277,7 @@ class Scheduler {
         const currentAttackMode = normalizeAttackMode(this.currentAttackMode);
         const nextAttackMode = normalizeAttackMode(normalizedNextConfig.manualAttackMode);
         if (shouldPreloadSemiconductorRefluxPostMatcher(nextAttackMode)) {
-            await ensureSemiconductorRefluxPostTitleMatcherLoaded();
+            await ensureSemiconductorRefluxEffectiveMatcherLoaded();
         }
         this.assertManualAttackModeReady('manual', nextAttackMode);
         if (shouldUseSearchDuplicateForCurrentRun('manual', nextAttackMode)
@@ -329,7 +329,7 @@ class Scheduler {
             return false;
         }
 
-        await ensureSemiconductorRefluxPostTitleMatcherLoaded();
+        await ensureSemiconductorRefluxEffectiveMatcherLoaded();
         await ensureRefluxSearchDuplicateBrokerLoaded();
         const normalizedNextConfig = {
             ...this.config,
@@ -459,8 +459,8 @@ class Scheduler {
                     const candidatePosts = refluxFilterResult
                         ? refluxFilterResult.candidatePosts
                         : basePosts.filter((post) => isEligibleForAttackMode(post, effectiveAttackMode, {
-                            isSemiconductorRefluxDatasetReady: isSemiconductorRefluxPostTitleMatcherReady(),
-                            matchesSemiconductorRefluxTitle: hasSemiconductorRefluxPostTitle,
+                            isSemiconductorRefluxDatasetReady: isSemiconductorRefluxEffectiveMatcherReady(),
+                            matchesSemiconductorRefluxTitle: hasSemiconductorRefluxEffectivePostTitle,
                         }));
                     const filterLabel = shouldUseSearchDuplicate
                         ? '역류기 검색/데이터셋 필터'
@@ -602,7 +602,7 @@ class Scheduler {
                 }
             }
             if (this.isRunning && shouldPreloadSemiconductorRefluxPostMatcher(this.currentAttackMode)) {
-                await ensureSemiconductorRefluxPostTitleMatcherLoaded();
+                await ensureSemiconductorRefluxEffectiveMatcherLoaded();
             }
             if (this.isRunning && shouldUseSearchDuplicateForCurrentRun(this.currentSource, this.currentAttackMode)) {
                 await ensureRefluxSearchDuplicateBrokerLoaded();
@@ -792,7 +792,7 @@ async function filterRefluxCandidatePosts(posts, context = {}) {
 
         const inspection = inspectRefluxFourStepCandidate({
             value: title,
-            matchesDataset: hasSemiconductorRefluxPostTitle,
+            matchesDataset: hasSemiconductorRefluxEffectivePostTitle,
             buildSearchContext: () => ({
                 deleteGalleryId: context.deleteGalleryId,
                 searchGalleryId: context.searchGalleryId,
