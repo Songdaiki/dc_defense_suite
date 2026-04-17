@@ -28,6 +28,11 @@ const PHASE = {
   RUNNING: 'RUNNING',
   WAITING: 'WAITING',
 };
+const DELETE_MODE_REASON = {
+  NORMAL: 'normal',
+  DELETE_LIMIT: 'delete_limit',
+  MONITOR_ATTACK: 'monitor_attack',
+};
 const UID_ACTION_RETENTION_MS = 24 * 60 * 60 * 1000;
 const SINGLE_SIGHT_TOTAL_ACTIVITY_THRESHOLD = 20;
 
@@ -69,6 +74,7 @@ class Scheduler {
     this.cycleCount = 0;
     this.logs = [];
     this.runtimeDeleteEnabled = Boolean(DEFAULT_CONFIG.delChk);
+    this.runtimeDeleteModeReason = DELETE_MODE_REASON.NORMAL;
     this.lastDeleteLimitExceededAt = '';
     this.lastDeleteLimitMessage = '';
     this.recentUidActions = {};
@@ -91,9 +97,7 @@ class Scheduler {
     this.phase = PHASE.RUNNING;
     this.currentPage = 1;
     this.nextRunAt = '';
-    this.runtimeDeleteEnabled = Boolean(this.config.delChk);
-    this.lastDeleteLimitExceededAt = '';
-    this.lastDeleteLimitMessage = '';
+    this.restoreRuntimeDeleteModeFromConfig();
     this.lastError = '';
     this.log('🟢 분탕자동차단 시작!');
     await this.saveState();
@@ -111,9 +115,7 @@ class Scheduler {
     this.phase = PHASE.IDLE;
     this.currentPage = 1;
     this.nextRunAt = '';
-    this.runtimeDeleteEnabled = Boolean(this.config.delChk);
-    this.lastDeleteLimitExceededAt = '';
-    this.lastDeleteLimitMessage = '';
+    this.restoreRuntimeDeleteModeFromConfig();
     this.lastError = '';
     this.log('🔴 분탕자동차단 중지.');
     await this.saveState();
@@ -576,6 +578,7 @@ class Scheduler {
     const trimmedMessage = String(message || '').trim();
     const switched = this.runtimeDeleteEnabled;
     this.runtimeDeleteEnabled = false;
+    this.runtimeDeleteModeReason = DELETE_MODE_REASON.DELETE_LIMIT;
     this.lastDeleteLimitExceededAt = new Date().toISOString();
     this.lastDeleteLimitMessage = trimmedMessage;
 
@@ -585,6 +588,33 @@ class Scheduler {
         this.log(`⚠️ 삭제 한도 상세: ${trimmedMessage}`);
       }
     }
+  }
+
+  activateMonitorAttackBanOnly() {
+    if (!this.runtimeDeleteEnabled) {
+      return false;
+    }
+
+    this.runtimeDeleteEnabled = false;
+    this.runtimeDeleteModeReason = DELETE_MODE_REASON.MONITOR_ATTACK;
+    this.lastDeleteLimitExceededAt = '';
+    this.lastDeleteLimitMessage = '';
+    this.log('⚠️ 게시물 자동화 공격 감지 - 공격 종료까지 분탕자동차단은 차단만 유지합니다.');
+    return true;
+  }
+
+  restoreRuntimeDeleteModeFromConfig() {
+    const nextDeleteEnabled = Boolean(this.config.delChk);
+    const changed = this.runtimeDeleteEnabled !== nextDeleteEnabled
+      || this.runtimeDeleteModeReason !== DELETE_MODE_REASON.NORMAL
+      || this.lastDeleteLimitExceededAt
+      || this.lastDeleteLimitMessage;
+
+    this.runtimeDeleteEnabled = nextDeleteEnabled;
+    this.runtimeDeleteModeReason = DELETE_MODE_REASON.NORMAL;
+    this.lastDeleteLimitExceededAt = '';
+    this.lastDeleteLimitMessage = '';
+    return changed;
   }
 
   log(message) {
@@ -627,6 +657,7 @@ class Scheduler {
           lastError: this.lastError,
           cycleCount: this.cycleCount,
           runtimeDeleteEnabled: this.runtimeDeleteEnabled,
+          runtimeDeleteModeReason: this.runtimeDeleteModeReason,
           lastDeleteLimitExceededAt: this.lastDeleteLimitExceededAt,
           lastDeleteLimitMessage: this.lastDeleteLimitMessage,
           recentUidActions: this.recentUidActions,
@@ -674,6 +705,14 @@ class Scheduler {
       this.runtimeDeleteEnabled = schedulerState.runtimeDeleteEnabled === undefined
         ? Boolean(schedulerState.config?.delChk)
         : Boolean(schedulerState.runtimeDeleteEnabled);
+      this.runtimeDeleteModeReason = normalizeRuntimeDeleteModeReason(
+        schedulerState.runtimeDeleteModeReason,
+        {
+          runtimeDeleteEnabled: this.runtimeDeleteEnabled,
+          lastDeleteLimitExceededAt: schedulerState.lastDeleteLimitExceededAt,
+          lastDeleteLimitMessage: schedulerState.lastDeleteLimitMessage,
+        },
+      );
       this.lastDeleteLimitExceededAt = String(schedulerState.lastDeleteLimitExceededAt || '');
       this.lastDeleteLimitMessage = String(schedulerState.lastDeleteLimitMessage || '');
       this.recentUidActions = normalizeRecentUidActions(schedulerState.recentUidActions);
@@ -740,6 +779,7 @@ class Scheduler {
       lastError: this.lastError,
       cycleCount: this.cycleCount,
       runtimeDeleteEnabled: this.runtimeDeleteEnabled,
+      runtimeDeleteModeReason: this.runtimeDeleteModeReason,
       lastDeleteLimitExceededAt: this.lastDeleteLimitExceededAt,
       lastDeleteLimitMessage: this.lastDeleteLimitMessage,
       logs: this.logs.slice(0, 20),
@@ -778,6 +818,22 @@ function buildPersistedConfig(config = {}) {
 
 function readPersistedConfig(raw = {}) {
   return buildPersistedConfig(raw);
+}
+
+function normalizeRuntimeDeleteModeReason(value, context = {}) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (Object.values(DELETE_MODE_REASON).includes(normalized)) {
+    return normalized;
+  }
+
+  const runtimeDeleteEnabled = Boolean(context.runtimeDeleteEnabled);
+  const lastDeleteLimitExceededAt = String(context.lastDeleteLimitExceededAt || '').trim();
+  const lastDeleteLimitMessage = String(context.lastDeleteLimitMessage || '').trim();
+  if (!runtimeDeleteEnabled && (lastDeleteLimitExceededAt || lastDeleteLimitMessage)) {
+    return DELETE_MODE_REASON.DELETE_LIMIT;
+  }
+
+  return DELETE_MODE_REASON.NORMAL;
 }
 
 function normalizeAvoidReasonText(value) {

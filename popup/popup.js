@@ -3155,6 +3155,7 @@ function buildDefaultUidWarningAutoBanStatus() {
     banOnlyFallbackCount: 0,
     lastError: '',
     runtimeDeleteEnabled: true,
+    runtimeDeleteModeReason: 'normal',
     lastDeleteLimitExceededAt: '',
     lastDeleteLimitMessage: '',
     logs: [],
@@ -3210,6 +3211,14 @@ function buildUidWarningAutoBanMetaText(status = {}) {
   }
 
   if (status.runtimeDeleteEnabled === false) {
+    if (status.runtimeDeleteModeReason === 'monitor_attack') {
+      return '감시 자동화 공격/복구 중이라 분탕자동차단은 차단만 유지합니다.';
+    }
+
+    if (status.runtimeDeleteModeReason !== 'delete_limit') {
+      return '현재는 분탕자동차단이 차단만 유지 중입니다. 삭제는 수행하지 않습니다.';
+    }
+
     const detail = status.lastDeleteLimitMessage ? ` (${status.lastDeleteLimitMessage})` : '';
     return `삭제 한도 보호 상태라 새 글이 와도 당분간 차단만 수행합니다${detail}`;
   }

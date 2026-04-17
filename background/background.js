@@ -987,6 +987,7 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.banOnlyFallbackCount = 0;
     scheduler.lastError = '';
     scheduler.cycleCount = 0;
+    scheduler.runtimeDeleteModeReason = 'normal';
     scheduler.lastDeleteLimitExceededAt = '';
     scheduler.lastDeleteLimitMessage = '';
     scheduler.runtimeDeleteEnabled = Boolean(scheduler.config?.delChk);
@@ -1024,7 +1025,7 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.managedPostStarted = false;
     scheduler.managedIpStarted = false;
     scheduler.managedIpDeleteEnabled = true;
-    scheduler.managedUidWarningAutoBanSuspended = false;
+    scheduler.managedUidWarningAutoBanBanOnly = false;
     scheduler.logs = [];
   }
 }
@@ -1391,9 +1392,21 @@ async function resolveUidWarningAutoBanResumeConflict() {
     && [MONITOR_PHASE.ATTACKING, MONITOR_PHASE.RECOVERING].includes(schedulers.monitor.phase);
 
   if (monitorOwnsUidWarningAutoBanLock) {
-    await schedulers.uidWarningAutoBan.stop();
-    schedulers.uidWarningAutoBan.log('ℹ️ 감시 자동화 공격/복구 상태와 충돌해 분탕자동차단 자동 복원을 취소했습니다.');
+    let managedBanOnly = false;
+
+    if (schedulers.uidWarningAutoBan.runtimeDeleteModeReason === 'monitor_attack') {
+      managedBanOnly = true;
+    } else if (typeof schedulers.uidWarningAutoBan.activateMonitorAttackBanOnly === 'function') {
+      const switched = schedulers.uidWarningAutoBan.activateMonitorAttackBanOnly();
+      managedBanOnly = Boolean(switched);
+      if (switched) {
+        schedulers.uidWarningAutoBan.log('ℹ️ 감시 자동화 공격/복구 상태 복원으로 분탕자동차단을 차단만 유지 상태로 맞춥니다.');
+      }
+    }
+
+    schedulers.monitor.managedUidWarningAutoBanBanOnly = managedBanOnly;
     await schedulers.uidWarningAutoBan.saveState();
+    await schedulers.monitor.saveState();
   }
 }
 
@@ -1759,6 +1772,7 @@ function resetUidWarningAutoBanSchedulerState(message) {
   scheduler.lastError = '';
   scheduler.cycleCount = 0;
   scheduler.runtimeDeleteEnabled = Boolean(scheduler.config?.delChk);
+  scheduler.runtimeDeleteModeReason = 'normal';
   scheduler.lastDeleteLimitExceededAt = '';
   scheduler.lastDeleteLimitMessage = '';
   scheduler.recentUidActions = {};
@@ -1795,7 +1809,7 @@ function resetMonitorSchedulerState(message) {
   scheduler.managedPostStarted = false;
   scheduler.managedIpStarted = false;
   scheduler.managedIpDeleteEnabled = true;
-  scheduler.managedUidWarningAutoBanSuspended = false;
+  scheduler.managedUidWarningAutoBanBanOnly = false;
   scheduler.totalAttackDetected = 0;
   scheduler.totalAttackReleased = 0;
   scheduler.logs = [];
