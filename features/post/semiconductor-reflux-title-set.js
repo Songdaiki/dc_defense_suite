@@ -38,6 +38,7 @@ const runtimeState = {
   permutationSignatureSet: new Set(),
   containmentSignatureSet: new Set(),
   titleCount: 0,
+  sourceTitleCount: 0,
   permutationSignatureCount: 0,
   containmentSignatureCount: 0,
   updatedAt: '',
@@ -115,13 +116,15 @@ function shouldHydrateBundledState(storedState, bundledState) {
 
 function normalizeSemiconductorRefluxTitleSetState(storedState) {
   const normalizedTitles = dedupeNormalizedTitles(storedState?.titles || []);
+  const sourceTitleCount = normalizeTitleCount(storedState?.sourceTitleCount ?? storedState?.titleCount);
   const sourceGalleryIds = normalizeSourceGalleryIds(storedState);
   const titleCount = normalizedTitles.length > 0
     ? normalizedTitles.length
-    : normalizeTitleCount(storedState?.titleCount);
+    : sourceTitleCount;
   return {
     titles: normalizedTitles,
     titleCount,
+    sourceTitleCount: sourceTitleCount > 0 ? sourceTitleCount : titleCount,
     updatedAt: String(storedState?.updatedAt || '').trim(),
     sourceGalleryId: sourceGalleryIds[0] || '',
     sourceGalleryIds,
@@ -132,13 +135,15 @@ function normalizeSemiconductorRefluxTitleSetState(storedState) {
 
 function normalizePreNormalizedSemiconductorRefluxTitleSetState(storedState) {
   const normalizedTitles = dedupePreNormalizedTitles(storedState?.titles || []);
+  const sourceTitleCount = normalizeTitleCount(storedState?.sourceTitleCount ?? storedState?.titleCount);
   const sourceGalleryIds = normalizeSourceGalleryIds(storedState);
   const titleCount = normalizedTitles.length > 0
     ? normalizedTitles.length
-    : normalizeTitleCount(storedState?.titleCount);
+    : sourceTitleCount;
   return {
     titles: normalizedTitles,
     titleCount,
+    sourceTitleCount: sourceTitleCount > 0 ? sourceTitleCount : titleCount,
     updatedAt: String(storedState?.updatedAt || '').trim(),
     sourceGalleryId: sourceGalleryIds[0] || '',
     sourceGalleryIds,
@@ -161,6 +166,9 @@ function hydrateSemiconductorRefluxTitleSetState(storedState, options = {}) {
   runtimeState.titleCount = normalizedTitles.length > 0
     ? normalizedTitles.length
     : normalizeTitleCount(normalizedState.titleCount);
+  runtimeState.sourceTitleCount = normalizeTitleCount(normalizedState.sourceTitleCount) > 0
+    ? normalizeTitleCount(normalizedState.sourceTitleCount)
+    : runtimeState.titleCount;
   runtimeState.permutationSignatureCount = permutationSignatureSet.size;
   runtimeState.containmentSignatureCount = containmentSignatureSet.size;
   runtimeState.updatedAt = normalizedState.updatedAt;
@@ -175,6 +183,7 @@ function getSemiconductorRefluxTitleSetStatus() {
     loaded: runtimeState.loaded,
     ready: isSemiconductorRefluxTitleSetReady(),
     titleCount: runtimeState.titleCount,
+    sourceTitleCount: runtimeState.sourceTitleCount,
     permutationSignatureCount: runtimeState.permutationSignatureCount,
     containmentSignatureCount: runtimeState.containmentSignatureCount,
     updatedAt: runtimeState.updatedAt,
@@ -249,6 +258,7 @@ async function saveNormalizedSemiconductorRefluxTitleSetState(storedState) {
     ? {
       titles: [],
       titleCount: normalizedState.titleCount,
+      sourceTitleCount: normalizedState.sourceTitleCount,
       updatedAt: normalizedState.updatedAt,
       sourceGalleryId: normalizedState.sourceGalleryId,
       sourceGalleryIds: normalizedState.sourceGalleryIds,

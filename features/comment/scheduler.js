@@ -28,9 +28,10 @@ import {
     normalizeCommentAttackMode,
 } from './attack-mode.js';
 import {
-    ensureCommentRefluxDatasetLoaded,
+    ensureCommentRefluxMatcherLoaded,
+    getCommentRefluxMatcherStatus,
     hasCommentRefluxMemo,
-    isCommentRefluxDatasetReady,
+    isCommentRefluxMatcherReady,
 } from './comment-reflux-dataset.js';
 import {
     ensureCommentRefluxSearchDuplicateBrokerLoaded,
@@ -39,6 +40,10 @@ import {
     resolveCommentRefluxSearchDuplicateDecision,
     setCommentRefluxSearchDuplicateBrokerLogger,
 } from './comment-reflux-search-duplicate-broker.js';
+import {
+    REFLUX_FOUR_STEP_STAGE,
+    inspectRefluxFourStepCandidate,
+} from '../reflux-four-step-filter.js';
 
 const STORAGE_KEY = 'commentSchedulerState';
 const MAX_VERIFICATION_EVENTS = 200;
@@ -379,7 +384,14 @@ class Scheduler {
         };
 
         for (const comment of fluidComments) {
-            if (hasCommentRefluxMemo(comment?.memo)) {
+            const inspection = inspectRefluxFourStepCandidate({
+                value: comment,
+                matchesDataset: (currentComment) => hasCommentRefluxMemo(currentComment?.memo),
+                buildSearchContext: (currentComment) => this.buildCommentRefluxSearchContext(postNo, currentComment, sharedContext),
+                peekSearchDecision: peekCommentRefluxSearchDuplicateDecision,
+            });
+
+            if (inspection.stage === REFLUX_FOUR_STEP_STAGE.DATASET) {
                 const commentNo = String(comment?.no || '').trim();
                 if (commentNo && !immediateTargetNos.has(commentNo)) {
                     immediateTargetNos.add(commentNo);
@@ -389,14 +401,7 @@ class Scheduler {
                 continue;
             }
 
-            const searchContext = this.buildCommentRefluxSearchContext(postNo, comment, sharedContext);
-            if (!searchContext) {
-                stats.searchNegativeCount += 1;
-                continue;
-            }
-
-            const cachedDecision = peekCommentRefluxSearchDuplicateDecision(searchContext);
-            if (cachedDecision.result === 'positive') {
+            if (inspection.stage === REFLUX_FOUR_STEP_STAGE.SEARCH_CACHE_POSITIVE) {
                 const commentNo = String(comment?.no || '').trim();
                 if (commentNo && !immediateTargetNos.has(commentNo)) {
                     immediateTargetNos.add(commentNo);
@@ -406,26 +411,26 @@ class Scheduler {
                 continue;
             }
 
-            if (cachedDecision.result === 'negative') {
+            if (inspection.stage === REFLUX_FOUR_STEP_STAGE.SEARCH_NEGATIVE) {
                 stats.searchNegativeCount += 1;
                 continue;
             }
 
-            if (cachedDecision.result === 'error') {
+            if (inspection.stage === REFLUX_FOUR_STEP_STAGE.SEARCH_ERROR) {
                 stats.searchErrorCount += 1;
                 continue;
             }
 
-            if (cachedDecision.result === 'pending') {
+            if (inspection.stage === REFLUX_FOUR_STEP_STAGE.SEARCH_PENDING) {
                 stats.pendingAwaitCount += 1;
-            } else if (cachedDecision.result === 'miss') {
+            } else {
                 stats.queueEnqueuedCount += 1;
             }
 
             pendingSearchJobs.push({
                 comment,
-                context: searchContext,
-                promise: resolveCommentRefluxSearchDuplicateDecision(searchContext),
+                context: inspection.searchContext,
+                promise: resolveCommentRefluxSearchDuplicateDecision(inspection.searchContext),
             });
         }
 
@@ -501,7 +506,7 @@ class Scheduler {
     logCommentRefluxFilterSummary(postNo, stats = {}) {
         const summaryParts = [];
         if (stats.datasetCount > 0) {
-            summaryParts.push(`dataset ${stats.datasetCount}`);
+            summaryParts.push(`matcher ${stats.datasetCount}`);
         }
         if (stats.searchCachePositiveCount > 0) {
             summaryParts.push(`search cache ${stats.searchCachePositiveCount}`);
@@ -746,9 +751,16 @@ class Scheduler {
             return;
         }
 
-        await ensureCommentRefluxDatasetLoaded();
-        if (!isCommentRefluxDatasetReady()) {
-            throw new Error('역류기 공용 dataset이 비어 있어 시작할 수 없습니다.');
+        await ensureCommentRefluxMatcherLoaded();
+        const matcherStatus = getCommentRefluxMatcherStatus();
+        if (!isCommentRefluxMatcherReady()) {
+            throw new Error(`역류기 댓글 matcher 준비 실패 - ${matcherStatus.reason || '역류기 공용 dataset이 비어 있습니다.'}`);
+        }
+
+        if (!matcherStatus.twoParentIndexReady) {
+            this.log(
+                `⚠️ 댓글 2-parent index 준비 실패 - single-title matcher만 사용합니다. (${matcherStatus.reason || 'unknown reason'})`,
+            );
         }
     }
 
@@ -910,6 +922,7 @@ class Scheduler {
     // ============================================================
 
     getStatus() {
+        const commentRefluxMatcherStatus = getCommentRefluxMatcherStatus();
         return {
             isRunning: this.isRunning,
             currentPage: this.currentPage,
@@ -926,6 +939,11 @@ class Scheduler {
             commentRefluxMode: this.currentAttackMode === COMMENT_ATTACK_MODE.COMMENT_REFLUX,
             excludePureHangulEffective: this.shouldExcludePureHangulForCurrentRun(),
             commentRefluxEffective: this.shouldFilterCommentRefluxForCurrentRun(),
+            commentRefluxMatcherReady: Boolean(commentRefluxMatcherStatus.ready),
+            commentRefluxTwoParentReady: Boolean(
+                commentRefluxMatcherStatus.ready && commentRefluxMatcherStatus.twoParentIndexReady,
+            ),
+            commentRefluxMatcherReason: String(commentRefluxMatcherStatus.reason || ''),
         };
     }
 }

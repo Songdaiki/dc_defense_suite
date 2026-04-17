@@ -1329,7 +1329,7 @@ function bindCommentEvents() {
   });
 
   bindCommentQuickAttackModeToggle(dom.excludePureHangulInput, 'exclude_pure_hangul', '한글제외 유동닉댓글 삭제');
-  bindCommentQuickAttackModeToggle(dom.commentRefluxModeInput, 'comment_reflux', '역류기 공용 dataset 공격');
+  bindCommentQuickAttackModeToggle(dom.commentRefluxModeInput, 'comment_reflux', '역류기 공용 matcher 공격');
 
   dom.saveConfigBtn.addEventListener('click', async () => {
     const refluxSearchGalleryId = normalizeRefluxSearchGalleryIdInputValue(dom.refluxSearchGalleryIdInput.value);

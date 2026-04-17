@@ -13,7 +13,8 @@ const BUNDLED_TWO_PARENT_INDEX_PATH = 'data/reflux-two-parent-index.json';
 const DEFAULT_BUCKET_COUNT = 64;
 const DEFAULT_CHUNK_LENGTHS = Object.freeze([3, 4]);
 const DEFAULT_POSTING_ENCODING = 'u32_delta_base64';
-const TWO_PARENT_MIN_TITLE_LENGTH = 10;
+// 운영 정책: 2-parent 분기는 26자 이상 제목만 본다.
+const TWO_PARENT_MIN_TITLE_LENGTH = 26;
 const TWO_PARENT_MIN_SIDE_LENGTH = 4;
 const TWO_PARENT_MIN_SIDE_MATCH_COUNT = 2;
 const TWO_PARENT_MAX_CANDIDATES_PER_SIDE = 40;
@@ -283,6 +284,13 @@ function normalizeChunkLengths(chunkLengths) {
     : [...DEFAULT_CHUNK_LENGTHS];
 }
 
+function getComparableTitleSetTitleCount(titleSetStatus) {
+  return Math.max(
+    0,
+    Number(titleSetStatus?.sourceTitleCount ?? titleSetStatus?.titleCount) || 0,
+  );
+}
+
 async function loadBundledTwoParentIndex(titleSetStatus) {
   const manifestJson = await readBundledDatasetJson(BUNDLED_TWO_PARENT_INDEX_PATH);
   const manifest = normalizeBundledTwoParentIndexManifest(manifestJson);
@@ -292,7 +300,7 @@ async function loadBundledTwoParentIndex(titleSetStatus) {
   runtimeState.twoParentChunkLengths = [...manifest.chunkLengths];
   runtimeState.postingEncoding = manifest.postingEncoding;
   runtimeState.twoParentIndexVersionMatch = manifest.datasetVersion === String(titleSetStatus.version || '').trim()
-    && manifest.titleCount === Math.max(0, Number(titleSetStatus.titleCount) || 0);
+    && manifest.titleCount === getComparableTitleSetTitleCount(titleSetStatus);
 
   if (!runtimeState.twoParentIndexVersionMatch) {
     runtimeState.twoParentIndexReady = false;
@@ -491,7 +499,7 @@ function isTwoParentIndexVersionCompatibleWithTitleSetStatus(titleSetStatus) {
     runtimeState.twoParentIndexVersionMatch
     && runtimeState.twoParentIndexDatasetVersion
     && runtimeState.twoParentIndexDatasetVersion === String(titleSetStatus?.version || '').trim()
-    && runtimeState.twoParentIndexTitleCount === Math.max(0, Number(titleSetStatus?.titleCount) || 0),
+    && runtimeState.twoParentIndexTitleCount === getComparableTitleSetTitleCount(titleSetStatus),
   );
 }
 

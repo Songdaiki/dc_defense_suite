@@ -5,6 +5,11 @@ import {
   hasNormalizedSemiconductorRefluxTitle,
   isSemiconductorRefluxTitleSetReady,
 } from '../post/semiconductor-reflux-title-set.js';
+import {
+  ensureSemiconductorRefluxPostTitleMatcherLoaded,
+  getSemiconductorRefluxPostTitleMatcherStatus,
+  hasNormalizedSemiconductorRefluxTwoParentMixTitle,
+} from '../post/semiconductor-reflux-post-title-matcher.js';
 
 const STORAGE_KEY = 'commentRefluxDatasetState';
 
@@ -36,6 +41,12 @@ async function ensureCommentRefluxDatasetLoaded() {
   hydrateCommentRefluxDatasetState(sharedDatasetState);
   await saveSharedCommentRefluxDatasetState(sharedDatasetState);
   return getCommentRefluxDatasetStatus();
+}
+
+async function ensureCommentRefluxMatcherLoaded() {
+  await ensureCommentRefluxDatasetLoaded();
+  await ensureSemiconductorRefluxPostTitleMatcherLoaded();
+  return getCommentRefluxMatcherStatus();
 }
 
 async function loadSharedCommentRefluxDatasetState() {
@@ -89,14 +100,50 @@ function getCommentRefluxDatasetStatus() {
   };
 }
 
+function getCommentRefluxMatcherStatus() {
+  const datasetStatus = getCommentRefluxDatasetStatus();
+  const postMatcherStatus = getSemiconductorRefluxPostTitleMatcherStatus();
+  const datasetReady = Boolean(datasetStatus.ready);
+  const twoParentIndexReady = Boolean(datasetReady && postMatcherStatus.twoParentIndexReady);
+
+  return {
+    loaded: Boolean(datasetStatus.loaded || postMatcherStatus.loaded),
+    ready: datasetReady,
+    datasetReady,
+    memoCount: datasetStatus.memoCount,
+    updatedAt: datasetStatus.updatedAt,
+    sourceGalleryId: datasetStatus.sourceGalleryId,
+    sourceGalleryIds: [...datasetStatus.sourceGalleryIds],
+    version: datasetStatus.version,
+    sourceType: datasetStatus.sourceType,
+    twoParentIndexReady,
+    twoParentIndexVersionMatch: Boolean(datasetReady && postMatcherStatus.twoParentIndexVersionMatch),
+    twoParentIndexDatasetVersion: String(postMatcherStatus.twoParentIndexDatasetVersion || '').trim(),
+    twoParentBucketCount: Math.max(0, Number(postMatcherStatus.twoParentBucketCount) || 0),
+    twoParentChunkLengths: Array.isArray(postMatcherStatus.twoParentChunkLengths)
+      ? [...postMatcherStatus.twoParentChunkLengths]
+      : [],
+    reason: buildCommentRefluxMatcherReason(datasetStatus, postMatcherStatus),
+  };
+}
+
 function isCommentRefluxDatasetReady() {
   return runtimeState.loaded
     && runtimeState.sourceType === 'bundled_shared_title_set'
     && isSemiconductorRefluxTitleSetReady();
 }
 
+function isCommentRefluxMatcherReady() {
+  return isCommentRefluxDatasetReady();
+}
+
+function isCommentRefluxTwoParentReady() {
+  const matcherStatus = getCommentRefluxMatcherStatus();
+  return Boolean(matcherStatus.ready && matcherStatus.twoParentIndexReady);
+}
+
 function hasCommentRefluxMemo(memo) {
-  if (!isCommentRefluxDatasetReady()) {
+  if (!isCommentRefluxMatcherReady()) {
     return false;
   }
 
@@ -105,7 +152,15 @@ function hasCommentRefluxMemo(memo) {
     return false;
   }
 
-  return hasNormalizedSemiconductorRefluxTitle(normalizedMemo);
+  if (hasNormalizedSemiconductorRefluxTitle(normalizedMemo)) {
+    return true;
+  }
+
+  if (!isCommentRefluxTwoParentReady()) {
+    return false;
+  }
+
+  return hasNormalizedSemiconductorRefluxTwoParentMixTitle(normalizedMemo);
 }
 
 async function replaceCommentRefluxDataset() {
@@ -139,10 +194,30 @@ function normalizeSourceGalleryIds(value) {
   return [...new Set(normalizedSourceGalleryIds)];
 }
 
+function buildCommentRefluxMatcherReason(datasetStatus = {}, postMatcherStatus = {}) {
+  if (!datasetStatus.loaded) {
+    return '역류기 공용 dataset이 아직 로드되지 않았습니다.';
+  }
+
+  if (!datasetStatus.ready) {
+    return '역류기 공용 dataset이 비어 있습니다.';
+  }
+
+  if (!postMatcherStatus.twoParentIndexReady) {
+    return String(postMatcherStatus.reason || '').trim() || '댓글 2-parent matcher를 사용할 수 없습니다.';
+  }
+
+  return '';
+}
+
 export {
   ensureCommentRefluxDatasetLoaded,
+  ensureCommentRefluxMatcherLoaded,
   getCommentRefluxDatasetStatus,
+  getCommentRefluxMatcherStatus,
   hasCommentRefluxMemo,
   isCommentRefluxDatasetReady,
+  isCommentRefluxMatcherReady,
+  isCommentRefluxTwoParentReady,
   replaceCommentRefluxDataset,
 };

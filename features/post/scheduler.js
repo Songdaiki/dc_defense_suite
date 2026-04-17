@@ -43,6 +43,10 @@ import {
     resetRefluxSearchDuplicateBrokerRuntime,
     setRefluxSearchDuplicateBrokerLogger,
 } from './reflux-search-duplicate-broker.js';
+import {
+    REFLUX_FOUR_STEP_STAGE,
+    inspectRefluxFourStepCandidate,
+} from '../reflux-four-step-filter.js';
 import { resolveRefluxSearchGalleryId } from '../reflux-search-gallery-id.js';
 
 const STORAGE_KEY = 'postSchedulerState';
@@ -786,45 +790,46 @@ async function filterRefluxCandidatePosts(posts, context = {}) {
             continue;
         }
 
-        if (hasSemiconductorRefluxPostTitle(title)) {
+        const inspection = inspectRefluxFourStepCandidate({
+            value: title,
+            matchesDataset: hasSemiconductorRefluxPostTitle,
+            buildSearchContext: () => ({
+                deleteGalleryId: context.deleteGalleryId,
+                searchGalleryId: context.searchGalleryId,
+                postNo: post?.no,
+                title,
+            }),
+            peekSearchDecision: peekRefluxSearchDuplicateDecision,
+        });
+
+        if (inspection.stage === REFLUX_FOUR_STEP_STAGE.DATASET) {
             immediateMatches.push(post);
             stats.datasetCount += 1;
             continue;
         }
 
-        const cacheDecision = peekRefluxSearchDuplicateDecision({
-            deleteGalleryId: context.deleteGalleryId,
-            searchGalleryId: context.searchGalleryId,
-            postNo: post?.no,
-            title,
-        });
-        if (cacheDecision.result === 'positive') {
+        if (inspection.stage === REFLUX_FOUR_STEP_STAGE.SEARCH_CACHE_POSITIVE) {
             immediateMatches.push(post);
             stats.positiveCacheCount += 1;
             continue;
         }
 
-        if (cacheDecision.result === 'negative') {
+        if (inspection.stage === REFLUX_FOUR_STEP_STAGE.SEARCH_NEGATIVE) {
             stats.negativeCount += 1;
             continue;
         }
 
-        if (cacheDecision.result === 'pending') {
+        if (inspection.stage === REFLUX_FOUR_STEP_STAGE.SEARCH_PENDING) {
             stats.pendingCount += 1;
             continue;
         }
 
-        if (cacheDecision.result === 'error') {
+        if (inspection.stage === REFLUX_FOUR_STEP_STAGE.SEARCH_ERROR) {
             stats.errorCooldownCount += 1;
             continue;
         }
 
-        const didEnqueue = enqueueRefluxSearchDuplicate({
-            deleteGalleryId: context.deleteGalleryId,
-            searchGalleryId: context.searchGalleryId,
-            postNo: post?.no,
-            title,
-        });
+        const didEnqueue = enqueueRefluxSearchDuplicate(inspection.searchContext);
         if (didEnqueue) {
             stats.queueEnqueuedCount += 1;
         }

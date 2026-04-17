@@ -23,6 +23,7 @@ async function main() {
     outputPath,
     bucketCount,
     dfThreshold,
+    chunkLengths,
   } = parseCliArgs(process.argv.slice(2));
   const resolvedInputPath = path.resolve(process.cwd(), inputPath);
   const resolvedOutputPath = path.resolve(process.cwd(), outputPath);
@@ -31,6 +32,7 @@ async function main() {
   const buildResult = await buildTwoParentIndex(inputManifest, resolvedInputPath, {
     bucketCount,
     dfThreshold,
+    chunkLengths,
   });
   const writeSummary = await writeTwoParentIndexOutput(resolvedOutputPath, buildResult);
 
@@ -42,6 +44,7 @@ async function main() {
   console.log(`- overflow chunk 수: ${buildResult.overflowChunkCount}`);
   console.log(`- posting 수: ${buildResult.postingCount}`);
   console.log(`- bucket 수: ${buildResult.manifest.bucketCount}`);
+  console.log(`- chunkLengths: ${buildResult.manifest.chunkLengths.join(',')}`);
   console.log(`- 출력 manifest: ${resolvedOutputPath}`);
   console.log(`- 출력 bucket 수: ${writeSummary.bucketCount}`);
 }
@@ -51,6 +54,7 @@ function parseCliArgs(argv) {
   let outputPath = DEFAULT_OUTPUT_PATH;
   let bucketCount = DEFAULT_BUCKET_COUNT;
   let dfThreshold = DEFAULT_DF_THRESHOLD;
+  let chunkLengths = [...DEFAULT_CHUNK_LENGTHS];
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = String(argv[index] || '').trim();
@@ -76,6 +80,12 @@ function parseCliArgs(argv) {
       continue;
     }
 
+    if (token === '--chunk-lengths') {
+      chunkLengths = normalizeChunkLengthsArg(argv[index + 1], DEFAULT_CHUNK_LENGTHS);
+      index += 1;
+      continue;
+    }
+
     inputPath = token;
   }
 
@@ -84,12 +94,14 @@ function parseCliArgs(argv) {
     outputPath,
     bucketCount,
     dfThreshold,
+    chunkLengths,
   };
 }
 
 async function buildTwoParentIndex(inputManifest, inputManifestPath, options = {}) {
   const bucketCount = normalizePositiveInteger(options.bucketCount, DEFAULT_BUCKET_COUNT);
   const dfThreshold = normalizePositiveInteger(options.dfThreshold, DEFAULT_DF_THRESHOLD);
+  const chunkLengths = normalizeChunkLengthsArg(options.chunkLengths, DEFAULT_CHUNK_LENGTHS);
   const postingMap = new Map();
   let titleId = 0;
 
@@ -112,7 +124,7 @@ async function buildTwoParentIndex(inputManifest, inputManifestPath, options = {
       const representativeChunks = extractRefluxRepresentativeChunksFromNormalizedCompareKey(
         normalizedTitle,
         {
-          chunkLengths: DEFAULT_CHUNK_LENGTHS,
+          chunkLengths,
           minChunkLength: 3,
           minLatinChunkLength: 4,
           minHangulChunkLength: 3,
@@ -175,7 +187,7 @@ async function buildTwoParentIndex(inputManifest, inputManifestPath, options = {
       updatedAt: new Date().toISOString(),
       bucketCount,
       dfThreshold,
-      chunkLengths: [...DEFAULT_CHUNK_LENGTHS],
+      chunkLengths: [...chunkLengths],
       anchorMode: 'start_mid_end',
       postingEncoding: DEFAULT_POSTING_ENCODING,
       paths: [],
@@ -366,6 +378,17 @@ function normalizePositiveInteger(value, fallback = 0) {
   }
 
   return Math.trunc(parsedValue);
+}
+
+function normalizeChunkLengthsArg(value, fallbackValue) {
+  const normalizedValues = [...new Set(
+    (Array.isArray(value) ? value : String(value || '').split(','))
+      .map((token) => Math.trunc(Number(String(token || '').trim()) || 0))
+      .filter((chunkLength) => chunkLength >= 2),
+  )].sort((left, right) => left - right);
+  return normalizedValues.length > 0
+    ? normalizedValues
+    : [...fallbackValue];
 }
 
 function normalizeRelativeOutputPath(outputPath) {

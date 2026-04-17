@@ -11,9 +11,10 @@ import {
   normalizeCommentAttackMode,
 } from '../comment/attack-mode.js';
 import {
-  ensureCommentRefluxDatasetLoaded,
+  ensureCommentRefluxMatcherLoaded,
+  getCommentRefluxMatcherStatus,
   hasCommentRefluxMemo,
-  isCommentRefluxDatasetReady,
+  isCommentRefluxMatcherReady,
 } from '../comment/comment-reflux-dataset.js';
 import {
   filterFluidComments,
@@ -59,6 +60,7 @@ class Scheduler {
     this.totalAttackDetected = 0;
     this.totalAttackReleased = 0;
     this.reseedRemaining = 1;
+    this.lastLoggedCommentRefluxMatcherDegradedReason = '';
     this.logs = [];
 
     this.config = {
@@ -110,6 +112,7 @@ class Scheduler {
     this.currentManagedAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
     this.lastManagedAttackModeReason = '';
     this.reseedRemaining = 1;
+    this.lastLoggedCommentRefluxMatcherDegradedReason = '';
     this.log('🟢 댓글 감시 자동화 시작!');
     await this.saveState();
     this.ensureRunLoop();
@@ -475,15 +478,28 @@ class Scheduler {
       };
     }
 
-    let refluxDatasetReady = false;
+    let refluxMatcherReady = false;
+    let refluxMatcherStatus = getCommentRefluxMatcherStatus();
     try {
-      await ensureCommentRefluxDatasetLoaded();
-      refluxDatasetReady = isCommentRefluxDatasetReady();
+      await ensureCommentRefluxMatcherLoaded();
+      refluxMatcherReady = isCommentRefluxMatcherReady();
+      refluxMatcherStatus = getCommentRefluxMatcherStatus();
     } catch (error) {
-      this.log(`⚠️ 역류기 공용 dataset 로드 실패 - ${error.message}`);
+      const errorMessage = String(error?.message || 'unknown error').trim() || 'unknown error';
+      refluxMatcherStatus = {
+        ...refluxMatcherStatus,
+        ready: false,
+        twoParentIndexReady: false,
+        reason: errorMessage,
+      };
+      this.log(`⚠️ 역류기 댓글 matcher 준비 실패 - ${errorMessage}`);
     }
 
-    const refluxMatchCount = refluxDatasetReady
+    if (refluxMatcherReady && !refluxMatcherStatus.twoParentIndexReady) {
+      this.maybeLogCommentRefluxMatcherDegradedWarning(refluxMatcherStatus.reason);
+    }
+
+    const refluxMatchCount = refluxMatcherReady
       ? sampleComments.reduce((count, comment) => (
         hasCommentRefluxMemo(comment.memo) ? count + 1 : count
       ), 0)
@@ -495,10 +511,10 @@ class Scheduler {
     const refluxRatio = sampleCount > 0 ? refluxMatchCount / sampleCount : 0;
     const nonPureHangulRatio = sampleCount > 0 ? nonPureHangulCount / sampleCount : 0;
 
-    if (refluxDatasetReady && refluxRatio >= COMMENT_ATTACK_SAMPLE_RATIO_THRESHOLD) {
+    if (refluxMatcherReady && refluxRatio >= COMMENT_ATTACK_SAMPLE_RATIO_THRESHOLD) {
       return {
         attackMode: COMMENT_ATTACK_MODE.COMMENT_REFLUX,
-        reason: `샘플 유동 댓글 ${sampleCount}개 중 dataset 매치 ${refluxMatchCount}개 (${formatRatioPercent(refluxRatio)}%)`,
+        reason: `샘플 유동 댓글 ${sampleCount}개 중 matcher 매치 ${refluxMatchCount}개 (${formatRatioPercent(refluxRatio)}%)`,
       };
     }
 
@@ -596,6 +612,7 @@ class Scheduler {
     this.releaseHitCount = 0;
     this.currentManagedAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
     this.lastManagedAttackModeReason = '';
+    this.lastLoggedCommentRefluxMatcherDegradedReason = '';
   }
 
   log(message) {
@@ -607,6 +624,16 @@ class Scheduler {
     if (this.logs.length > 100) {
       this.logs = this.logs.slice(0, 100);
     }
+  }
+
+  maybeLogCommentRefluxMatcherDegradedWarning(reason = '') {
+    const normalizedReason = String(reason || '').trim() || 'unknown reason';
+    if (this.lastLoggedCommentRefluxMatcherDegradedReason === normalizedReason) {
+      return;
+    }
+
+    this.lastLoggedCommentRefluxMatcherDegradedReason = normalizedReason;
+    this.log(`⚠️ 댓글 2-parent index 준비 실패 - single-title matcher만 사용합니다. (${normalizedReason})`);
   }
 
   async saveState() {
@@ -697,6 +724,7 @@ class Scheduler {
   }
 
   getStatus() {
+    const refluxMatcherStatus = getCommentRefluxMatcherStatus();
     return {
       isRunning: this.isRunning,
       phase: this.phase,
@@ -713,6 +741,9 @@ class Scheduler {
       totalAttackDetected: this.totalAttackDetected,
       totalAttackReleased: this.totalAttackReleased,
       reseedRemaining: this.reseedRemaining,
+      refluxMatcherReady: Boolean(refluxMatcherStatus.ready),
+      refluxTwoParentReady: Boolean(refluxMatcherStatus.ready && refluxMatcherStatus.twoParentIndexReady),
+      refluxMatcherReason: String(refluxMatcherStatus.reason || ''),
       logs: this.logs.slice(0, 20),
       config: this.config,
     };
