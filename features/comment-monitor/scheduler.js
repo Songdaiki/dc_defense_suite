@@ -17,10 +17,19 @@ import {
   isCommentRefluxMatcherReady,
 } from '../comment/comment-reflux-dataset.js';
 import {
+  ensureCommentRefluxSearchDuplicateBrokerLoaded,
+  peekCommentRefluxSearchDuplicateDecision,
+  resolveCommentRefluxSearchDuplicateDecision,
+} from '../comment/comment-reflux-search-duplicate-broker.js';
+import {
+  buildCommentRefluxSearchQuery,
   filterFluidComments,
   isPureHangulCommentMemo,
   normalizeCommentMemo,
+  normalizeCommentRefluxCompareKey,
 } from '../comment/parser.js';
+import { resolveRefluxSearchGalleryId } from '../reflux-search-gallery-id.js';
+import { REFLUX_FOUR_STEP_STAGE, inspectRefluxFourStepCandidate } from '../reflux-four-step-filter.js';
 
 const STORAGE_KEY = 'commentMonitorSchedulerState';
 const COMMENT_ATTACK_SAMPLE_POST_LIMIT = 5;
@@ -392,6 +401,10 @@ class Scheduler {
     }
 
     const attackModeDecision = await this.buildManagedAttackModeDecision(metrics);
+    if (!this.isRunning || attackModeDecision?.stale) {
+      return;
+    }
+
     this.phase = PHASE.ATTACKING;
     this.attackSessionId = `comment_attack_${Date.now()}`;
     this.attackHitCount = 0;
@@ -499,11 +512,27 @@ class Scheduler {
       this.maybeLogCommentRefluxMatcherDegradedWarning(refluxMatcherStatus.reason);
     }
 
-    const refluxMatchCount = refluxMatcherReady
-      ? sampleComments.reduce((count, comment) => (
-        hasCommentRefluxMemo(comment.memo) ? count + 1 : count
-      ), 0)
-      : 0;
+    const refluxMatchStats = refluxMatcherReady
+      ? await this.countManagedCommentRefluxMatches(sampleComments)
+      : buildEmptyManagedCommentRefluxMatchStats();
+    if (refluxMatchStats.stale) {
+      return {
+        attackMode: COMMENT_ATTACK_MODE.DEFAULT,
+        reason: '댓글 감시 자동화가 정지되어 공격 판정을 중단했습니다.',
+        stale: true,
+      };
+    }
+
+    if (refluxMatchStats.brokerErrorMessage) {
+      this.log(`⚠️ 자동 역류기 샘플 search 준비 실패 - ${refluxMatchStats.brokerErrorMessage}`);
+    }
+
+    if (refluxMatchStats.searchErrorCount > 0) {
+      this.log(`⚠️ 자동 역류기 샘플 search 확인 실패 ${refluxMatchStats.searchErrorCount}건`);
+    }
+
+    const refluxMatchCount = refluxMatchStats.totalMatchCount;
+    const refluxSearchMatchCount = refluxMatchStats.searchCachePositiveCount + refluxMatchStats.searchPositiveCount;
     const nonPureHangulCount = sampleComments.reduce((count, comment) => (
       isNonPureHangulLikeComment(comment.memo) ? count + 1 : count
     ), 0);
@@ -514,21 +543,178 @@ class Scheduler {
     if (refluxMatcherReady && refluxRatio >= COMMENT_ATTACK_SAMPLE_RATIO_THRESHOLD) {
       return {
         attackMode: COMMENT_ATTACK_MODE.COMMENT_REFLUX,
-        reason: `샘플 유동 댓글 ${sampleCount}개 중 matcher 매치 ${refluxMatchCount}개 (${formatRatioPercent(refluxRatio)}%)`,
+        reason: `샘플 유동 댓글 ${sampleCount}개 중 matcher ${refluxMatchStats.matcherCount}개 + search ${refluxSearchMatchCount}개 = ${refluxMatchCount}개 (${formatRatioPercent(refluxRatio)}%)`,
       };
     }
 
     if (nonPureHangulRatio >= COMMENT_ATTACK_SAMPLE_RATIO_THRESHOLD) {
       return {
         attackMode: COMMENT_ATTACK_MODE.EXCLUDE_PURE_HANGUL,
-        reason: `샘플 유동 댓글 ${sampleCount}개 중 비순수한글 ${nonPureHangulCount}개 (${formatRatioPercent(nonPureHangulRatio)}%)`,
+        reason: `샘플 유동 댓글 ${sampleCount}개 중 비순수한글 ${nonPureHangulCount}개 (${formatRatioPercent(nonPureHangulRatio)}%) / 역류 matcher ${refluxMatchStats.matcherCount}개 + search ${refluxSearchMatchCount}개 = ${refluxMatchCount}개`,
       };
     }
 
     return {
       attackMode: COMMENT_ATTACK_MODE.DEFAULT,
-      reason: `샘플 유동 댓글 ${sampleCount}개 중 역류 ${refluxMatchCount}개 / 비순수한글 ${nonPureHangulCount}개라서 기본 댓글 방어 유지`,
+      reason: `샘플 유동 댓글 ${sampleCount}개 중 역류 matcher ${refluxMatchStats.matcherCount}개 + search ${refluxSearchMatchCount}개 = ${refluxMatchCount}개 / 비순수한글 ${nonPureHangulCount}개라서 기본 댓글 방어 유지`,
     };
+  }
+
+  buildManagedCommentRefluxSearchContext(comment, context = {}) {
+    const plainText = normalizeCommentMemo(comment?.memo);
+    const normalizedCompareKey = normalizeCommentRefluxCompareKey(plainText);
+    const searchQuery = buildCommentRefluxSearchQuery(plainText);
+    if (!plainText || !normalizedCompareKey || !searchQuery) {
+      return null;
+    }
+
+    return {
+      deleteGalleryId: String(context.deleteGalleryId || '').trim().toLowerCase(),
+      searchGalleryId: String(context.searchGalleryId || '').trim().toLowerCase(),
+      currentPostNo: Number(comment?.postNo) || 0,
+      plainText,
+      normalizedCompareKey,
+      searchQuery,
+    };
+  }
+
+  async countManagedCommentRefluxMatches(sampleComments = []) {
+    const stats = buildEmptyManagedCommentRefluxMatchStats();
+    const sampleCount = Array.isArray(sampleComments) ? sampleComments.length : 0;
+    const requiredMatchCount = Math.ceil(sampleCount * COMMENT_ATTACK_SAMPLE_RATIO_THRESHOLD);
+    if (sampleCount <= 0) {
+      return stats;
+    }
+
+    const matcherMissComments = [];
+    for (const comment of sampleComments) {
+      if (!this.isRunning) {
+        return {
+          ...stats,
+          stale: true,
+        };
+      }
+
+      if (hasCommentRefluxMemo(comment?.memo)) {
+        stats.matcherCount += 1;
+        stats.totalMatchCount += 1;
+      } else {
+        matcherMissComments.push(comment);
+      }
+    }
+
+    if (stats.totalMatchCount >= requiredMatchCount || matcherMissComments.length <= 0) {
+      return stats;
+    }
+
+    const deleteGalleryId = String(
+      this.commentScheduler?.config?.galleryId || this.config.galleryId || '',
+    ).trim().toLowerCase();
+    // 자동 감지도 실제 댓글 삭제 런타임과 같은 search 갤 기준을 써야 판정/실행이 어긋나지 않는다.
+    const searchGalleryId = resolveRefluxSearchGalleryId({
+      galleryId: deleteGalleryId,
+      refluxSearchGalleryId: this.commentScheduler?.config?.refluxSearchGalleryId,
+    });
+    if (!searchGalleryId) {
+      return stats;
+    }
+
+    try {
+      await ensureCommentRefluxSearchDuplicateBrokerLoaded();
+    } catch (error) {
+      return {
+        ...stats,
+        brokerErrorMessage: String(error?.message || 'unknown error').trim() || 'unknown error',
+      };
+    }
+
+    if (!this.isRunning) {
+      return {
+        ...stats,
+        stale: true,
+      };
+    }
+
+    const unresolvedJobs = [];
+    const sharedContext = {
+      deleteGalleryId,
+      searchGalleryId,
+    };
+
+    for (const comment of matcherMissComments) {
+      if (!this.isRunning) {
+        return {
+          ...stats,
+          stale: true,
+        };
+      }
+
+      const inspection = inspectRefluxFourStepCandidate({
+        value: comment,
+        matchesDataset: () => false,
+        buildSearchContext: (currentComment) => this.buildManagedCommentRefluxSearchContext(currentComment, sharedContext),
+        peekSearchDecision: peekCommentRefluxSearchDuplicateDecision,
+      });
+
+      if (inspection.stage === REFLUX_FOUR_STEP_STAGE.SEARCH_CACHE_POSITIVE) {
+        stats.searchCachePositiveCount += 1;
+        stats.totalMatchCount += 1;
+      } else if (inspection.stage === REFLUX_FOUR_STEP_STAGE.SEARCH_NEGATIVE) {
+        stats.searchNegativeCount += 1;
+      } else if (inspection.stage === REFLUX_FOUR_STEP_STAGE.SEARCH_ERROR) {
+        stats.searchErrorCount += 1;
+      } else {
+        unresolvedJobs.push(inspection.searchContext);
+      }
+
+      if (stats.totalMatchCount >= requiredMatchCount) {
+        return stats;
+      }
+    }
+
+    // 남은 unresolved를 전부 hit로 가정해도 70%를 못 넘으면 더 볼 필요가 없다.
+    if (stats.totalMatchCount + unresolvedJobs.length < requiredMatchCount) {
+      return stats;
+    }
+
+    for (let index = 0; index < unresolvedJobs.length; index += 1) {
+      const remainingCandidateCount = unresolvedJobs.length - index;
+      if (stats.totalMatchCount + remainingCandidateCount < requiredMatchCount) {
+        return stats;
+      }
+
+      if (!this.isRunning) {
+        return {
+          ...stats,
+          stale: true,
+        };
+      }
+
+      const decision = await resolveCommentRefluxSearchDuplicateDecision(unresolvedJobs[index]);
+      if (!this.isRunning) {
+        return {
+          ...stats,
+          stale: true,
+        };
+      }
+
+      if (decision.result === 'positive') {
+        stats.searchPositiveCount += 1;
+        stats.totalMatchCount += 1;
+      } else if (decision.result === 'negative') {
+        stats.searchNegativeCount += 1;
+      } else if (decision.result === 'cancelled') {
+        stats.cancelledCount += 1;
+      } else {
+        stats.searchErrorCount += 1;
+      }
+
+      if (stats.totalMatchCount >= requiredMatchCount) {
+        return stats;
+      }
+    }
+
+    return stats;
   }
 
   async collectSampleFluidComments(topChangedPosts = []) {
@@ -764,6 +950,20 @@ function buildSeedMetrics(snapshotPostCount) {
   return {
     ...buildEmptyMetrics(),
     snapshotPostCount,
+  };
+}
+
+function buildEmptyManagedCommentRefluxMatchStats() {
+  return {
+    stale: false,
+    totalMatchCount: 0,
+    matcherCount: 0,
+    searchCachePositiveCount: 0,
+    searchPositiveCount: 0,
+    searchNegativeCount: 0,
+    searchErrorCount: 0,
+    cancelledCount: 0,
+    brokerErrorMessage: '',
   };
 }
 
