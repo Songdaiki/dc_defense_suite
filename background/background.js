@@ -19,6 +19,11 @@ import {
   Scheduler as BumpPostScheduler,
   normalizeConfig as normalizeBumpPostConfig,
 } from '../features/bump-post/scheduler.js';
+import { getAgentBaseUrlValidationMessage } from '../features/self-hosted-vpn/api.js';
+import {
+  Scheduler as SelfHostedVpnScheduler,
+  normalizeConfig as normalizeSelfHostedVpnConfig,
+} from '../features/self-hosted-vpn/scheduler.js';
 import {
   Scheduler as RefluxDatasetCollectorScheduler,
   normalizeConfig as normalizeRefluxDatasetCollectorConfig,
@@ -82,6 +87,7 @@ const conceptPatrolScheduler = new ConceptPatrolScheduler({
 });
 const hanRefreshIpBanScheduler = new HanRefreshIpBanScheduler();
 const bumpPostScheduler = new BumpPostScheduler();
+const selfHostedVpnScheduler = new SelfHostedVpnScheduler();
 const refluxDatasetCollectorScheduler = new RefluxDatasetCollectorScheduler();
 const refluxOverlayCollectorScheduler = new RefluxOverlayCollectorScheduler();
 const commentRefluxCollectorScheduler = new CommentRefluxCollectorScheduler();
@@ -102,6 +108,7 @@ const schedulers = {
   conceptPatrol: conceptPatrolScheduler,
   hanRefreshIpBan: hanRefreshIpBanScheduler,
   bumpPost: bumpPostScheduler,
+  selfHostedVpn: selfHostedVpnScheduler,
   refluxDatasetCollector: refluxDatasetCollectorScheduler,
   refluxOverlayCollector: refluxOverlayCollectorScheduler,
   commentRefluxCollector: commentRefluxCollectorScheduler,
@@ -216,6 +223,7 @@ async function resumeAllSchedulers() {
     await loadSchedulerStateIfIdle(schedulers.conceptPatrol);
     await loadSchedulerStateIfIdle(schedulers.hanRefreshIpBan);
     await loadSchedulerStateIfIdle(schedulers.bumpPost);
+    await loadSchedulerStateIfIdle(schedulers.selfHostedVpn);
     await loadSchedulerStateIfIdle(schedulers.refluxDatasetCollector);
     await loadSchedulerStateIfIdle(schedulers.refluxOverlayCollector);
     await loadSchedulerStateIfIdle(schedulers.commentRefluxCollector);
@@ -276,6 +284,7 @@ async function resumeAllSchedulers() {
     await resumeStandaloneScheduler(schedulers.conceptPatrol, '🔁 저장된 개념글순회 상태 복원');
     await resumeStandaloneScheduler(schedulers.hanRefreshIpBan, '🔁 저장된 도배기 갱신 차단 자동 상태 복원');
     await resumeStandaloneScheduler(schedulers.bumpPost, '🔁 저장된 끌올 자동 상태 복원');
+    await resumeStandaloneScheduler(schedulers.selfHostedVpn, '🔁 저장된 자체 VPN 테스트 상태 복원');
     await resolveUidWarningAutoBanResumeConflict();
     await resumeStandaloneScheduler(schedulers.uidWarningAutoBan, '🔁 저장된 분탕자동차단 상태 복원');
     await resumeUidRatioWarningForActiveTab();
@@ -319,6 +328,26 @@ function getScheduler(feature) {
   return schedulers[feature] || null;
 }
 
+async function refreshSelfHostedVpnStatusIfNeeded(options = {}) {
+  const scheduler = schedulers.selfHostedVpn;
+  if (!scheduler || typeof scheduler.refreshStatusFromAgent !== 'function') {
+    return;
+  }
+
+  await scheduler.refreshStatusFromAgent(options);
+}
+
+function getSelfHostedVpnPollingTimeoutMs() {
+  const configuredTimeout = Number.parseInt(
+    String(schedulers.selfHostedVpn?.config?.requestTimeoutMs ?? ''),
+    10,
+  );
+  const safeDefaultTimeout = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? configuredTimeout
+    : 800;
+  return Math.min(safeDefaultTimeout, 1200);
+}
+
 function getAllStatuses() {
   return {
     comment: schedulers.comment.getStatus(),
@@ -327,6 +356,7 @@ function getAllStatuses() {
     conceptPatrol: schedulers.conceptPatrol.getStatus(),
     hanRefreshIpBan: schedulers.hanRefreshIpBan.getStatus(),
     bumpPost: schedulers.bumpPost.getStatus(),
+    selfHostedVpn: schedulers.selfHostedVpn.getStatus(),
     refluxDatasetCollector: schedulers.refluxDatasetCollector.getStatus(),
     refluxOverlayCollector: schedulers.refluxOverlayCollector.getStatus(),
     commentRefluxCollector: schedulers.commentRefluxCollector.getStatus(),
@@ -343,6 +373,9 @@ async function handleMessage(message) {
   await ensureSchedulersReadyForMessage();
 
   if (message.action === 'getAllStatus') {
+    await refreshSelfHostedVpnStatusIfNeeded({
+      timeoutMs: getSelfHostedVpnPollingTimeoutMs(),
+    });
     return {
       success: true,
       statuses: getAllStatuses(),
@@ -500,6 +533,18 @@ async function handleMessage(message) {
 
   switch (message.action) {
     case 'start':
+      if (message.feature === 'selfHostedVpn') {
+        const selfHostedVpnStartBlockMessage = getSelfHostedVpnStartBlockMessage();
+        if (selfHostedVpnStartBlockMessage) {
+          return {
+            success: false,
+            message: selfHostedVpnStartBlockMessage,
+            status: scheduler.getStatus(),
+            statuses: getAllStatuses(),
+            sessionFallbackStatus: getDcSessionBrokerStatus(),
+          };
+        }
+      }
       if (typeof scheduler.getStartBlockReason === 'function') {
         const guardedStartBlockReason = scheduler.getStartBlockReason();
         if (guardedStartBlockReason) {
@@ -547,7 +592,29 @@ async function handleMessage(message) {
       return { success: true, status: scheduler.getStatus(), statuses: getAllStatuses() };
 
     case 'getStatus':
+      if (message.feature === 'selfHostedVpn') {
+        await refreshSelfHostedVpnStatusIfNeeded({
+          timeoutMs: getSelfHostedVpnPollingTimeoutMs(),
+        });
+      }
       return { success: true, status: scheduler.getStatus() };
+
+    case 'refreshStatus':
+      if (message.feature !== 'selfHostedVpn') {
+        return {
+          success: false,
+          message: '이 기능은 수동 상태 새로고침을 지원하지 않습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+
+      await refreshSelfHostedVpnStatusIfNeeded({ force: true, logFailures: true });
+      return {
+        success: true,
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+      };
 
     case 'updateConfig': {
       let partialConfigMessage = '';
@@ -577,6 +644,16 @@ async function handleMessage(message) {
           message.config = {
             ...message.config,
             refluxSearchGalleryId: trimmedSearchGalleryId,
+          };
+        }
+
+        if (
+          ['post', 'comment'].includes(message.feature)
+          && message.config.useVpnGatePrefixFilter !== undefined
+        ) {
+          message.config = {
+            ...message.config,
+            useVpnGatePrefixFilter: Boolean(message.config.useVpnGatePrefixFilter),
           };
         }
 
@@ -619,6 +696,23 @@ async function handleMessage(message) {
             ...scheduler.config,
             ...message.config,
           });
+        }
+
+        if (message.feature === 'selfHostedVpn') {
+          message.config = normalizeSelfHostedVpnConfig({
+            ...scheduler.config,
+            ...message.config,
+          });
+
+          const agentBaseUrlValidationMessage = getAgentBaseUrlValidationMessage(message.config.agentBaseUrl);
+          if (agentBaseUrlValidationMessage) {
+            return {
+              success: false,
+              message: agentBaseUrlValidationMessage,
+              status: scheduler.getStatus(),
+              statuses: getAllStatuses(),
+            };
+          }
         }
 
         if (message.feature === 'refluxDatasetCollector') {
@@ -751,6 +845,14 @@ async function handleMessage(message) {
         return {
           success: false,
           message: '역류댓글 수집 실행 중에는 통계와 로그를 초기화할 수 없습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+      if (message.feature === 'selfHostedVpn' && scheduler.isRunning) {
+        return {
+          success: false,
+          message: 'VPN 연결 중에는 상태 기록과 로그를 초기화할 수 없습니다.',
           status: scheduler.getStatus(),
           statuses: getAllStatuses(),
         };
@@ -1000,6 +1102,32 @@ function resetSchedulerStats(feature, scheduler) {
       scheduler.endsAt = '';
       scheduler.nextRunAt = '';
     }
+    return;
+  }
+
+  if (feature === 'selfHostedVpn') {
+    scheduler.isRunning = false;
+    scheduler.phase = 'IDLE';
+    scheduler.healthOk = false;
+    scheduler.agentReachable = false;
+    scheduler.agentVersion = '';
+    scheduler.lastSyncAt = '';
+    scheduler.lastHealthAt = '';
+    scheduler.operationId = '';
+    scheduler.activeProfileId = '';
+    scheduler.publicIpBefore = '';
+    scheduler.publicIpAfter = '';
+    scheduler.currentPublicIp = '';
+    scheduler.publicIpProvider = '';
+    scheduler.ipv4DefaultRouteChanged = false;
+    scheduler.ipv6DefaultRouteChanged = false;
+    scheduler.dnsChanged = false;
+    scheduler.activeAdapterName = '';
+    scheduler.connectedAt = '';
+    scheduler.lastErrorCode = '';
+    scheduler.lastErrorMessage = '';
+    scheduler.lastSyncCompletedAtMs = 0;
+    scheduler.logs = [];
     return;
   }
 
@@ -1320,6 +1448,38 @@ function isSchedulerBusy(scheduler) {
   return Boolean(scheduler?.isRunning || scheduler?.runPromise || scheduler?.startAbortController);
 }
 
+function getSelfHostedVpnBlockingFeatures() {
+  const blockingFeatures = [...getBusyFeatures()];
+
+  if (isSchedulerBusy(schedulers.refluxDatasetCollector)) {
+    blockingFeatures.push('Local 수집');
+  }
+
+  if (isSchedulerBusy(schedulers.commentRefluxCollector)) {
+    blockingFeatures.push('역류댓글 수집');
+  }
+
+  if (isSchedulerBusy(schedulers.refluxOverlayCollector)) {
+    blockingFeatures.push('임시 Overlay 수집');
+  }
+
+  return [...new Set(blockingFeatures)];
+}
+
+function getSelfHostedVpnStartBlockMessage() {
+  const sessionFallbackStatus = getDcSessionBrokerStatus();
+  if (sessionFallbackStatus.switchInProgress || sessionFallbackStatus.sessionAutomationInProgress) {
+    return '로그인 세션 자동화가 진행 중일 때는 VPN 연결을 시작할 수 없습니다.';
+  }
+
+  const busyFeatures = getSelfHostedVpnBlockingFeatures();
+  if (busyFeatures.length > 0) {
+    return `VPN 연결 전에 먼저 정지하세요: ${busyFeatures.join(', ')}`;
+  }
+
+  return '';
+}
+
 function getConfigUpdateBlockMessage(feature, scheduler, config) {
   if (!scheduler.isRunning && !scheduler.startAbortController) {
     return '';
@@ -1374,6 +1534,28 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
       && Number(config.intervalMinutes) !== Number(scheduler.config.intervalMinutes);
     if (postNoChanged || durationChanged || intervalChanged) {
       return '끌올 자동 설정은 기능을 정지한 뒤 변경하세요.';
+    }
+  }
+
+  if (feature === 'selfHostedVpn') {
+    const agentBaseUrlChanged = config.agentBaseUrl !== undefined
+      && String(config.agentBaseUrl || '') !== String(scheduler.config.agentBaseUrl || '');
+    const authTokenChanged = config.authToken !== undefined
+      && String(config.authToken || '') !== String(scheduler.config.authToken || '');
+    const profileIdChanged = config.profileId !== undefined
+      && String(config.profileId || '') !== String(scheduler.config.profileId || '');
+    const requestTimeoutChanged = config.requestTimeoutMs !== undefined
+      && Number(config.requestTimeoutMs) !== Number(scheduler.config.requestTimeoutMs);
+    const actionTimeoutChanged = config.actionTimeoutMs !== undefined
+      && Number(config.actionTimeoutMs) !== Number(scheduler.config.actionTimeoutMs);
+    if (
+      agentBaseUrlChanged
+      || authTokenChanged
+      || profileIdChanged
+      || requestTimeoutChanged
+      || actionTimeoutChanged
+    ) {
+      return '자체 VPN 테스트 설정은 연결을 끊은 뒤 변경하세요.';
     }
   }
 
@@ -1527,6 +1709,9 @@ async function stopDormantMonitorChildSchedulers() {
     if (typeof schedulers.post.cancelPendingRuntimeTransition === 'function') {
       schedulers.post.cancelPendingRuntimeTransition('감시 자동화 child 정리로 게시글 분류 모드 전환을 취소했습니다.');
     }
+    if (typeof schedulers.post.releaseAllKnownVpnGatePrefixConsumers === 'function') {
+      await schedulers.post.releaseAllKnownVpnGatePrefixConsumers();
+    }
     schedulers.post.clearRuntimeAttackMode();
     await schedulers.post.saveState();
   }
@@ -1578,6 +1763,9 @@ async function stopDormantCommentMonitorChildScheduler() {
   }
 
   schedulers.comment.isRunning = false;
+  if (typeof schedulers.comment.releaseAllKnownVpnGatePrefixConsumers === 'function') {
+    await schedulers.comment.releaseAllKnownVpnGatePrefixConsumers();
+  }
   if (typeof schedulers.comment.setCurrentSource === 'function') {
     schedulers.comment.setCurrentSource('', { logChange: false });
   }

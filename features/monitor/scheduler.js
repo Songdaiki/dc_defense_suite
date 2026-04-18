@@ -660,7 +660,7 @@ class Scheduler {
         postStateChanged = true;
       }
 
-      if (this.postScheduler.setMonitorAttackMode(this.attackMode)) {
+      if (await this.postScheduler.setMonitorAttackMode(this.attackMode)) {
         postStateChanged = true;
       }
 

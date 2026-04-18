@@ -8,6 +8,7 @@ const DIRTY_FEATURES = {
   conceptPatrol: false,
   hanRefreshIpBan: false,
   bumpPost: false,
+  selfHostedVpn: false,
   refluxDatasetCollector: false,
   refluxOverlayCollector: false,
   commentRefluxCollector: false,
@@ -19,6 +20,10 @@ const DIRTY_FEATURES = {
   monitor: false,
   uidWarningAutoBan: false,
 };
+const INLINE_SETTING_DIRTY = {
+  commentVpnGate: false,
+  postVpnGate: false,
+};
 let sharedConfigDirty = false;
 let sessionFallbackDirty = false;
 let latestMonitorStatus = null;
@@ -28,6 +33,9 @@ let latestSessionFallbackStatus = null;
 let latestUidRatioWarningStatus = null;
 let latestUidWarningAutoBanStatus = null;
 let latestBumpPostStatus = null;
+let latestCommentStatus = null;
+let latestPostStatus = null;
+let latestSelfHostedVpnStatus = null;
 let latestRefluxDatasetCollectorStatus = null;
 let latestRefluxOverlayCollectorStatus = null;
 let latestRefluxOverlayCollectorOverlays = [];
@@ -156,6 +164,35 @@ const FEATURE_DOM = {
     saveConfigBtn: document.getElementById('bumpPostSaveConfigBtn'),
     resetBtn: document.getElementById('bumpPostResetBtn'),
   },
+  selfHostedVpn: {
+    toggleBtn: document.getElementById('selfHostedVpnToggleBtn'),
+    toggleLabel: document.getElementById('selfHostedVpnToggleLabel'),
+    statusText: document.getElementById('selfHostedVpnStatusText'),
+    agentHealthText: document.getElementById('selfHostedVpnAgentHealthText'),
+    agentVersionText: document.getElementById('selfHostedVpnAgentVersionText'),
+    profileIdText: document.getElementById('selfHostedVpnProfileIdText'),
+    currentPublicIpText: document.getElementById('selfHostedVpnCurrentPublicIpText'),
+    publicIpBeforeText: document.getElementById('selfHostedVpnPublicIpBeforeText'),
+    publicIpAfterText: document.getElementById('selfHostedVpnPublicIpAfterText'),
+    activeAdapterText: document.getElementById('selfHostedVpnActiveAdapterText'),
+    ipv4RouteText: document.getElementById('selfHostedVpnIpv4RouteText'),
+    ipv6RouteText: document.getElementById('selfHostedVpnIpv6RouteText'),
+    dnsChangedText: document.getElementById('selfHostedVpnDnsChangedText'),
+    lastSyncAtText: document.getElementById('selfHostedVpnLastSyncAtText'),
+    lastHealthAtText: document.getElementById('selfHostedVpnLastHealthAtText'),
+    connectedAtText: document.getElementById('selfHostedVpnConnectedAtText'),
+    lastErrorCodeText: document.getElementById('selfHostedVpnLastErrorCodeText'),
+    metaText: document.getElementById('selfHostedVpnMetaText'),
+    logList: document.getElementById('selfHostedVpnLogList'),
+    agentBaseUrlInput: document.getElementById('selfHostedVpnAgentBaseUrl'),
+    authTokenInput: document.getElementById('selfHostedVpnAuthToken'),
+    profileIdInput: document.getElementById('selfHostedVpnProfileId'),
+    requestTimeoutMsInput: document.getElementById('selfHostedVpnRequestTimeoutMs'),
+    actionTimeoutMsInput: document.getElementById('selfHostedVpnActionTimeoutMs'),
+    saveConfigBtn: document.getElementById('selfHostedVpnSaveConfigBtn'),
+    refreshBtn: document.getElementById('selfHostedVpnRefreshBtn'),
+    resetBtn: document.getElementById('selfHostedVpnResetBtn'),
+  },
   refluxDatasetCollector: {
     toggleBtn: document.getElementById('refluxDatasetCollectorToggleBtn'),
     toggleLabel: document.getElementById('refluxDatasetCollectorToggleLabel'),
@@ -278,6 +315,8 @@ const FEATURE_DOM = {
     requestDelayInput: document.getElementById('commentRequestDelay'),
     cycleDelayInput: document.getElementById('commentCycleDelay'),
     refluxSearchGalleryIdInput: document.getElementById('commentRefluxSearchGalleryId'),
+    useVpnGatePrefixFilterInput: document.getElementById('commentUseVpnGatePrefixFilter'),
+    vpnGatePrefixSaveBtn: document.getElementById('commentVpnGatePrefixSaveBtn'),
     postConcurrencyInput: document.getElementById('commentPostConcurrency'),
     banOnDeleteInput: document.getElementById('commentBanOnDelete'),
     excludePureHangulInput: document.getElementById('commentExcludePureHangul'),
@@ -299,6 +338,8 @@ const FEATURE_DOM = {
     requestDelayInput: document.getElementById('postRequestDelay'),
     cycleDelayInput: document.getElementById('postCycleDelay'),
     refluxSearchGalleryIdInput: document.getElementById('postRefluxSearchGalleryId'),
+    useVpnGatePrefixFilterInput: document.getElementById('postUseVpnGatePrefixFilter'),
+    vpnGatePrefixSaveBtn: document.getElementById('postVpnGatePrefixSaveBtn'),
     cjkModeToggleInput: document.getElementById('postCjkModeToggle'),
     semiconductorRefluxModeToggleInput: document.getElementById('postSemiconductorRefluxModeToggle'),
     page1NoCutoffModeToggleInput: document.getElementById('postPage1NoCutoffModeToggle'),
@@ -442,6 +483,7 @@ function bindFeatureEvents() {
   bindConfigDirtyTracking('conceptPatrol');
   bindConfigDirtyTracking('hanRefreshIpBan');
   bindConfigDirtyTracking('bumpPost');
+  bindConfigDirtyTracking('selfHostedVpn');
   bindConfigDirtyTracking('refluxDatasetCollector');
   bindConfigDirtyTracking('refluxOverlayCollector');
   bindConfigDirtyTracking('commentRefluxCollector');
@@ -455,6 +497,7 @@ function bindFeatureEvents() {
   bindConceptMonitorEvents();
   bindHanRefreshIpBanEvents();
   bindBumpPostEvents();
+  bindSelfHostedVpnEvents();
   bindRefluxDatasetCollectorEvents();
   bindRefluxOverlayCollectorEvents();
   bindCommentRefluxCollectorEvents();
@@ -954,6 +997,100 @@ function bindBumpPostEvents() {
     }
 
     const response = await sendFeatureMessage('bumpPost', { action: 'resetStats' });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+}
+
+function bindSelfHostedVpnEvents() {
+  const dom = FEATURE_DOM.selfHostedVpn;
+
+  dom.toggleBtn.addEventListener('change', async () => {
+    const action = dom.toggleBtn.checked ? 'start' : 'stop';
+
+    if (action === 'start' && DIRTY_FEATURES.selfHostedVpn) {
+      alert('자체 VPN 테스트 설정을 먼저 저장하세요.');
+      await refreshAllStatuses();
+      return;
+    }
+
+    const response = await sendFeatureMessage('selfHostedVpn', { action });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.saveConfigBtn.addEventListener('click', async () => {
+    const config = {
+      agentBaseUrl: dom.agentBaseUrlInput.value.trim(),
+      authToken: dom.authTokenInput.value,
+      profileId: dom.profileIdInput.value.trim(),
+      requestTimeoutMs: Math.max(100, parseOptionalInt(dom.requestTimeoutMsInput.value, 800)),
+      actionTimeoutMs: Math.max(100, parseOptionalInt(dom.actionTimeoutMsInput.value, 3000)),
+    };
+
+    const response = await sendFeatureMessage('selfHostedVpn', { action: 'updateConfig', config });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    DIRTY_FEATURES.selfHostedVpn = false;
+    flashSaved(dom.saveConfigBtn);
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.refreshBtn.addEventListener('click', async () => {
+    const response = await sendFeatureMessage('selfHostedVpn', { action: 'refreshStatus' });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.resetBtn.addEventListener('click', async () => {
+    if (!confirm('자체 VPN 테스트 상태 기록과 로그를 초기화하시겠습니까?')) {
+      return;
+    }
+
+    const response = await sendFeatureMessage('selfHostedVpn', { action: 'resetStats' });
     if (!response?.success) {
       if (response?.message) {
         alert(response.message);
@@ -1532,6 +1669,37 @@ function bindCommentEvents() {
   bindCommentQuickAttackModeToggle(dom.excludePureHangulInput, 'exclude_pure_hangul', '한글제외 유동닉댓글 삭제');
   bindCommentQuickAttackModeToggle(dom.commentRefluxModeInput, 'comment_reflux', '역류기 공용 matcher 공격');
 
+  dom.useVpnGatePrefixFilterInput.addEventListener('change', () => {
+    INLINE_SETTING_DIRTY.commentVpnGate = dom.useVpnGatePrefixFilterInput.checked !== Boolean(
+      latestCommentStatus?.config?.useVpnGatePrefixFilter ?? false,
+    );
+  });
+
+  dom.vpnGatePrefixSaveBtn.addEventListener('click', async () => {
+    const response = await sendFeatureMessage('comment', {
+      action: 'updateConfig',
+      config: {
+        useVpnGatePrefixFilter: dom.useVpnGatePrefixFilterInput.checked,
+      },
+    });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    INLINE_SETTING_DIRTY.commentVpnGate = false;
+    flashSaved(dom.vpnGatePrefixSaveBtn, '✅ 저장');
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+      return;
+    }
+
+    updateCommentUI(response.status);
+  });
+
   dom.saveConfigBtn.addEventListener('click', async () => {
     const refluxSearchGalleryId = normalizeRefluxSearchGalleryIdInputValue(dom.refluxSearchGalleryIdInput.value);
     if (refluxSearchGalleryId && !isValidRefluxSearchGalleryId(refluxSearchGalleryId)) {
@@ -1677,6 +1845,36 @@ function bindPostEvents() {
   bindPostQuickAttackModeToggle(dom.cjkModeToggleInput, 'cjk_narrow', '중국어/한자 공격');
   bindPostQuickAttackModeToggle(dom.semiconductorRefluxModeToggleInput, 'semiconductor_reflux', '역류기 공격');
   bindPostQuickAttackModeToggle(dom.page1NoCutoffModeToggleInput, 'page1_no_cutoff', '1페이지 전체 검사');
+
+  dom.useVpnGatePrefixFilterInput.addEventListener('change', () => {
+    INLINE_SETTING_DIRTY.postVpnGate = dom.useVpnGatePrefixFilterInput.checked !== Boolean(
+      latestPostStatus?.config?.useVpnGatePrefixFilter ?? false,
+    );
+  });
+
+  dom.vpnGatePrefixSaveBtn.addEventListener('click', async () => {
+    const response = await sendFeatureMessage('post', {
+      action: 'updateConfig',
+      config: {
+        useVpnGatePrefixFilter: dom.useVpnGatePrefixFilterInput.checked,
+      },
+    });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    INLINE_SETTING_DIRTY.postVpnGate = false;
+    flashSaved(dom.vpnGatePrefixSaveBtn, '✅ 저장');
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      updatePostUI(response.status);
+    }
+  });
 
   dom.saveConfigBtn.addEventListener('click', async () => {
     const refluxSearchGalleryId = normalizeRefluxSearchGalleryIdInputValue(dom.refluxSearchGalleryIdInput.value);
@@ -2206,6 +2404,7 @@ function applyStatuses(statuses) {
   updateConceptPatrolUI(statuses.conceptPatrol);
   updateHanRefreshIpBanUI(statuses.hanRefreshIpBan);
   updateBumpPostUI(statuses.bumpPost);
+  updateSelfHostedVpnUI(statuses.selfHostedVpn);
   updateRefluxDatasetCollectorUI(statuses.refluxDatasetCollector);
   updateRefluxOverlayCollectorUI(statuses.refluxOverlayCollector);
   updateCommentRefluxCollectorUI(statuses.commentRefluxCollector);
@@ -2494,6 +2693,65 @@ function updateBumpPostUI(status) {
   setDisabled(dom.toggleBtn, false);
 }
 
+function updateSelfHostedVpnUI(status) {
+  const dom = FEATURE_DOM.selfHostedVpn;
+  if (!dom?.toggleBtn) {
+    return;
+  }
+
+  const nextStatus = status || buildDefaultSelfHostedVpnStatus();
+  latestSelfHostedVpnStatus = nextStatus;
+
+  const ipv4RouteDisplay = getSelfHostedVpnIpv4RouteDisplay(nextStatus);
+  const ipv6RouteDisplay = getSelfHostedVpnIpv6RouteDisplay(nextStatus);
+  const dnsDisplay = getSelfHostedVpnDnsDisplay(nextStatus);
+
+  updateToggle(dom, nextStatus.isRunning);
+  updateStatusText(
+    dom.statusText,
+    getSelfHostedVpnStatusLabel(nextStatus),
+    getSelfHostedVpnStatusClassName(nextStatus),
+  );
+  updateStatusText(
+    dom.agentHealthText,
+    getSelfHostedVpnAgentHealthLabel(nextStatus),
+    getSelfHostedVpnAgentHealthClassName(nextStatus),
+  );
+  dom.agentVersionText.textContent = nextStatus.agentVersion || '-';
+  dom.profileIdText.textContent = nextStatus.activeProfileId || nextStatus.config?.profileId || '-';
+  dom.currentPublicIpText.textContent = buildSelfHostedVpnPublicIpText(
+    nextStatus.currentPublicIp,
+    nextStatus.publicIpProvider,
+  );
+  dom.publicIpBeforeText.textContent = nextStatus.publicIpBefore || '-';
+  dom.publicIpAfterText.textContent = nextStatus.publicIpAfter || '-';
+  dom.activeAdapterText.textContent = nextStatus.activeAdapterName || '-';
+  updateStatusText(dom.ipv4RouteText, ipv4RouteDisplay.text, ipv4RouteDisplay.className);
+  updateStatusText(dom.ipv6RouteText, ipv6RouteDisplay.text, ipv6RouteDisplay.className);
+  updateStatusText(dom.dnsChangedText, dnsDisplay.text, dnsDisplay.className);
+  dom.lastSyncAtText.textContent = formatTimestamp(nextStatus.lastSyncAt);
+  dom.lastHealthAtText.textContent = formatTimestamp(nextStatus.lastHealthAt);
+  dom.connectedAtText.textContent = formatTimestamp(nextStatus.connectedAt);
+  dom.lastErrorCodeText.textContent = nextStatus.lastErrorCode || '-';
+  dom.metaText.textContent = buildSelfHostedVpnMetaText(nextStatus);
+
+  syncFeatureConfigInputs('selfHostedVpn', [
+    [dom.agentBaseUrlInput, nextStatus.config?.agentBaseUrl ?? 'http://127.0.0.1:8765'],
+    [dom.authTokenInput, nextStatus.config?.authToken ?? ''],
+    [dom.profileIdInput, nextStatus.config?.profileId ?? ''],
+    [dom.requestTimeoutMsInput, nextStatus.config?.requestTimeoutMs ?? 800],
+    [dom.actionTimeoutMsInput, nextStatus.config?.actionTimeoutMs ?? 3000],
+  ]);
+  updateLogList(dom.logList, nextStatus.logs);
+
+  const isLocked = Boolean(nextStatus.isRunning);
+  getFeatureConfigInputs('selfHostedVpn').forEach((input) => setDisabled(input, isLocked));
+  setDisabled(dom.saveConfigBtn, isLocked);
+  setDisabled(dom.refreshBtn, false);
+  setDisabled(dom.resetBtn, isLocked);
+  setDisabled(dom.toggleBtn, false);
+}
+
 function updateRefluxDatasetCollectorUI(status) {
   const dom = FEATURE_DOM.refluxDatasetCollector;
   if (!dom?.toggleBtn) {
@@ -2742,6 +3000,7 @@ function updateCommentUI(status) {
     return;
   }
 
+  latestCommentStatus = status;
   const dom = FEATURE_DOM.comment;
   updateToggle(dom, status.isRunning);
   updateStatusText(dom.statusText, status.isRunning ? '🟢 실행 중' : '🔴 정지', status.isRunning ? 'status-on' : 'status-off');
@@ -2761,6 +3020,9 @@ function updateCommentUI(status) {
     [dom.banOnDeleteInput, status.config?.banOnDelete ?? true],
     [dom.avoidHourInput, status.config?.avoidHour ?? '1'],
   ]);
+  if (!INLINE_SETTING_DIRTY.commentVpnGate) {
+    syncConfigInput(dom.useVpnGatePrefixFilterInput, status.config?.useVpnGatePrefixFilter ?? false);
+  }
   dom.excludePureHangulInput.checked = Boolean(
     status.isRunning
     && status.currentSource === 'manual'
@@ -2779,6 +3041,7 @@ function updatePostUI(status) {
     return;
   }
 
+  latestPostStatus = status;
   const dom = FEATURE_DOM.post;
   updateToggle(dom, status.isRunning);
   updateStatusText(dom.statusText, status.isRunning ? '🟢 실행 중' : '🔴 정지', status.isRunning ? 'status-on' : 'status-off');
@@ -2795,6 +3058,9 @@ function updatePostUI(status) {
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
     [dom.refluxSearchGalleryIdInput, status.config?.refluxSearchGalleryId ?? ''],
   ]);
+  if (!INLINE_SETTING_DIRTY.postVpnGate) {
+    syncConfigInput(dom.useVpnGatePrefixFilterInput, status.config?.useVpnGatePrefixFilter ?? false);
+  }
   dom.cjkModeToggleInput.checked = Boolean(
     status.isRunning
     && status.currentSource === 'manual'
@@ -3010,12 +3276,16 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uid
   setDisabled(commentDom.toggleBtn, commentLocked);
   setDisabled(commentDom.excludePureHangulInput, commentLocked);
   setDisabled(commentDom.commentRefluxModeInput, commentLocked);
+  setDisabled(commentDom.useVpnGatePrefixFilterInput, commentLocked);
+  setDisabled(commentDom.vpnGatePrefixSaveBtn, commentLocked);
   setDisabled(commentDom.saveConfigBtn, commentLocked);
   setDisabled(commentDom.resetBtn, commentLocked);
   setDisabled(postDom.toggleBtn, postIpLocked);
   setDisabled(postDom.cjkModeToggleInput, postIpLocked);
   setDisabled(postDom.semiconductorRefluxModeToggleInput, postIpLocked);
   setDisabled(postDom.page1NoCutoffModeToggleInput, postIpLocked);
+  setDisabled(postDom.useVpnGatePrefixFilterInput, postIpLocked);
+  setDisabled(postDom.vpnGatePrefixSaveBtn, postIpLocked);
   setDisabled(postDom.saveConfigBtn, postIpLocked);
   setDisabled(postDom.resetBtn, postIpLocked);
   setDisabled(semiPostDom.toggleBtn, postIpLocked);
@@ -3041,6 +3311,39 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uid
   getFeatureConfigInputs('semiPost').forEach((input) => setDisabled(input, postIpLocked));
   getFeatureConfigInputs('ip').forEach((input) => setDisabled(input, postIpLocked));
   getFeatureConfigInputs('uidWarningAutoBan').forEach((input) => setDisabled(input, monitorUidWarningAutoBanLocked));
+}
+
+function buildDefaultSelfHostedVpnStatus() {
+  return {
+    isRunning: false,
+    phase: 'IDLE',
+    healthOk: false,
+    agentReachable: false,
+    agentVersion: '',
+    lastSyncAt: '',
+    lastHealthAt: '',
+    operationId: '',
+    activeProfileId: '',
+    publicIpBefore: '',
+    publicIpAfter: '',
+    currentPublicIp: '',
+    publicIpProvider: '',
+    ipv4DefaultRouteChanged: false,
+    ipv6DefaultRouteChanged: false,
+    dnsChanged: false,
+    activeAdapterName: '',
+    connectedAt: '',
+    lastErrorCode: '',
+    lastErrorMessage: '',
+    logs: [],
+    config: {
+      agentBaseUrl: 'http://127.0.0.1:8765',
+      authToken: '',
+      profileId: '',
+      requestTimeoutMs: 800,
+      actionTimeoutMs: 3000,
+    },
+  };
 }
 
 function buildDefaultBumpPostStatus() {
@@ -3156,6 +3459,171 @@ function buildDefaultCommentRefluxCollectorStatus() {
       postConcurrency: 8,
     },
   };
+}
+
+function getSelfHostedVpnStatusLabel(status = {}) {
+  if (!status.lastSyncAt && !status.isRunning) {
+    return '⚪ 확인 전';
+  }
+
+  if (status.phase === 'CONNECTING') {
+    return '🟡 연결 시작 중';
+  }
+
+  if (status.phase === 'CONNECTED') {
+    return '🟢 연결됨';
+  }
+
+  if (status.phase === 'DISCONNECTING') {
+    return '🟠 연결 종료 중';
+  }
+
+  if (status.phase === 'AGENT_UNAVAILABLE') {
+    return '🔴 agent 연결 불가';
+  }
+
+  if (status.phase === 'ERROR') {
+    return status.isRunning ? '🟠 상태 확인 불완전' : '🔴 최근 오류';
+  }
+
+  if (status.lastErrorMessage) {
+    return '🔴 정지 (최근 오류)';
+  }
+
+  return '🔴 정지';
+}
+
+function getSelfHostedVpnStatusClassName(status = {}) {
+  if (!status.lastSyncAt && !status.isRunning) {
+    return 'status-muted';
+  }
+
+  if (status.phase === 'CONNECTED') {
+    return 'status-on';
+  }
+
+  if (['CONNECTING', 'DISCONNECTING', 'ERROR'].includes(String(status.phase || ''))) {
+    return 'status-warn';
+  }
+
+  if (status.phase === 'AGENT_UNAVAILABLE') {
+    return 'status-off';
+  }
+
+  if (status.lastErrorMessage) {
+    return 'status-warn';
+  }
+
+  return 'status-off';
+}
+
+function getSelfHostedVpnAgentHealthLabel(status = {}) {
+  if (!status.lastSyncAt) {
+    return '확인 전';
+  }
+
+  if (!status.agentReachable) {
+    return '🔴 응답 없음';
+  }
+
+  if (status.healthOk) {
+    return '🟢 응답 정상';
+  }
+
+  return '🟠 일부 응답';
+}
+
+function getSelfHostedVpnAgentHealthClassName(status = {}) {
+  if (!status.lastSyncAt) {
+    return 'status-muted';
+  }
+
+  if (!status.agentReachable) {
+    return 'status-off';
+  }
+
+  return status.healthOk ? 'status-on' : 'status-warn';
+}
+
+function buildSelfHostedVpnPublicIpText(ip, provider) {
+  const normalizedIp = String(ip || '').trim();
+  if (!normalizedIp) {
+    return '-';
+  }
+
+  const normalizedProvider = String(provider || '').trim();
+  return normalizedProvider
+    ? `${normalizedIp} (${normalizedProvider})`
+    : normalizedIp;
+}
+
+function getSelfHostedVpnIpv4RouteDisplay(status = {}) {
+  if (status.phase !== 'CONNECTED') {
+    return { text: '-', className: 'status-muted' };
+  }
+
+  if (status.ipv4DefaultRouteChanged) {
+    return { text: '변경 감지', className: 'status-on' };
+  }
+
+  return { text: '미감지', className: 'status-warn' };
+}
+
+function getSelfHostedVpnIpv6RouteDisplay(status = {}) {
+  if (status.phase !== 'CONNECTED') {
+    return { text: '-', className: 'status-muted' };
+  }
+
+  return status.ipv6DefaultRouteChanged
+    ? { text: '변경 감지', className: 'status-on' }
+    : { text: '미감지', className: 'status-muted' };
+}
+
+function getSelfHostedVpnDnsDisplay(status = {}) {
+  if (status.phase !== 'CONNECTED') {
+    return { text: '-', className: 'status-muted' };
+  }
+
+  return status.dnsChanged
+    ? { text: '변경 감지', className: 'status-on' }
+    : { text: '미감지', className: 'status-muted' };
+}
+
+function buildSelfHostedVpnMetaText(status = {}) {
+  const profileId = String(status.activeProfileId || status.config?.profileId || '').trim();
+  const agentBaseUrl = String(status.config?.agentBaseUrl || '').trim() || 'http://127.0.0.1:8765';
+
+  if (status.lastErrorMessage) {
+    return `최근 오류: ${status.lastErrorMessage}`;
+  }
+
+  if (!status.lastSyncAt) {
+    return `아직 local agent 상태를 읽지 않았습니다. 기본 예시는 ${agentBaseUrl} 이고, 실제 IP 변경은 연결 후 현재 출구 IP가 바뀔 때 확인합니다.`;
+  }
+
+  if (!status.agentReachable) {
+    return `local agent 응답이 없어 상태를 확인하지 못했습니다. agent 실행 여부와 주소(${agentBaseUrl})를 확인하세요.`;
+  }
+
+  if (status.phase === 'CONNECTING') {
+    return `${profileId || '미지정 profile'} 연결 요청을 보냈고, 터널과 기본 경로가 올라오길 기다리는 중입니다.`;
+  }
+
+  if (status.phase === 'CONNECTED') {
+    const currentPublicIpText = buildSelfHostedVpnPublicIpText(status.currentPublicIp, status.publicIpProvider);
+    const ipv4RouteState = status.ipv4DefaultRouteChanged ? 'IPv4 기본경로 변경 감지' : 'IPv4 기본경로 미감지';
+    return `${profileId || '현재 profile'} 로 연결 중입니다. 현재 출구 IP는 ${currentPublicIpText} 이고, ${ipv4RouteState} 상태입니다.`;
+  }
+
+  if (status.phase === 'DISCONNECTING') {
+    return '터널 종료 요청을 보냈습니다. 종료가 완료되면 현재 출구 IP와 route 상태가 다시 정지 상태로 내려옵니다.';
+  }
+
+  if (status.healthOk) {
+    return 'local agent 응답은 정상입니다. 연결 전후 공인 IP와 IPv4 route 변화를 같이 보면서 터널 적용 여부를 확인하면 됩니다.';
+  }
+
+  return 'local agent 응답은 있지만 health/status 일부가 비정상일 수 있습니다. 새로고침이나 agent 로그를 같이 확인하세요.';
 }
 
 function getBumpPostStatusLabel(status = {}) {
@@ -3778,6 +4246,16 @@ function getFeatureConfigInputs(feature) {
     ];
   }
 
+  if (feature === 'selfHostedVpn') {
+    return [
+      dom.agentBaseUrlInput,
+      dom.authTokenInput,
+      dom.profileIdInput,
+      dom.requestTimeoutMsInput,
+      dom.actionTimeoutMsInput,
+    ];
+  }
+
   if (feature === 'refluxDatasetCollector') {
     return [
       dom.galleryIdInput,
@@ -4235,10 +4713,23 @@ function sendMessage(message) {
 }
 
 function flashSaved(button, successText = '✅ 저장됨') {
-  const previousText = button.textContent;
+  if (!button) {
+    return;
+  }
+
+  if (typeof button.__flashSavedOriginalText !== 'string') {
+    button.__flashSavedOriginalText = button.textContent;
+  }
+
+  if (button.__flashSavedTimer) {
+    clearTimeout(button.__flashSavedTimer);
+  }
+
+  const originalText = button.__flashSavedOriginalText;
   button.textContent = successText;
-  setTimeout(() => {
-    button.textContent = previousText;
+  button.__flashSavedTimer = setTimeout(() => {
+    button.textContent = originalText;
+    button.__flashSavedTimer = null;
   }, 1500);
 }
 

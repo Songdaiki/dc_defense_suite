@@ -30,6 +30,7 @@
       <button class="tab-button" data-tab="bumpPost"><span class="tab-label">끌올<br>자동</span></button>
       <button class="tab-button" data-tab="refluxDatasetCollector"><span class="tab-label">Local<br>수집</span></button>
       <button class="tab-button" data-tab="refluxOverlayCollector"><span class="tab-label">Dataset<br>수집</span></button>
+      <button class="tab-button" data-tab="selfHostedVpn"><span class="tab-label">자체 VPN<br>테스트</span></button>
     </nav>
 
     <main class="panels">
@@ -513,12 +514,19 @@
             <h2>댓글 방어</h2>
             <p>유동닉 댓글 자동 삭제</p>
           </div>
-          <div class="toggle-section">
-            <label class="toggle-switch">
-              <input type="checkbox" id="commentToggleBtn">
-              <span class="slider"></span>
-            </label>
-            <span id="commentToggleLabel" class="toggle-label">OFF</span>
+          <div class="feature-header-side">
+            <div class="toggle-section">
+              <label class="toggle-switch">
+                <input type="checkbox" id="commentToggleBtn">
+                <span class="slider"></span>
+              </label>
+              <span id="commentToggleLabel" class="toggle-label">OFF</span>
+            </div>
+            <div class="feature-inline-mini-setting">
+              <span class="feature-inline-mini-setting-label">VPNGate IP 필터</span>
+              <input type="checkbox" id="commentUseVpnGatePrefixFilter" class="feature-inline-mini-setting-checkbox">
+              <button id="commentVpnGatePrefixSaveBtn" class="btn btn-secondary feature-inline-mini-setting-save-btn">저장</button>
+            </div>
           </div>
         </div>
 
@@ -1057,12 +1065,19 @@
             <h2>게시글 분류</h2>
             <p>유동 게시글 도배기 탭 자동 분류</p>
           </div>
-          <div class="toggle-section">
-            <label class="toggle-switch">
-              <input type="checkbox" id="postToggleBtn">
-              <span class="slider"></span>
-            </label>
-            <span id="postToggleLabel" class="toggle-label">OFF</span>
+          <div class="feature-header-side">
+            <div class="toggle-section">
+              <label class="toggle-switch">
+                <input type="checkbox" id="postToggleBtn">
+                <span class="slider"></span>
+              </label>
+              <span id="postToggleLabel" class="toggle-label">OFF</span>
+            </div>
+            <div class="feature-inline-mini-setting">
+              <span class="feature-inline-mini-setting-label">VPNGate IP 필터</span>
+              <input type="checkbox" id="postUseVpnGatePrefixFilter" class="feature-inline-mini-setting-checkbox">
+              <button id="postVpnGatePrefixSaveBtn" class="btn btn-secondary feature-inline-mini-setting-save-btn">저장</button>
+            </div>
           </div>
         </div>
 
@@ -1626,6 +1641,124 @@
         <section class="log-section">
           <h3>최근 로그</h3>
           <div id="monitorLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+      </section>
+
+      <section class="panel" data-feature="selfHostedVpn">
+        <div class="feature-header">
+          <div>
+            <h2>자체 VPN 테스트</h2>
+            <p>local agent에 연결/해제 요청을 보내고, 연결 전후 공인 IP와 route 변화를 함께 확인합니다</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="selfHostedVpnToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="selfHostedVpnToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="status-grid manual-utility-status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="selfHostedVpnStatusText" class="status-value status-off">🔴 정지</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">agent</span>
+            <span id="selfHostedVpnAgentHealthText" class="status-value status-muted">확인 전</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">agent 버전</span>
+            <span id="selfHostedVpnAgentVersionText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">profile</span>
+            <span id="selfHostedVpnProfileIdText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 출구 IP</span>
+            <span id="selfHostedVpnCurrentPublicIpText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">연결 전 IP</span>
+            <span id="selfHostedVpnPublicIpBeforeText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">연결 후 IP</span>
+            <span id="selfHostedVpnPublicIpAfterText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">활성 어댑터</span>
+            <span id="selfHostedVpnActiveAdapterText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">IPv4 기본경로</span>
+            <span id="selfHostedVpnIpv4RouteText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">IPv6 기본경로</span>
+            <span id="selfHostedVpnIpv6RouteText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">DNS 변화</span>
+            <span id="selfHostedVpnDnsChangedText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 sync</span>
+            <span id="selfHostedVpnLastSyncAtText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 health</span>
+            <span id="selfHostedVpnLastHealthAtText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">연결 시각</span>
+            <span id="selfHostedVpnConnectedAtText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 오류 코드</span>
+            <span id="selfHostedVpnLastErrorCodeText" class="status-value">-</span>
+          </div>
+        </div>
+
+        <p id="selfHostedVpnMetaText" class="manual-utility-meta">local agent와 연결되면 연결 전후 공인 IP와 route 변화를 같이 표시합니다.</p>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label for="selfHostedVpnAgentBaseUrl">local agent 주소</label>
+              <input type="text" id="selfHostedVpnAgentBaseUrl" value="http://127.0.0.1:8765" spellcheck="false" placeholder="http://127.0.0.1:8765">
+            </div>
+            <div class="setting-item">
+              <label for="selfHostedVpnAuthToken">인증 토큰 (선택)</label>
+              <input type="password" id="selfHostedVpnAuthToken" value="">
+            </div>
+            <div class="setting-item">
+              <label for="selfHostedVpnProfileId">profile ID</label>
+              <input type="text" id="selfHostedVpnProfileId" value="" spellcheck="false" placeholder="test-profile-01">
+            </div>
+            <div class="setting-item">
+              <label for="selfHostedVpnRequestTimeoutMs">상태 조회 timeout (ms)</label>
+              <input type="number" id="selfHostedVpnRequestTimeoutMs" min="100" max="30000" step="100" value="800">
+            </div>
+            <div class="setting-item">
+              <label for="selfHostedVpnActionTimeoutMs">연결/해제 timeout (ms)</label>
+              <input type="number" id="selfHostedVpnActionTimeoutMs" min="100" max="60000" step="100" value="3000">
+            </div>
+            <button id="selfHostedVpnSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          </div>
+        </details>
+
+        <div class="action-row">
+          <button id="selfHostedVpnRefreshBtn" class="btn btn-secondary">지금 새로고침</button>
+          <button id="selfHostedVpnResetBtn" class="btn btn-secondary">상태 기록 초기화</button>
+        </div>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="selfHostedVpnLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
         </section>
       </section>
     </main>

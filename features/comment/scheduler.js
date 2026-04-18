@@ -44,6 +44,11 @@ import {
     REFLUX_FOUR_STEP_STAGE,
     inspectRefluxFourStepCandidate,
 } from '../reflux-four-step-filter.js';
+import {
+    ensureVpnGatePrefixRuntimeReady,
+    filterCommentsByVpnGatePrefixes,
+    releaseVpnGatePrefixRuntimeConsumer,
+} from '../vpngate-prefix/runtime.js';
 
 const STORAGE_KEY = 'commentSchedulerState';
 const MAX_VERIFICATION_EVENTS = 200;
@@ -64,6 +69,7 @@ class Scheduler {
         this.lastVerifiedDeletedCount = 0;
         this.verificationEvents = [];
         this.logs = [];
+        this.activeVpnGatePrefixConsumerIds = new Set();
 
         // 설정 (기본값)
         this.config = {
@@ -81,6 +87,7 @@ class Scheduler {
             avoidTypeChk: true,    // IP 차단 여부
             refluxSearchGalleryId: '',
             excludePureHangulManualOnly: false,
+            useVpnGatePrefixFilter: false,
         };
         this.currentSource = '';
         this.currentAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
@@ -114,12 +121,89 @@ class Scheduler {
 
     async stop() {
         this.isRunning = false;
+        await this.releaseAllKnownVpnGatePrefixConsumers();
         this.resetCommentRefluxSearchRuntime();
         setCommentRefluxSearchDuplicateBrokerLogger(null);
         this.currentSource = '';
         this.currentAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
         this.log('🔴 자동 삭제 중지.');
         await this.saveState();
+    }
+
+    getVpnGatePrefixConsumerId(source = this.currentSource) {
+        return source === 'monitor'
+            ? 'comment_monitor_default'
+            : 'comment_manual_default';
+    }
+
+    shouldUseVpnGatePrefixFilterForCurrentRun() {
+        return Boolean(this.config.useVpnGatePrefixFilter)
+            && this.currentAttackMode === COMMENT_ATTACK_MODE.DEFAULT;
+    }
+
+    async releaseTrackedVpnGatePrefixConsumers() {
+        if (this.activeVpnGatePrefixConsumerIds.size <= 0) {
+            return false;
+        }
+
+        for (const consumerId of [...this.activeVpnGatePrefixConsumerIds]) {
+            await releaseVpnGatePrefixRuntimeConsumer(consumerId);
+        }
+        this.activeVpnGatePrefixConsumerIds.clear();
+        return true;
+    }
+
+    async releaseAllKnownVpnGatePrefixConsumers() {
+        const knownConsumerIds = [
+            this.getVpnGatePrefixConsumerId('manual'),
+            this.getVpnGatePrefixConsumerId('monitor'),
+        ];
+
+        for (const consumerId of knownConsumerIds) {
+            await releaseVpnGatePrefixRuntimeConsumer(consumerId);
+        }
+        this.activeVpnGatePrefixConsumerIds.clear();
+        return true;
+    }
+
+    async filterFluidCommentsWithVpnGatePrefixes(fluidComments) {
+        if (!this.shouldUseVpnGatePrefixFilterForCurrentRun()) {
+            await this.releaseTrackedVpnGatePrefixConsumers();
+            return {
+                filteredComments: fluidComments,
+                applied: false,
+                hasUsablePrefixes: false,
+                usedStaleCache: false,
+                fallbackToDefault: false,
+                errorMessage: '',
+            };
+        }
+
+        const consumerId = this.getVpnGatePrefixConsumerId(this.currentSource);
+        const runtimeResult = await ensureVpnGatePrefixRuntimeReady(consumerId, {
+            logger: (message) => this.log(message),
+        });
+        this.activeVpnGatePrefixConsumerIds.add(consumerId);
+
+        if (!runtimeResult.hasUsablePrefixes) {
+            return {
+                filteredComments: fluidComments,
+                applied: false,
+                hasUsablePrefixes: false,
+                usedStaleCache: runtimeResult.usedStaleCache,
+                fallbackToDefault: runtimeResult.fallbackToDefault,
+                errorMessage: runtimeResult.errorMessage,
+            };
+        }
+
+        return {
+            filteredComments: filterCommentsByVpnGatePrefixes(fluidComments, runtimeResult.effectivePrefixSet),
+            applied: true,
+            hasUsablePrefixes: true,
+            usedStaleCache: runtimeResult.usedStaleCache,
+            fallbackToDefault: runtimeResult.fallbackToDefault,
+            errorMessage: runtimeResult.errorMessage,
+        };
     }
 
     // ============================================================
@@ -246,6 +330,9 @@ class Scheduler {
                 return true;
             }
 
+            const vpnGateFilterResult = await this.filterFluidCommentsWithVpnGatePrefixes(fluidComments);
+            const candidateFluidComments = vpnGateFilterResult.filteredComments;
+
             if (this.shouldFilterCommentRefluxForCurrentRun()) {
                 // 역류기 댓글은 dataset/cache obvious hit를 먼저 지우고, miss만 검색으로 넘긴다.
                 const refluxPlan = await this.planCommentRefluxDeletion(postNo, fluidComments);
@@ -308,13 +395,27 @@ class Scheduler {
                 return deferredBatchResult.shouldDelay;
             }
 
-            const deletionTargets = filterDeletionTargetComments(fluidComments, {
+            if (candidateFluidComments.length === 0) {
+                if (vpnGateFilterResult.applied) {
+                    this.log(`ℹ️ #${postNo}: 유동닉 ${fluidComments.length}개 중 VPNGate prefix 필터 후 0개`);
+                }
+                return true;
+            }
+
+            const deletionTargets = filterDeletionTargetComments(candidateFluidComments, {
                 attackMode: this.currentAttackMode,
                 matchesCommentRefluxMemo: hasCommentRefluxMemo,
             });
 
             if (deletionTargets.length === 0) {
-                this.log(`ℹ️ #${postNo}: 유동닉 ${fluidComments.length}개 중 ${getDeletionSkipReasonText(this.currentAttackMode)} 삭제 대상 0개`);
+                if (vpnGateFilterResult.applied) {
+                    this.log(
+                        `ℹ️ #${postNo}: 유동닉 ${fluidComments.length}개 중 `
+                        + `VPNGate prefix 필터 후 ${candidateFluidComments.length}개, 삭제 대상 0개`,
+                    );
+                } else {
+                    this.log(`ℹ️ #${postNo}: 유동닉 ${fluidComments.length}개 중 ${getDeletionSkipReasonText(this.currentAttackMode)} 삭제 대상 0개`);
+                }
                 return true;
             }
 
@@ -328,7 +429,7 @@ class Scheduler {
                 esno,
                 sharedEsno,
                 {
-                    totalFluidCount: fluidComments.length,
+                    totalFluidCount: candidateFluidComments.length,
                     phaseLabel: '',
                 },
             );
@@ -810,6 +911,9 @@ class Scheduler {
         const previousAttackMode = normalizeCommentAttackMode(this.currentAttackMode);
         await this.ensureDatasetReadyForAttackMode(nextAttackMode);
         await this.prepareCommentRefluxSearchRuntime(previousAttackMode, nextAttackMode);
+        if (nextAttackMode !== COMMENT_ATTACK_MODE.DEFAULT) {
+            await this.releaseTrackedVpnGatePrefixConsumers();
+        }
 
         if (this.currentAttackMode === nextAttackMode) {
             return false;
@@ -865,11 +969,15 @@ class Scheduler {
                 this.config = { ...this.config, ...schedulerState.config };
                 this.config.avoidReasonText = normalizeAvoidReasonText(this.config.avoidReasonText);
                 this.config.refluxSearchGalleryId = String(this.config.refluxSearchGalleryId || '').trim().toLowerCase();
+                this.config.useVpnGatePrefixFilter = Boolean(this.config.useVpnGatePrefixFilter);
                 this.currentSource = normalizeRunSource(
                     schedulerState.currentSource,
                     schedulerState.isRunning ? 'manual' : '',
                 );
                 this.currentAttackMode = normalizeStoredCommentAttackMode(schedulerState);
+            }
+            if (!this.isRunning) {
+                await this.releaseAllKnownVpnGatePrefixConsumers();
             }
         } catch (error) {
             console.error('[Scheduler] 상태 복원 실패:', error.message);

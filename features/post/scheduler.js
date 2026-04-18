@@ -48,6 +48,11 @@ import {
     inspectRefluxFourStepCandidate,
 } from '../reflux-four-step-filter.js';
 import { resolveRefluxSearchGalleryId } from '../reflux-search-gallery-id.js';
+import {
+    ensureVpnGatePrefixRuntimeReady,
+    filterPostsByVpnGatePrefixes,
+    releaseVpnGatePrefixRuntimeConsumer,
+} from '../vpngate-prefix/runtime.js';
 
 const STORAGE_KEY = 'postSchedulerState';
 
@@ -66,6 +71,7 @@ class Scheduler {
         this.currentSource = 'manual';
         this.currentAttackMode = ATTACK_MODE.DEFAULT;
         this.pendingRuntimeTransition = null;
+        this.activeVpnGatePrefixConsumerIds = new Set();
 
         // 설정 (기본값)
         this.config = {
@@ -78,6 +84,7 @@ class Scheduler {
             cycleDelay: 1000,      // 사이클 간 딜레이 (ms)
             cutoffPostNo: 0,       // 시작 시점 snapshot 기준 게시물 번호
             manualAttackMode: ATTACK_MODE.DEFAULT,
+            useVpnGatePrefixFilter: false,
         };
         setRefluxSearchDuplicateBrokerLogger((message) => {
             this.log(message);
@@ -140,6 +147,7 @@ class Scheduler {
         this.isRunning = false;
         this.currentPage = 0;
         this.cancelPendingRuntimeTransition('게시글 분류가 정지되어 모드 전환을 취소했습니다.');
+        await this.releaseAllKnownVpnGatePrefixConsumers();
         this.clearRuntimeAttackMode();
         this.resetSearchDuplicateRuntime();
         this.log('🔴 자동 분류 중지.');
@@ -148,6 +156,82 @@ class Scheduler {
 
     resetSearchDuplicateRuntime() {
         resetRefluxSearchDuplicateBrokerRuntime();
+    }
+
+    getVpnGatePrefixConsumerId(source = this.currentSource) {
+        return source === 'monitor'
+            ? 'post_monitor_default'
+            : 'post_manual_default';
+    }
+
+    shouldUseVpnGatePrefixFilterForCurrentRun(attackMode = this.getEffectiveAttackMode()) {
+        return Boolean(this.config.useVpnGatePrefixFilter)
+            && normalizeAttackMode(attackMode) === ATTACK_MODE.DEFAULT;
+    }
+
+    async releaseTrackedVpnGatePrefixConsumers() {
+        if (this.activeVpnGatePrefixConsumerIds.size <= 0) {
+            return false;
+        }
+
+        for (const consumerId of [...this.activeVpnGatePrefixConsumerIds]) {
+            await releaseVpnGatePrefixRuntimeConsumer(consumerId);
+        }
+        this.activeVpnGatePrefixConsumerIds.clear();
+        return true;
+    }
+
+    async releaseAllKnownVpnGatePrefixConsumers() {
+        const knownConsumerIds = [
+            this.getVpnGatePrefixConsumerId('manual'),
+            this.getVpnGatePrefixConsumerId('monitor'),
+        ];
+
+        for (const consumerId of knownConsumerIds) {
+            await releaseVpnGatePrefixRuntimeConsumer(consumerId);
+        }
+        this.activeVpnGatePrefixConsumerIds.clear();
+        return true;
+    }
+
+    async filterBasePostsWithVpnGatePrefixes(basePosts, attackMode = this.getEffectiveAttackMode()) {
+        if (!this.shouldUseVpnGatePrefixFilterForCurrentRun(attackMode)) {
+            await this.releaseTrackedVpnGatePrefixConsumers();
+            return {
+                candidatePosts: basePosts,
+                applied: false,
+                hasUsablePrefixes: false,
+                usedStaleCache: false,
+                fallbackToDefault: false,
+                errorMessage: '',
+            };
+        }
+
+        const consumerId = this.getVpnGatePrefixConsumerId(this.currentSource);
+        const runtimeResult = await ensureVpnGatePrefixRuntimeReady(consumerId, {
+            logger: (message) => this.log(message),
+        });
+        this.activeVpnGatePrefixConsumerIds.add(consumerId);
+
+        if (!runtimeResult.hasUsablePrefixes) {
+            return {
+                candidatePosts: basePosts,
+                applied: false,
+                hasUsablePrefixes: false,
+                usedStaleCache: runtimeResult.usedStaleCache,
+                fallbackToDefault: runtimeResult.fallbackToDefault,
+                errorMessage: runtimeResult.errorMessage,
+            };
+        }
+
+        return {
+            candidatePosts: filterPostsByVpnGatePrefixes(basePosts, runtimeResult.effectivePrefixSet),
+            applied: true,
+            hasUsablePrefixes: true,
+            usedStaleCache: runtimeResult.usedStaleCache,
+            fallbackToDefault: runtimeResult.fallbackToDefault,
+            errorMessage: runtimeResult.errorMessage,
+        };
     }
 
     async captureCutoffPostNo(config = this.config) {
@@ -216,13 +300,16 @@ class Scheduler {
         return result;
     }
 
-    setMonitorAttackMode(attackMode) {
+    async setMonitorAttackMode(attackMode) {
         const normalizedAttackMode = normalizeAttackMode(attackMode);
         const sourceChanged = this.currentSource !== 'monitor';
         const modeChanged = this.currentAttackMode !== normalizedAttackMode;
 
         this.currentSource = 'monitor';
         this.currentAttackMode = normalizedAttackMode;
+        if (sourceChanged || !this.shouldUseVpnGatePrefixFilterForCurrentRun(normalizedAttackMode)) {
+            await this.releaseTrackedVpnGatePrefixConsumers();
+        }
         return sourceChanged || modeChanged;
     }
 
@@ -380,6 +467,9 @@ class Scheduler {
             if (pendingRuntimeTransition.resetRefluxSearchRuntime) {
                 this.resetSearchDuplicateRuntime();
             }
+            if (!this.shouldUseVpnGatePrefixFilterForCurrentRun(pendingRuntimeTransition.nextAttackMode)) {
+                await this.releaseTrackedVpnGatePrefixConsumers();
+            }
 
             this.log(
                 pendingRuntimeTransition.transitionLogMessage
@@ -449,16 +539,18 @@ class Scheduler {
                     const basePosts = shouldApplyCutoff
                         ? fluidPosts.filter((post) => isPostAfterCutoff(post, this.config.cutoffPostNo))
                         : fluidPosts;
+                    const vpnGateFilterResult = await this.filterBasePostsWithVpnGatePrefixes(basePosts, effectiveAttackMode);
+                    const vpnGateFilteredBasePosts = vpnGateFilterResult.candidatePosts;
                     const shouldUseSearchDuplicate = shouldUseSearchDuplicateForCurrentRun(this.currentSource, effectiveAttackMode);
                     const refluxFilterResult = shouldUseSearchDuplicate
-                        ? await filterRefluxCandidatePosts(basePosts, {
+                        ? await filterRefluxCandidatePosts(vpnGateFilteredBasePosts, {
                             deleteGalleryId: this.config.galleryId,
                             searchGalleryId: resolveRefluxSearchGalleryId(this.config),
                         })
                         : null;
                     const candidatePosts = refluxFilterResult
                         ? refluxFilterResult.candidatePosts
-                        : basePosts.filter((post) => isEligibleForAttackMode(post, effectiveAttackMode, {
+                        : vpnGateFilteredBasePosts.filter((post) => isEligibleForAttackMode(post, effectiveAttackMode, {
                             isSemiconductorRefluxDatasetReady: isSemiconductorRefluxEffectiveMatcherReady(),
                             matchesSemiconductorRefluxTitle: hasSemiconductorRefluxEffectivePostTitle,
                         }));
@@ -479,6 +571,11 @@ class Scheduler {
                                 `📄 ${page}페이지: 유동닉 ${fluidPosts.length}개 발견, 기존 포함 ${basePosts.length}개, ${filterLabel} 후 ${candidatePosts.length}개${refluxSummary}`,
                             );
                         }
+                    } else if (vpnGateFilterResult.applied) {
+                        this.log(
+                            `📄 ${page}페이지: 유동닉 ${fluidPosts.length}개 발견, cutoff 이후 ${basePosts.length}개, `
+                            + `VPNGate prefix 필터 후 ${candidatePosts.length}개`,
+                        );
                     } else {
                         this.log(`📄 ${page}페이지: 유동닉 ${fluidPosts.length}개 발견, cutoff 이후 ${candidatePosts.length}개`);
                     }
@@ -590,6 +687,7 @@ class Scheduler {
                     ...this.config,
                     ...schedulerState.config,
                     manualAttackMode: normalizeAttackMode(schedulerState?.config?.manualAttackMode),
+                    useVpnGatePrefixFilter: Boolean(schedulerState?.config?.useVpnGatePrefixFilter),
                 };
                 this.pendingRuntimeTransition = null;
                 this.currentSource = normalizeRunSource(
@@ -600,6 +698,9 @@ class Scheduler {
                 if (!schedulerState.isRunning) {
                     this.clearRuntimeAttackMode();
                 }
+            }
+            if (!this.isRunning) {
+                await this.releaseAllKnownVpnGatePrefixConsumers();
             }
             if (this.isRunning && shouldPreloadSemiconductorRefluxPostMatcher(this.currentAttackMode)) {
                 await ensureSemiconductorRefluxEffectiveMatcherLoaded();

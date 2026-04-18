@@ -18,6 +18,7 @@
     "https://search.dcinside.com/*",
     "https://*.dcinside.co.kr/*",
     "https://sign.dcinside.com/*",
+    "http://xd.x1.client.api.vpngate2.jp/*",
     "http://127.0.0.1/*",
     "http://localhost/*",
     "http://[::1]/*"
