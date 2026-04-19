@@ -1,0 +1,12 @@
+{
+  "fromSampleIndex": 3,
+  "toSampleIndex": 4,
+  "fromCapturedAt": "2026-04-18T14:19:54.433Z",
+  "toCapturedAt": "2026-04-18T14:24:54.860Z",
+  "appearedCount": 0,
+  "disappearedCount": 0,
+  "keptCount": 199,
+  "appearedIps": [],
+  "disappearedIps": [],
+  "diffPath": "/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/data/vpngate-change-test-20260418-230451/diff-4-to-5.json"
+}

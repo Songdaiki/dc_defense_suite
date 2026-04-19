@@ -1,0 +1,14 @@
+(node:504243) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///mnt/c/Users/eorb9/projects/dc_defense_suite_repo/features/vpngate-prefix/dat-decode.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /mnt/c/Users/eorb9/projects/dc_defense_suite_repo/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[probe][round 1] latest hosts=200, selected candidates=166
+[probe][round 1] candidate 1/166: 125.129.85.155:995 vpn890351087.opengw.net KR score=1429286 attempts=995/465/1195/1786/9008
+[probe][round 1] success: 125.129.85.155:995 before=1.210.3.152 after=121.130.125.143 nic=VPN2 udpAccel=false cleanup=restored=1.210.3.152
+[probe][round 1] candidate 2/166: 121.139.2.155:995 vpn211565425.opengw.net KR score=1394951 attempts=995/465/1195/1521/9008
+[probe][round 1] fail: 121.139.2.155:995 error=SoftEther account는 생성됐지만 연결이 완료되지 않았습니다. cleanup=restored=1.210.3.152
+[probe][round 1] candidate 3/166: 59.5.141.18:995 vpn307948504.opengw.net KR score=1380535 attempts=995/465/1195/1548/9008
+[probe][round 1] success: 59.5.141.18:995 before=1.210.3.152 after=118.32.109.80 nic=VPN2 udpAccel=false cleanup=restored=1.210.3.152
+[probe][round 1] candidate 4/166: 61.84.19.133:995 vpn795165346.opengw.net KR score=1370155 attempts=995/465/1195/1297/9008
+[probe][round 1] success: 61.84.19.133:995 before=1.210.3.152 after=121.168.52.11 nic=VPN2 udpAccel=false cleanup=restored=1.210.3.152
+[probe][round 1] candidate 5/166: 39.122.7.147:995 vpn841245340.opengw.net KR score=1274778 attempts=995/465/1195/1493/9008

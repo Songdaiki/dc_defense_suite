@@ -1,0 +1,22 @@
+(node:516384) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///mnt/c/Users/eorb9/projects/dc_defense_suite_repo/features/vpngate-prefix/dat-decode.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /mnt/c/Users/eorb9/projects/dc_defense_suite_repo/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[survey] latest hosts=200, selected candidates=164, nic=VPN2
+[survey] candidate 1/164: 121.164.146.116:995 KR attempts=995/465/1195/1930/9008
+[survey-json] {"type":"result","index":1,"ok":true,"ip":"121.164.146.116","fqdn":"vpn131652721.opengw.net","countryShort":"KR","countryFull":"Korea Republic of","selectedSslPort":995,"connectedPort":995,"elapsedMs":68367,"attempts":[{"port":995,"ok":true,"state":"Connected","reason":""}]}
+[survey] candidate 2/164: 125.129.85.155:995 KR attempts=995/465/1195/1786/9008
+[survey-json] {"type":"result","index":2,"ok":true,"ip":"125.129.85.155","fqdn":"vpn890351087.opengw.net","countryShort":"KR","countryFull":"Korea Republic of","selectedSslPort":995,"connectedPort":995,"elapsedMs":68849,"attempts":[{"port":995,"ok":true,"state":"Connected","reason":""}]}
+[survey] candidate 3/164: 121.139.2.155:995 KR attempts=995/465/1195/1521/9008
+[survey-json] {"type":"result","index":3,"ok":true,"ip":"121.139.2.155","fqdn":"vpn211565425.opengw.net","countryShort":"KR","countryFull":"Korea Republic of","selectedSslPort":995,"connectedPort":995,"elapsedMs":67367,"attempts":[{"port":995,"ok":true,"state":"Connected","reason":""}]}
+[survey] candidate 4/164: 59.5.141.18:995 KR attempts=995/465/1195/1548/9008
+[survey-json] {"type":"result","index":4,"ok":true,"ip":"59.5.141.18","fqdn":"vpn307948504.opengw.net","countryShort":"KR","countryFull":"Korea Republic of","selectedSslPort":995,"connectedPort":995,"elapsedMs":68775,"attempts":[{"port":995,"ok":true,"state":"Connected","reason":""}]}
+[survey] candidate 5/164: 39.122.7.147:995 KR attempts=995/465/1195/1493/9008
+[survey-json] {"type":"result","index":5,"ok":false,"ip":"39.122.7.147","fqdn":"vpn841245340.opengw.net","countryShort":"KR","countryFull":"Korea Republic of","selectedSslPort":995,"connectedPort":0,"elapsedMs":289076,"attempts":[{"port":995,"ok":false,"state":"Connecting","reason":"connect-timeout"},{"port":465,"ok":false,"state":"Connecting","reason":"connect-timeout"},{"port":1195,"ok":false,"state":"Connecting","reason":"connect-timeout"},{"port":1493,"ok":false,"state":"Connecting","reason":"connect-timeout"},{"port":9008,"ok":false,"state":"Connecting","reason":"connect-timeout"}],"failureReason":"[995] connect-timeout / [465] connect-timeout / [1195] connect-timeout / [1493] connect-timeout / [9008] connect-timeout"}
+[survey] candidate 6/164: 175.206.178.132:995 KR attempts=995/465/1195/1363/9008
+[survey-json] {"type":"result","index":6,"ok":true,"ip":"175.206.178.132","fqdn":"vpn500645444.opengw.net","countryShort":"KR","countryFull":"Korea Republic of","selectedSslPort":995,"connectedPort":995,"elapsedMs":67569,"attempts":[{"port":995,"ok":true,"state":"Connected","reason":""}]}
+[survey] candidate 7/164: 59.4.178.139:995 KR attempts=995/465/1195/1915/9008
+[survey-json] {"type":"result","index":7,"ok":true,"ip":"59.4.178.139","fqdn":"vpn527273112.opengw.net","countryShort":"KR","countryFull":"Korea Republic of","selectedSslPort":995,"connectedPort":995,"elapsedMs":68751,"attempts":[{"port":995,"ok":true,"state":"Connected","reason":""}]}
+[survey] candidate 8/164: 211.224.76.33:995 KR attempts=995/465/1195/1435/9008
+[survey-json] {"type":"result","index":8,"ok":false,"ip":"211.224.76.33","fqdn":"vpn996596697.opengw.net","countryShort":"KR","countryFull":"Korea Republic of","selectedSslPort":995,"connectedPort":0,"elapsedMs":287315,"attempts":[{"port":995,"ok":false,"state":"Connecting","reason":"connect-timeout"},{"port":465,"ok":false,"state":"Connecting","reason":"connect-timeout"},{"port":1195,"ok":false,"state":"Connecting","reason":"connect-timeout"},{"port":1435,"ok":false,"state":"Connecting","reason":"connect-timeout"},{"port":9008,"ok":false,"state":"Connecting","reason":"connect-timeout"}],"failureReason":"[995] connect-timeout / [465] connect-timeout / [1195] connect-timeout / [1435] connect-timeout / [9008] connect-timeout"}
+[survey] candidate 9/164: 221.155.210.148:995 KR attempts=995/465/1195/1808/9008

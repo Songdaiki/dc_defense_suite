@@ -344,8 +344,8 @@ function getSelfHostedVpnPollingTimeoutMs() {
   );
   const safeDefaultTimeout = Number.isFinite(configuredTimeout) && configuredTimeout > 0
     ? configuredTimeout
-    : 800;
-  return Math.min(safeDefaultTimeout, 1200);
+    : 3000;
+  return Math.min(safeDefaultTimeout, 3000);
 }
 
 function getAllStatuses() {
@@ -1114,7 +1114,12 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.lastSyncAt = '';
     scheduler.lastHealthAt = '';
     scheduler.operationId = '';
+    scheduler.activeConnectionMode = 'profile';
     scheduler.activeProfileId = '';
+    scheduler.activeRelayId = '';
+    scheduler.activeRelayIp = '';
+    scheduler.activeRelayFqdn = '';
+    scheduler.activeSelectedSslPort = 0;
     scheduler.publicIpBefore = '';
     scheduler.publicIpAfter = '';
     scheduler.currentPublicIp = '';
@@ -1542,8 +1547,16 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
       && String(config.agentBaseUrl || '') !== String(scheduler.config.agentBaseUrl || '');
     const authTokenChanged = config.authToken !== undefined
       && String(config.authToken || '') !== String(scheduler.config.authToken || '');
+    const connectionModeChanged = config.connectionMode !== undefined
+      && String(config.connectionMode || '') !== String(scheduler.config.connectionMode || '');
     const profileIdChanged = config.profileId !== undefined
       && String(config.profileId || '') !== String(scheduler.config.profileId || '');
+    const selectedRelayIdChanged = config.selectedRelayId !== undefined
+      && String(config.selectedRelayId || '') !== String(scheduler.config.selectedRelayId || '');
+    const selectedSslPortChanged = config.selectedSslPort !== undefined
+      && Number(config.selectedSslPort) !== Number(scheduler.config.selectedSslPort);
+    const relaySnapshotChanged = config.relaySnapshot !== undefined
+      && JSON.stringify(config.relaySnapshot || {}) !== JSON.stringify(scheduler.config.relaySnapshot || {});
     const requestTimeoutChanged = config.requestTimeoutMs !== undefined
       && Number(config.requestTimeoutMs) !== Number(scheduler.config.requestTimeoutMs);
     const actionTimeoutChanged = config.actionTimeoutMs !== undefined
@@ -1551,7 +1564,11 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
     if (
       agentBaseUrlChanged
       || authTokenChanged
+      || connectionModeChanged
       || profileIdChanged
+      || selectedRelayIdChanged
+      || selectedSslPortChanged
+      || relaySnapshotChanged
       || requestTimeoutChanged
       || actionTimeoutChanged
     ) {

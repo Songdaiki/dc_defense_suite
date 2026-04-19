@@ -171,6 +171,9 @@ const FEATURE_DOM = {
     agentHealthText: document.getElementById('selfHostedVpnAgentHealthText'),
     agentVersionText: document.getElementById('selfHostedVpnAgentVersionText'),
     profileIdText: document.getElementById('selfHostedVpnProfileIdText'),
+    connectionModeText: document.getElementById('selfHostedVpnConnectionModeText'),
+    relayText: document.getElementById('selfHostedVpnRelayText'),
+    sslPortText: document.getElementById('selfHostedVpnSslPortText'),
     currentPublicIpText: document.getElementById('selfHostedVpnCurrentPublicIpText'),
     publicIpBeforeText: document.getElementById('selfHostedVpnPublicIpBeforeText'),
     publicIpAfterText: document.getElementById('selfHostedVpnPublicIpAfterText'),
@@ -186,7 +189,14 @@ const FEATURE_DOM = {
     logList: document.getElementById('selfHostedVpnLogList'),
     agentBaseUrlInput: document.getElementById('selfHostedVpnAgentBaseUrl'),
     authTokenInput: document.getElementById('selfHostedVpnAuthToken'),
+    connectionModeInput: document.getElementById('selfHostedVpnConnectionMode'),
     profileIdInput: document.getElementById('selfHostedVpnProfileId'),
+    relayIdInput: document.getElementById('selfHostedVpnRelayId'),
+    relayFqdnInput: document.getElementById('selfHostedVpnRelayFqdn'),
+    relayIpInput: document.getElementById('selfHostedVpnRelayIp'),
+    selectedSslPortInput: document.getElementById('selfHostedVpnSelectedSslPort'),
+    relayUdpPortInput: document.getElementById('selfHostedVpnRelayUdpPort'),
+    relayHostUniqueKeyInput: document.getElementById('selfHostedVpnRelayHostUniqueKey'),
     requestTimeoutMsInput: document.getElementById('selfHostedVpnRequestTimeoutMs'),
     actionTimeoutMsInput: document.getElementById('selfHostedVpnActionTimeoutMs'),
     saveConfigBtn: document.getElementById('selfHostedVpnSaveConfigBtn'),
@@ -1042,12 +1052,31 @@ function bindSelfHostedVpnEvents() {
   });
 
   dom.saveConfigBtn.addEventListener('click', async () => {
+    const connectionMode = normalizeSelfHostedVpnConnectionMode(dom.connectionModeInput.value);
+    const relayHostUniqueKey = normalizeSelfHostedVpnHostUniqueKey(dom.relayHostUniqueKeyInput.value);
+    if (relayHostUniqueKey && !/^[0-9A-F]{40}$/.test(relayHostUniqueKey)) {
+      alert('HostUniqueKey는 40자리 hex 문자열만 입력하세요.');
+      dom.relayHostUniqueKeyInput.focus();
+      dom.relayHostUniqueKeyInput.select();
+      return;
+    }
+
     const config = {
       agentBaseUrl: dom.agentBaseUrlInput.value.trim(),
       authToken: dom.authTokenInput.value,
+      connectionMode,
       profileId: dom.profileIdInput.value.trim(),
-      requestTimeoutMs: Math.max(100, parseOptionalInt(dom.requestTimeoutMsInput.value, 800)),
-      actionTimeoutMs: Math.max(100, parseOptionalInt(dom.actionTimeoutMsInput.value, 3000)),
+      selectedRelayId: dom.relayIdInput.value.trim(),
+      selectedSslPort: parseOptionalInt(dom.selectedSslPortInput.value, 0),
+      relaySnapshot: {
+        id: dom.relayIdInput.value.trim(),
+        fqdn: dom.relayFqdnInput.value.trim(),
+        ip: dom.relayIpInput.value.trim(),
+        udpPort: parseOptionalInt(dom.relayUdpPortInput.value, 0),
+        hostUniqueKey: relayHostUniqueKey,
+      },
+      requestTimeoutMs: Math.max(3000, parseOptionalInt(dom.requestTimeoutMsInput.value, 3000)),
+      actionTimeoutMs: Math.max(15000, parseOptionalInt(dom.actionTimeoutMsInput.value, 15000)),
     };
 
     const response = await sendFeatureMessage('selfHostedVpn', { action: 'updateConfig', config });
@@ -2718,7 +2747,10 @@ function updateSelfHostedVpnUI(status) {
     getSelfHostedVpnAgentHealthClassName(nextStatus),
   );
   dom.agentVersionText.textContent = nextStatus.agentVersion || '-';
-  dom.profileIdText.textContent = nextStatus.activeProfileId || nextStatus.config?.profileId || '-';
+  dom.profileIdText.textContent = getSelfHostedVpnEffectiveProfileId(nextStatus) || '-';
+  dom.connectionModeText.textContent = getSelfHostedVpnConnectionModeLabel(nextStatus);
+  dom.relayText.textContent = buildSelfHostedVpnRelayText(nextStatus);
+  dom.sslPortText.textContent = buildSelfHostedVpnSelectedSslPortText(nextStatus);
   dom.currentPublicIpText.textContent = buildSelfHostedVpnPublicIpText(
     nextStatus.currentPublicIp,
     nextStatus.publicIpProvider,
@@ -2738,9 +2770,16 @@ function updateSelfHostedVpnUI(status) {
   syncFeatureConfigInputs('selfHostedVpn', [
     [dom.agentBaseUrlInput, nextStatus.config?.agentBaseUrl ?? 'http://127.0.0.1:8765'],
     [dom.authTokenInput, nextStatus.config?.authToken ?? ''],
+    [dom.connectionModeInput, nextStatus.config?.connectionMode ?? 'profile'],
     [dom.profileIdInput, nextStatus.config?.profileId ?? ''],
-    [dom.requestTimeoutMsInput, nextStatus.config?.requestTimeoutMs ?? 800],
-    [dom.actionTimeoutMsInput, nextStatus.config?.actionTimeoutMs ?? 3000],
+    [dom.relayIdInput, nextStatus.config?.selectedRelayId ?? nextStatus.config?.relaySnapshot?.id ?? ''],
+    [dom.relayFqdnInput, nextStatus.config?.relaySnapshot?.fqdn ?? ''],
+    [dom.relayIpInput, nextStatus.config?.relaySnapshot?.ip ?? ''],
+    [dom.selectedSslPortInput, nextStatus.config?.selectedSslPort || ''],
+    [dom.relayUdpPortInput, nextStatus.config?.relaySnapshot?.udpPort || ''],
+    [dom.relayHostUniqueKeyInput, nextStatus.config?.relaySnapshot?.hostUniqueKey ?? ''],
+    [dom.requestTimeoutMsInput, nextStatus.config?.requestTimeoutMs ?? 3000],
+    [dom.actionTimeoutMsInput, nextStatus.config?.actionTimeoutMs ?? 15000],
   ]);
   updateLogList(dom.logList, nextStatus.logs);
 
@@ -3323,7 +3362,12 @@ function buildDefaultSelfHostedVpnStatus() {
     lastSyncAt: '',
     lastHealthAt: '',
     operationId: '',
+    activeConnectionMode: 'profile',
     activeProfileId: '',
+    activeRelayId: '',
+    activeRelayIp: '',
+    activeRelayFqdn: '',
+    activeSelectedSslPort: 0,
     publicIpBefore: '',
     publicIpAfter: '',
     currentPublicIp: '',
@@ -3339,9 +3383,19 @@ function buildDefaultSelfHostedVpnStatus() {
     config: {
       agentBaseUrl: 'http://127.0.0.1:8765',
       authToken: '',
+      connectionMode: 'profile',
       profileId: '',
-      requestTimeoutMs: 800,
-      actionTimeoutMs: 3000,
+      selectedRelayId: '',
+      selectedSslPort: 0,
+      relaySnapshot: {
+        id: '',
+        fqdn: '',
+        ip: '',
+        udpPort: 0,
+        hostUniqueKey: '',
+      },
+      requestTimeoutMs: 3000,
+      actionTimeoutMs: 15000,
     },
   };
 }
@@ -3589,9 +3643,102 @@ function getSelfHostedVpnDnsDisplay(status = {}) {
     : { text: '미감지', className: 'status-muted' };
 }
 
+function normalizeSelfHostedVpnConnectionMode(value) {
+  return String(value || '').trim() === 'softether_vpngate_raw'
+    ? 'softether_vpngate_raw'
+    : 'profile';
+}
+
+function normalizeSelfHostedVpnHostUniqueKey(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, '')
+    .toUpperCase();
+}
+
+function getSelfHostedVpnEffectiveProfileId(status = {}) {
+  const configuredProfileId = String(status.activeProfileId || status.config?.profileId || '').trim();
+  if (configuredProfileId) {
+    return configuredProfileId;
+  }
+
+  const connectionMode = normalizeSelfHostedVpnConnectionMode(status.activeConnectionMode || status.config?.connectionMode);
+  if (connectionMode !== 'softether_vpngate_raw') {
+    return '';
+  }
+
+  const relayId = String(status.activeRelayId || status.config?.selectedRelayId || status.config?.relaySnapshot?.id || '').trim();
+  const relayHost = String(status.activeRelayIp || status.activeRelayFqdn || status.config?.relaySnapshot?.ip || status.config?.relaySnapshot?.fqdn || '').trim();
+  const selectedSslPort = Number.parseInt(String(status.activeSelectedSslPort || status.config?.selectedSslPort || 0), 10) || 0;
+  if (!selectedSslPort) {
+    return '';
+  }
+
+  if (relayId) {
+    return `vpngate-${sanitizeSelfHostedVpnToken(relayId)}-${selectedSslPort}`;
+  }
+
+  if (relayHost) {
+    return `vpngate-${sanitizeSelfHostedVpnToken(relayHost)}-${selectedSslPort}`;
+  }
+
+  return '';
+}
+
+function getSelfHostedVpnConnectionModeLabel(status = {}) {
+  const connectionMode = normalizeSelfHostedVpnConnectionMode(status.activeConnectionMode || status.config?.connectionMode);
+  return connectionMode === 'softether_vpngate_raw' ? 'SoftEther VPNGate raw' : 'profile';
+}
+
+function buildSelfHostedVpnRelayText(status = {}) {
+  if (normalizeSelfHostedVpnConnectionMode(status.activeConnectionMode || status.config?.connectionMode) !== 'softether_vpngate_raw') {
+    return '-';
+  }
+
+  const relayHost = String(
+    status.activeRelayIp
+    || status.activeRelayFqdn
+    || status.config?.relaySnapshot?.ip
+    || status.config?.relaySnapshot?.fqdn
+    || '',
+  ).trim();
+  const relayId = String(
+    status.activeRelayId
+    || status.config?.selectedRelayId
+    || status.config?.relaySnapshot?.id
+    || '',
+  ).trim();
+
+  if (!relayHost && !relayId) {
+    return '-';
+  }
+
+  if (relayHost && relayId) {
+    return `${relayHost} (#${relayId})`;
+  }
+
+  return relayHost || `#${relayId}`;
+}
+
+function buildSelfHostedVpnSelectedSslPortText(status = {}) {
+  if (normalizeSelfHostedVpnConnectionMode(status.activeConnectionMode || status.config?.connectionMode) !== 'softether_vpngate_raw') {
+    return '-';
+  }
+
+  const selectedSslPort = Number.parseInt(String(
+    status.activeSelectedSslPort
+    || status.config?.selectedSslPort
+    || 0,
+  ), 10) || 0;
+  return selectedSslPort > 0 ? String(selectedSslPort) : '-';
+}
+
 function buildSelfHostedVpnMetaText(status = {}) {
-  const profileId = String(status.activeProfileId || status.config?.profileId || '').trim();
+  const profileId = getSelfHostedVpnEffectiveProfileId(status);
   const agentBaseUrl = String(status.config?.agentBaseUrl || '').trim() || 'http://127.0.0.1:8765';
+  const connectionModeLabel = getSelfHostedVpnConnectionModeLabel(status);
+  const relayText = buildSelfHostedVpnRelayText(status);
+  const selectedSslPortText = buildSelfHostedVpnSelectedSslPortText(status);
 
   if (status.lastErrorMessage) {
     return `최근 오류: ${status.lastErrorMessage}`;
@@ -3606,12 +3753,20 @@ function buildSelfHostedVpnMetaText(status = {}) {
   }
 
   if (status.phase === 'CONNECTING') {
+    if (normalizeSelfHostedVpnConnectionMode(status.activeConnectionMode || status.config?.connectionMode) === 'softether_vpngate_raw') {
+      return `${relayText !== '-' ? relayText : 'raw 릴레이'}:${selectedSslPortText !== '-' ? selectedSslPortText : '미지정 포트'} 로 연결 요청을 보냈고, 터널과 기본 경로가 올라오길 기다리는 중입니다.`;
+    }
+
     return `${profileId || '미지정 profile'} 연결 요청을 보냈고, 터널과 기본 경로가 올라오길 기다리는 중입니다.`;
   }
 
   if (status.phase === 'CONNECTED') {
     const currentPublicIpText = buildSelfHostedVpnPublicIpText(status.currentPublicIp, status.publicIpProvider);
     const ipv4RouteState = status.ipv4DefaultRouteChanged ? 'IPv4 기본경로 변경 감지' : 'IPv4 기본경로 미감지';
+    if (normalizeSelfHostedVpnConnectionMode(status.activeConnectionMode || status.config?.connectionMode) === 'softether_vpngate_raw') {
+      return `${relayText !== '-' ? relayText : '현재 raw 릴레이'}:${selectedSslPortText !== '-' ? selectedSslPortText : '미지정 포트'} 로 연결 중입니다. 현재 출구 IP는 ${currentPublicIpText} 이고, ${ipv4RouteState} 상태입니다.`;
+    }
+
     return `${profileId || '현재 profile'} 로 연결 중입니다. 현재 출구 IP는 ${currentPublicIpText} 이고, ${ipv4RouteState} 상태입니다.`;
   }
 
@@ -3620,10 +3775,19 @@ function buildSelfHostedVpnMetaText(status = {}) {
   }
 
   if (status.healthOk) {
-    return 'local agent 응답은 정상입니다. 연결 전후 공인 IP와 IPv4 route 변화를 같이 보면서 터널 적용 여부를 확인하면 됩니다.';
+    return `local agent 응답은 정상입니다. 현재 설정 모드는 ${connectionModeLabel} 이고, 연결 전후 공인 IP와 IPv4 route 변화를 같이 보면서 터널 적용 여부를 확인하면 됩니다.`;
   }
 
   return 'local agent 응답은 있지만 health/status 일부가 비정상일 수 있습니다. 새로고침이나 agent 로그를 같이 확인하세요.';
+}
+
+function sanitizeSelfHostedVpnToken(value) {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized || 'relay';
 }
 
 function getBumpPostStatusLabel(status = {}) {
@@ -4250,7 +4414,14 @@ function getFeatureConfigInputs(feature) {
     return [
       dom.agentBaseUrlInput,
       dom.authTokenInput,
+      dom.connectionModeInput,
       dom.profileIdInput,
+      dom.relayIdInput,
+      dom.relayFqdnInput,
+      dom.relayIpInput,
+      dom.selectedSslPortInput,
+      dom.relayUdpPortInput,
+      dom.relayHostUniqueKeyInput,
       dom.requestTimeoutMsInput,
       dom.actionTimeoutMsInput,
     ];

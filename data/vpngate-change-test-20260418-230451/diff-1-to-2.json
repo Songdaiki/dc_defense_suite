@@ -1,0 +1,28 @@
+{
+  "fromSampleIndex": 0,
+  "toSampleIndex": 1,
+  "fromCapturedAt": "2026-04-18T14:04:51.903Z",
+  "toCapturedAt": "2026-04-18T14:09:53.283Z",
+  "appearedCount": 7,
+  "disappearedCount": 7,
+  "keptCount": 192,
+  "appearedIps": [
+    "113.23.121.89",
+    "118.70.192.102",
+    "121.165.115.14",
+    "122.103.113.207",
+    "14.33.233.172",
+    "175.197.94.132",
+    "211.58.39.152"
+  ],
+  "disappearedIps": [
+    "103.152.178.62",
+    "183.106.44.191",
+    "184.22.253.96",
+    "49.49.222.180",
+    "60.108.146.236",
+    "82.162.54.124",
+    "87.225.73.195"
+  ],
+  "diffPath": "/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/data/vpngate-change-test-20260418-230451/diff-1-to-2.json"
+}

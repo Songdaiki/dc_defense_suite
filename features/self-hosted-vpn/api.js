@@ -1,18 +1,62 @@
+const CONNECTION_MODE = {
+  PROFILE: 'profile',
+  SOFTETHER_VPNGATE_RAW: 'softether_vpngate_raw',
+};
+
+const EMPTY_RELAY_SNAPSHOT = Object.freeze({
+  id: '',
+  fqdn: '',
+  ip: '',
+  sslPorts: [],
+  udpPort: 0,
+  hostUniqueKey: '',
+});
+
+const MIN_REQUEST_TIMEOUT_MS = 3000;
+const MIN_ACTION_TIMEOUT_MS = 15000;
+
 const DEFAULT_CONFIG = {
   agentBaseUrl: 'http://127.0.0.1:8765',
   authToken: '',
+  connectionMode: CONNECTION_MODE.PROFILE,
   profileId: '',
-  requestTimeoutMs: 800,
-  actionTimeoutMs: 3000,
+  selectedRelayId: '',
+  selectedSslPort: 0,
+  relaySnapshot: EMPTY_RELAY_SNAPSHOT,
+  requestTimeoutMs: MIN_REQUEST_TIMEOUT_MS,
+  actionTimeoutMs: MIN_ACTION_TIMEOUT_MS,
 };
 
 function normalizeConfig(config = {}) {
+  const normalizedConnectionMode = normalizeConnectionMode(config.connectionMode);
+  const normalizedRelaySnapshot = normalizeRelaySnapshot(config.relaySnapshot, config.selectedRelayId);
+  const normalizedSelectedSslPort = normalizePort(config.selectedSslPort, DEFAULT_CONFIG.selectedSslPort);
+  const normalizedSelectedRelayId = String(
+    config.selectedRelayId
+    || normalizedRelaySnapshot.id
+    || '',
+  ).trim();
+
   return {
     agentBaseUrl: normalizeBaseUrl(config.agentBaseUrl || DEFAULT_CONFIG.agentBaseUrl),
     authToken: String(config.authToken || '').trim(),
+    connectionMode: normalizedConnectionMode,
     profileId: String(config.profileId || '').trim(),
-    requestTimeoutMs: normalizePositiveInteger(config.requestTimeoutMs, DEFAULT_CONFIG.requestTimeoutMs),
-    actionTimeoutMs: normalizePositiveInteger(config.actionTimeoutMs, DEFAULT_CONFIG.actionTimeoutMs),
+    selectedRelayId: normalizedSelectedRelayId,
+    selectedSslPort: normalizedSelectedSslPort,
+    relaySnapshot: {
+      ...normalizedRelaySnapshot,
+      id: normalizedRelaySnapshot.id || normalizedSelectedRelayId,
+      sslPorts: buildRelaySslPortList(normalizedRelaySnapshot.sslPorts, normalizedSelectedSslPort),
+    },
+    requestTimeoutMs: Math.max(
+      MIN_REQUEST_TIMEOUT_MS,
+      normalizePositiveInteger(config.requestTimeoutMs, DEFAULT_CONFIG.requestTimeoutMs),
+    ),
+    actionTimeoutMs: Math.max(
+      MIN_ACTION_TIMEOUT_MS,
+      normalizePositiveInteger(config.actionTimeoutMs, DEFAULT_CONFIG.actionTimeoutMs),
+    ),
   };
 }
 
@@ -37,13 +81,12 @@ async function getVpnEgress(config = {}, options = {}) {
   });
 }
 
-async function connectVpn(config = {}, profileId = '', options = {}) {
-  return agentRequest(config, '/v1/vpn/connect', {
+async function connectVpn(config = {}, options = {}) {
+  const resolvedConfig = normalizeConfig(config);
+  return agentRequest(resolvedConfig, '/v1/vpn/connect', {
     method: 'POST',
     timeoutMs: options.timeoutMs,
-    body: {
-      profileId: String(profileId || '').trim(),
-    },
+    body: buildConnectRequestBody(resolvedConfig),
   });
 }
 
@@ -53,6 +96,98 @@ async function disconnectVpn(config = {}, options = {}) {
     timeoutMs: options.timeoutMs,
     body: {},
   });
+}
+
+function buildConnectRequestBody(config = {}) {
+  const resolvedConfig = normalizeConfig(config);
+  const effectiveProfileId = getEffectiveProfileId(resolvedConfig);
+
+  if (resolvedConfig.connectionMode === CONNECTION_MODE.PROFILE) {
+    return {
+      mode: CONNECTION_MODE.PROFILE,
+      profileId: effectiveProfileId,
+    };
+  }
+
+  const relayId = resolvedConfig.selectedRelayId || resolvedConfig.relaySnapshot.id;
+  const relay = {
+    fqdn: resolvedConfig.relaySnapshot.fqdn,
+    ip: resolvedConfig.relaySnapshot.ip,
+    selectedSslPort: resolvedConfig.selectedSslPort,
+    sslPorts: resolvedConfig.relaySnapshot.sslPorts,
+    udpPort: resolvedConfig.relaySnapshot.udpPort,
+    hostUniqueKey: resolvedConfig.relaySnapshot.hostUniqueKey,
+  };
+
+  if (relayId) {
+    relay.id = serializeRelayId(relayId);
+  }
+
+  return {
+    mode: CONNECTION_MODE.SOFTETHER_VPNGATE_RAW,
+    profileId: effectiveProfileId,
+    relay,
+  };
+}
+
+function getEffectiveProfileId(config = {}) {
+  const resolvedConfig = normalizeConfig(config);
+  if (resolvedConfig.profileId) {
+    return resolvedConfig.profileId;
+  }
+
+  if (resolvedConfig.connectionMode !== CONNECTION_MODE.SOFTETHER_VPNGATE_RAW) {
+    return '';
+  }
+
+  const relayId = resolvedConfig.selectedRelayId || resolvedConfig.relaySnapshot.id;
+  const selectedSslPort = resolvedConfig.selectedSslPort;
+  if (relayId && selectedSslPort) {
+    return `vpngate-${sanitizeToken(relayId)}-${selectedSslPort}`;
+  }
+
+  const relayHost = resolvedConfig.relaySnapshot.ip || resolvedConfig.relaySnapshot.fqdn;
+  if (relayHost && selectedSslPort) {
+    return `vpngate-${sanitizeToken(relayHost)}-${selectedSslPort}`;
+  }
+
+  return '';
+}
+
+function getConfigValidationMessage(config = {}) {
+  const resolvedConfig = normalizeConfig(config);
+  const baseUrlValidationMessage = getAgentBaseUrlValidationMessage(resolvedConfig.agentBaseUrl);
+  if (baseUrlValidationMessage) {
+    return baseUrlValidationMessage;
+  }
+
+  if (!resolvedConfig.agentBaseUrl) {
+    return 'local agent 주소를 입력한 뒤 저장하세요.';
+  }
+
+  if (resolvedConfig.connectionMode === CONNECTION_MODE.PROFILE) {
+    if (!resolvedConfig.profileId) {
+      return 'profile ID를 입력한 뒤 저장하세요.';
+    }
+
+    return '';
+  }
+
+  const relayHost = String(resolvedConfig.relaySnapshot.ip || resolvedConfig.relaySnapshot.fqdn || '').trim();
+  if (!relayHost) {
+    return 'raw 릴레이 IP 또는 FQDN을 입력한 뒤 저장하세요.';
+  }
+
+  if (!resolvedConfig.selectedSslPort) {
+    return 'raw 릴레이 SSL 포트를 입력한 뒤 저장하세요.';
+  }
+
+  if (resolvedConfig.relaySnapshot.hostUniqueKey
+    && /^[0-9A-F]{40}$/.test(resolvedConfig.relaySnapshot.hostUniqueKey) === false) {
+    return 'HostUniqueKey는 40자리 hex 문자열만 입력하세요.';
+  }
+
+  return '';
 }
 
 async function agentRequest(config = {}, path = '/', options = {}) {
@@ -115,6 +250,74 @@ async function agentRequest(config = {}, path = '/', options = {}) {
     rawText,
     accepted: Boolean(data?.accepted ?? data?.success ?? true),
   };
+}
+
+function normalizeConnectionMode(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === CONNECTION_MODE.SOFTETHER_VPNGATE_RAW) {
+    return CONNECTION_MODE.SOFTETHER_VPNGATE_RAW;
+  }
+
+  return CONNECTION_MODE.PROFILE;
+}
+
+function normalizeRelaySnapshot(snapshot = {}, fallbackRelayId = '') {
+  const rawSnapshot = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  return {
+    id: String(rawSnapshot.id ?? rawSnapshot.ID ?? fallbackRelayId ?? '').trim(),
+    fqdn: String(rawSnapshot.fqdn ?? rawSnapshot.Fqdn ?? '').trim(),
+    ip: String(rawSnapshot.ip ?? rawSnapshot.IP ?? '').trim(),
+    sslPorts: normalizePortList(rawSnapshot.sslPorts ?? rawSnapshot.SslPorts),
+    udpPort: normalizePort(rawSnapshot.udpPort ?? rawSnapshot.UdpPort, 0),
+    hostUniqueKey: normalizeHostUniqueKey(rawSnapshot.hostUniqueKey ?? rawSnapshot.HostUniqueKey),
+  };
+}
+
+function normalizePortList(value) {
+  const rawValues = Array.isArray(value)
+    ? value
+    : String(value || '')
+      .split(/[\s,]+/)
+      .filter(Boolean);
+  const normalized = [];
+  const seen = new Set();
+  for (const rawValue of rawValues) {
+    const port = normalizePort(rawValue, 0);
+    if (!port || seen.has(port)) {
+      continue;
+    }
+    seen.add(port);
+    normalized.push(port);
+  }
+  return normalized;
+}
+
+function buildRelaySslPortList(sslPorts = [], selectedSslPort = 0) {
+  const normalized = normalizePortList(sslPorts);
+  if (!selectedSslPort) {
+    return normalized;
+  }
+
+  return [
+    selectedSslPort,
+    ...normalized.filter(port => port !== selectedSslPort),
+  ];
+}
+
+function normalizeHostUniqueKey(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, '')
+    .toUpperCase();
+}
+
+function normalizePort(value, fallback = 0) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 65535) {
+    return fallback;
+  }
+
+  return parsed;
 }
 
 function buildTargetUrl(baseUrl, path) {
@@ -202,13 +405,36 @@ function normalizePositiveInteger(value, fallback) {
   return parsed;
 }
 
+function sanitizeToken(value) {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized || 'relay';
+}
+
+function serializeRelayId(value) {
+  const trimmed = String(value || '').trim();
+  if (/^\d+$/.test(trimmed)) {
+    return Number.parseInt(trimmed, 10);
+  }
+
+  return trimmed;
+}
+
 export {
+  CONNECTION_MODE,
   DEFAULT_CONFIG,
+  EMPTY_RELAY_SNAPSHOT,
   connectVpn,
   disconnectVpn,
   getAgentBaseUrlValidationMessage,
   getAgentHealth,
+  getConfigValidationMessage,
+  getEffectiveProfileId,
   getVpnEgress,
   getVpnStatus,
   normalizeConfig,
+  normalizeConnectionMode,
 };

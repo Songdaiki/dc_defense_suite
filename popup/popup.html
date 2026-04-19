@@ -1673,8 +1673,20 @@
             <span id="selfHostedVpnAgentVersionText" class="status-value">-</span>
           </div>
           <div class="status-item">
-            <span class="status-label">profile</span>
+            <span class="status-label">profile/식별자</span>
             <span id="selfHostedVpnProfileIdText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">연결 모드</span>
+            <span id="selfHostedVpnConnectionModeText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">활성 릴레이</span>
+            <span id="selfHostedVpnRelayText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">SSL 포트</span>
+            <span id="selfHostedVpnSslPortText" class="status-value">-</span>
           </div>
           <div class="status-item">
             <span class="status-label">현재 출구 IP</span>
@@ -1736,16 +1748,47 @@
               <input type="password" id="selfHostedVpnAuthToken" value="">
             </div>
             <div class="setting-item">
-              <label for="selfHostedVpnProfileId">profile ID</label>
-              <input type="text" id="selfHostedVpnProfileId" value="" spellcheck="false" placeholder="test-profile-01">
+              <label for="selfHostedVpnConnectionMode">연결 모드</label>
+              <select id="selfHostedVpnConnectionMode">
+                <option value="profile">profile</option>
+                <option value="softether_vpngate_raw">SoftEther VPNGate raw</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <label for="selfHostedVpnProfileId">profile ID / 호환 식별자</label>
+              <input type="text" id="selfHostedVpnProfileId" value="" spellcheck="false" placeholder="test-profile-01 또는 비워두기">
+            </div>
+            <div class="setting-item">
+              <label for="selfHostedVpnRelayId">raw relay ID</label>
+              <input type="text" id="selfHostedVpnRelayId" value="" spellcheck="false" placeholder="18786933">
+            </div>
+            <div class="setting-item">
+              <label for="selfHostedVpnRelayFqdn">raw relay FQDN</label>
+              <input type="text" id="selfHostedVpnRelayFqdn" value="" spellcheck="false" placeholder="vpn204414021.opengw.net">
+            </div>
+            <div class="setting-item">
+              <label for="selfHostedVpnRelayIp">raw relay IP</label>
+              <input type="text" id="selfHostedVpnRelayIp" value="" spellcheck="false" placeholder="121.138.132.127">
+            </div>
+            <div class="setting-item">
+              <label for="selfHostedVpnSelectedSslPort">raw SSL 포트</label>
+              <input type="number" id="selfHostedVpnSelectedSslPort" min="1" max="65535" step="1" value="" placeholder="1698">
+            </div>
+            <div class="setting-item">
+              <label for="selfHostedVpnRelayUdpPort">raw UDP 포트 (선택)</label>
+              <input type="number" id="selfHostedVpnRelayUdpPort" min="1" max="65535" step="1" value="" placeholder="34429">
+            </div>
+            <div class="setting-item">
+              <label for="selfHostedVpnRelayHostUniqueKey">HostUniqueKey (선택)</label>
+              <input type="text" id="selfHostedVpnRelayHostUniqueKey" value="" spellcheck="false" placeholder="E8FD31EE814ABD78B33361B0A625667518EE2D50">
             </div>
             <div class="setting-item">
               <label for="selfHostedVpnRequestTimeoutMs">상태 조회 timeout (ms)</label>
-              <input type="number" id="selfHostedVpnRequestTimeoutMs" min="100" max="30000" step="100" value="800">
+              <input type="number" id="selfHostedVpnRequestTimeoutMs" min="100" max="30000" step="100" value="3000">
             </div>
             <div class="setting-item">
               <label for="selfHostedVpnActionTimeoutMs">연결/해제 timeout (ms)</label>
-              <input type="number" id="selfHostedVpnActionTimeoutMs" min="100" max="60000" step="100" value="3000">
+              <input type="number" id="selfHostedVpnActionTimeoutMs" min="100" max="60000" step="100" value="15000">
             </div>
             <button id="selfHostedVpnSaveConfigBtn" class="btn btn-primary">설정 저장</button>
           </div>

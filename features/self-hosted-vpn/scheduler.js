@@ -1,8 +1,10 @@
 import {
+  CONNECTION_MODE,
   DEFAULT_CONFIG,
   connectVpn,
   disconnectVpn,
-  getAgentBaseUrlValidationMessage,
+  getConfigValidationMessage,
+  getEffectiveProfileId,
   getAgentHealth,
   getVpnEgress,
   getVpnStatus,
@@ -37,7 +39,12 @@ class Scheduler {
     this.lastSyncAt = '';
     this.lastHealthAt = '';
     this.operationId = '';
+    this.activeConnectionMode = CONNECTION_MODE.PROFILE;
     this.activeProfileId = '';
+    this.activeRelayId = '';
+    this.activeRelayIp = '';
+    this.activeRelayFqdn = '';
+    this.activeSelectedSslPort = 0;
     this.publicIpBefore = '';
     this.publicIpAfter = '';
     this.currentPublicIp = '';
@@ -58,20 +65,7 @@ class Scheduler {
   }
 
   getStartBlockReason() {
-    const baseUrlValidationMessage = getAgentBaseUrlValidationMessage(this.config.agentBaseUrl);
-    if (baseUrlValidationMessage) {
-      return baseUrlValidationMessage;
-    }
-
-    if (!this.config.agentBaseUrl) {
-      return 'local agent 주소를 입력한 뒤 저장하세요.';
-    }
-
-    if (!this.config.profileId) {
-      return 'profile ID를 입력한 뒤 저장하세요.';
-    }
-
-    return '';
+    return getConfigValidationMessage(this.config);
   }
 
   async start() {
@@ -92,7 +86,12 @@ class Scheduler {
       this.lastErrorCode = '';
       this.lastErrorMessage = '';
       this.operationId = '';
+      this.activeConnectionMode = this.config.connectionMode || CONNECTION_MODE.PROFILE;
       this.activeProfileId = '';
+      this.activeRelayId = '';
+      this.activeRelayIp = '';
+      this.activeRelayFqdn = '';
+      this.activeSelectedSslPort = 0;
       this.publicIpBefore = '';
       this.publicIpAfter = '';
       this.currentPublicIp = '';
@@ -106,7 +105,7 @@ class Scheduler {
 
       let response;
       try {
-        response = await this.connectVpn(this.config, this.config.profileId);
+        response = await this.connectVpn(this.config);
       } catch (error) {
         await this.handleActionFailure('CONNECT_REQUEST_FAILED', `연결 시작 실패 - ${error.message}`, {
           fallbackPhase: PHASE.ERROR,
@@ -125,8 +124,15 @@ class Scheduler {
       }
 
       this.operationId = String(response?.data?.operationId || '').trim();
-      this.activeProfileId = String(response?.data?.profileId || this.config.profileId || '').trim();
-      this.log(`🟡 연결 요청 전송 - profileId=${this.config.profileId}`);
+      this.activeConnectionMode = String(
+        response?.data?.connectionMode
+        || response?.data?.mode
+        || this.config.connectionMode
+        || CONNECTION_MODE.PROFILE,
+      ).trim() || CONNECTION_MODE.PROFILE;
+      this.activeProfileId = String(response?.data?.profileId || getEffectiveProfileId(this.config) || '').trim();
+      this.applyActiveRelayConfig(this.config, response?.data);
+      this.log(buildConnectLogMessage(this.config, this.activeProfileId));
       await this.saveState();
       await this.refreshStatusFromAgent({ force: true, logFailures: true });
     });
@@ -170,7 +176,12 @@ class Scheduler {
       if (this.phase === PHASE.AGENT_UNAVAILABLE && !this.agentReachable) {
         this.isRunning = false;
         this.operationId = '';
+        this.activeConnectionMode = this.config.connectionMode || CONNECTION_MODE.PROFILE;
         this.activeProfileId = '';
+        this.activeRelayId = '';
+        this.activeRelayIp = '';
+        this.activeRelayFqdn = '';
+        this.activeSelectedSslPort = 0;
         this.ipv4DefaultRouteChanged = false;
         this.ipv6DefaultRouteChanged = false;
         this.dnsChanged = false;
@@ -200,6 +211,10 @@ class Scheduler {
 
   async performStatusRefresh(options = {}) {
     const logFailures = options.logFailures === true;
+    const suppressUnavailableNoise = !this.isRunning
+      && this.phase === PHASE.IDLE
+      && logFailures !== true
+      && options.force !== true;
     const nowIso = new Date().toISOString();
     const beforeSnapshot = this.buildStateSnapshot();
     const requestOptions = options.timeoutMs !== undefined
@@ -227,6 +242,9 @@ class Scheduler {
 
     if (statusData) {
       this.applyAgentStatus(statusData);
+    } else if (suppressUnavailableNoise) {
+      this.phase = PHASE.IDLE;
+      this.isRunning = false;
     } else {
       const fallbackPhase = this.agentReachable ? PHASE.ERROR : PHASE.AGENT_UNAVAILABLE;
       const keepRunning = [PHASE.CONNECTING, PHASE.CONNECTED, PHASE.DISCONNECTING, PHASE.AGENT_UNAVAILABLE].includes(this.phase)
@@ -245,12 +263,15 @@ class Scheduler {
 
     if (!statusData) {
       const failureMessage = extractRefreshFailureMessage(healthResult, statusResult, egressResult);
-      if (failureMessage) {
+      if (failureMessage && !suppressUnavailableNoise) {
         this.lastErrorCode = this.agentReachable ? 'STATUS_UNAVAILABLE' : 'AGENT_UNAVAILABLE';
         this.lastErrorMessage = failureMessage;
         if (logFailures) {
           this.log(`⚠️ 상태 확인 실패 - ${failureMessage}`);
         }
+      } else if (suppressUnavailableNoise) {
+        this.lastErrorCode = '';
+        this.lastErrorMessage = '';
       }
     } else if (!this.agentReachable) {
       this.lastErrorCode = 'AGENT_UNAVAILABLE';
@@ -272,13 +293,21 @@ class Scheduler {
     this.phase = normalizedPhase;
     this.isRunning = [PHASE.CONNECTING, PHASE.CONNECTED, PHASE.DISCONNECTING].includes(normalizedPhase);
     this.operationId = String(status.operationId || this.operationId || '').trim();
+    this.activeConnectionMode = String(
+      status.connectionMode
+      || status.mode
+      || this.activeConnectionMode
+      || this.config.connectionMode
+      || CONNECTION_MODE.PROFILE,
+    ).trim() || CONNECTION_MODE.PROFILE;
     this.activeProfileId = String(
       status.profileId
       || status.activeProfileId
       || this.activeProfileId
-      || this.config.profileId
+      || getEffectiveProfileId(this.config)
       || '',
     ).trim();
+    this.applyActiveRelayConfig(this.config, status);
     this.publicIpBefore = String(status.publicIpBefore || this.publicIpBefore || '').trim();
     this.publicIpAfter = String(status.publicIpAfter || this.publicIpAfter || '').trim();
     if (Object.prototype.hasOwnProperty.call(status, 'ipv4DefaultRouteChanged')) {
@@ -324,6 +353,13 @@ class Scheduler {
       this.lastErrorCode = '';
       this.lastErrorMessage = '';
     }
+
+    if (normalizedPhase === PHASE.IDLE) {
+      this.activeRelayId = '';
+      this.activeRelayIp = '';
+      this.activeRelayFqdn = '';
+      this.activeSelectedSslPort = 0;
+    }
   }
 
   async handleActionFailure(errorCode, message, options = {}) {
@@ -366,7 +402,12 @@ class Scheduler {
       lastSyncAt: this.lastSyncAt,
       lastHealthAt: this.lastHealthAt,
       operationId: this.operationId,
+      activeConnectionMode: this.activeConnectionMode,
       activeProfileId: this.activeProfileId,
+      activeRelayId: this.activeRelayId,
+      activeRelayIp: this.activeRelayIp,
+      activeRelayFqdn: this.activeRelayFqdn,
+      activeSelectedSslPort: this.activeSelectedSslPort,
       publicIpBefore: this.publicIpBefore,
       publicIpAfter: this.publicIpAfter,
       currentPublicIp: this.currentPublicIp,
@@ -410,7 +451,12 @@ class Scheduler {
       this.lastSyncAt = String(schedulerState.lastSyncAt || '');
       this.lastHealthAt = String(schedulerState.lastHealthAt || '');
       this.operationId = String(schedulerState.operationId || '');
+      this.activeConnectionMode = String(schedulerState.activeConnectionMode || CONNECTION_MODE.PROFILE);
       this.activeProfileId = String(schedulerState.activeProfileId || '');
+      this.activeRelayId = String(schedulerState.activeRelayId || '');
+      this.activeRelayIp = String(schedulerState.activeRelayIp || '');
+      this.activeRelayFqdn = String(schedulerState.activeRelayFqdn || '');
+      this.activeSelectedSslPort = Number.parseInt(String(schedulerState.activeSelectedSslPort || '0'), 10) || 0;
       this.publicIpBefore = String(schedulerState.publicIpBefore || '');
       this.publicIpAfter = String(schedulerState.publicIpAfter || '');
       this.currentPublicIp = String(schedulerState.currentPublicIp || '');
@@ -446,7 +492,12 @@ class Scheduler {
       lastSyncAt: this.lastSyncAt,
       lastHealthAt: this.lastHealthAt,
       operationId: this.operationId,
+      activeConnectionMode: this.activeConnectionMode,
       activeProfileId: this.activeProfileId,
+      activeRelayId: this.activeRelayId,
+      activeRelayIp: this.activeRelayIp,
+      activeRelayFqdn: this.activeRelayFqdn,
+      activeSelectedSslPort: this.activeSelectedSslPort,
       publicIpBefore: this.publicIpBefore,
       publicIpAfter: this.publicIpAfter,
       currentPublicIp: this.currentPublicIp,
@@ -472,6 +523,87 @@ class Scheduler {
       this.logs = this.logs.slice(0, 50);
     }
   }
+
+  applyActiveRelayConfig(config = {}, status = {}) {
+    const resolvedConfig = normalizeConfig(config);
+    const relayData = status?.relay && typeof status.relay === 'object' ? status.relay : {};
+    const statusHasRelayFields = Boolean(
+      relayData.id
+      || relayData.ip
+      || relayData.fqdn
+      || relayData.selectedSslPort
+      || status?.activeRelayId
+      || status?.relayId
+      || status?.activeRelayIp
+      || status?.relayIp
+      || status?.activeRelayFqdn
+      || status?.relayFqdn
+      || status?.activeSelectedSslPort
+      || status?.selectedSslPort,
+    );
+    const resolvedConnectionMode = String(
+      status?.connectionMode
+      || status?.mode
+      || (statusHasRelayFields ? CONNECTION_MODE.SOFTETHER_VPNGATE_RAW : '')
+      || this.activeConnectionMode
+      || resolvedConfig.connectionMode
+      || CONNECTION_MODE.PROFILE,
+    ).trim() || CONNECTION_MODE.PROFILE;
+    if (resolvedConnectionMode !== CONNECTION_MODE.SOFTETHER_VPNGATE_RAW) {
+      this.activeRelayId = '';
+      this.activeRelayIp = '';
+      this.activeRelayFqdn = '';
+      this.activeSelectedSslPort = 0;
+      return;
+    }
+
+    const nextActiveRelayId = String(
+      status?.activeRelayId
+      || status?.relayId
+      || relayData.id
+      || resolvedConfig.selectedRelayId
+      || resolvedConfig.relaySnapshot.id
+      || '',
+    ).trim();
+    const nextActiveRelayIp = String(
+      status?.activeRelayIp
+      || status?.relayIp
+      || relayData.ip
+      || resolvedConfig.relaySnapshot.ip
+      || '',
+    ).trim();
+    const nextActiveRelayFqdn = String(
+      status?.activeRelayFqdn
+      || status?.relayFqdn
+      || relayData.fqdn
+      || resolvedConfig.relaySnapshot.fqdn
+      || '',
+    ).trim();
+    const nextActiveSelectedSslPort = Number.parseInt(String(
+      status?.activeSelectedSslPort
+      || status?.selectedSslPort
+      || relayData.selectedSslPort
+      || resolvedConfig.selectedSslPort
+      || 0,
+    ), 10) || 0;
+
+    this.activeRelayId = nextActiveRelayId;
+    this.activeRelayIp = nextActiveRelayIp;
+    this.activeRelayFqdn = nextActiveRelayFqdn;
+    this.activeSelectedSslPort = nextActiveSelectedSslPort;
+  }
+}
+
+function buildConnectLogMessage(config = {}, effectiveProfileId = '') {
+  const resolvedConfig = normalizeConfig(config);
+  if (resolvedConfig.connectionMode === CONNECTION_MODE.SOFTETHER_VPNGATE_RAW) {
+    const relayHost = resolvedConfig.relaySnapshot.ip || resolvedConfig.relaySnapshot.fqdn || '미지정 릴레이';
+    const relayPort = resolvedConfig.selectedSslPort || '미지정 포트';
+    const compatibilityProfileId = effectiveProfileId || getEffectiveProfileId(resolvedConfig) || '미지정 profile';
+    return `🟡 raw 릴레이 연결 요청 전송 - ${relayHost}:${relayPort} / profileId=${compatibilityProfileId}`;
+  }
+
+  return `🟡 연결 요청 전송 - profileId=${effectiveProfileId || resolvedConfig.profileId || '미지정 profile'}`;
 }
 
 function normalizePhase(value) {
