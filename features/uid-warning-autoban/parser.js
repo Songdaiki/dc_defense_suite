@@ -1,4 +1,5 @@
 const IMMEDIATE_TITLE_KEEP_REGEX = /[^가-힣a-z]/g;
+const IMMEDIATE_TITLE_HANGUL_BETWEEN_LATIN_REGEX = /(?<=[가-힣])[a-z]+(?=[가-힣])/g;
 const INVISIBLE_CHARACTER_REGEX = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
 const IMMEDIATE_TITLE_CONFUSABLE_CHAR_MAP = new Map([
   ['Ꭺ', 'a'],
@@ -365,6 +366,8 @@ function normalizeImmediateTitleValue(value) {
   return folded
     .toLowerCase()
     .replace(IMMEDIATE_TITLE_KEEP_REGEX, '')
+    // 제목 우회용으로 한글 사이에만 끼워 넣은 영문 filler는 제거한다.
+    .replace(IMMEDIATE_TITLE_HANGUL_BETWEEN_LATIN_REGEX, '')
     .trim();
 }
 

@@ -339,6 +339,9 @@ async function createSchedulerForRows(rows, dependencyOverrides = {}, configOver
 async function runHelperAssertions() {
   const normalizedAv = normalizeImmediateTitleValue('Ꭺ\u200BV');
   const normalizedSamsung = normalizeImmediateTitleValue('※삼성전자※');
+  const normalizedHangulBetweenLatin = normalizeImmediateTitleValue('x권x은 x비x 밀x 본x 꼭x 노 x 영x 상');
+  const normalizedLeadingLatin = normalizeImmediateTitleValue('x권은비');
+  const normalizedTrailingLatin = normalizeImmediateTitleValue('권은비x');
   const normalizedRules = normalizeImmediateTitleBanRules([' AV ', 'A\u200BV', '삼성전자', '', '삼성전자']);
   const normalizedMixedRules = normalizeImmediateTitleBanRules([
     ' AV ',
@@ -372,6 +375,13 @@ async function runHelperAssertions() {
 
   recordEqual(normalizedAv, 'av', '정규화가 confusable AV를 av로 접는지');
   recordEqual(normalizedSamsung, '삼성전자', '정규화가 특수문자를 제거하는지');
+  recordEqual(normalizedHangulBetweenLatin, 'x권은비밀본꼭노영상', '정규화가 한글 사이에 낀 영문 filler만 제거하는지');
+  recordEqual(normalizedLeadingLatin, 'x권은비', '정규화가 한글 앞 영문은 유지하는지');
+  recordEqual(normalizedTrailingLatin, '권은비x', '정규화가 한글 뒤 영문은 유지하는지');
+  record(
+    normalizedHangulBetweenLatin.includes('권은비밀본꼭노'),
+    '한글 사이 영문 filler 제거 뒤 contains 규칙이 다시 매치 가능한지',
+  );
   recordEqual(normalizedRules.length, 2, '제목 규칙 정규화가 빈값/중복을 제거하는지');
   recordArrayEqual(normalizedRules.map((rule) => rule.normalizedTitle), ['av', '삼성전자'], '제목 규칙 정규화 결과가 예상과 같은지');
   recordArrayEqual(normalizedRules.map((rule) => rule.type), ['contains', 'contains'], '구버전 제목 규칙이 contains 타입으로 승격되는지');
