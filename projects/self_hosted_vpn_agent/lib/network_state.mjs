@@ -159,6 +159,8 @@ ConvertTo-Json -Depth 4
     observedAt: new Date().toISOString(),
     adapters,
     ipConfigs,
+    ipv4DefaultRoutes: ipv4Routes.map(route => normalizeRoute(route)),
+    ipv6DefaultRoutes: ipv6Routes.map(route => normalizeRoute(route)),
     primaryIpv4Route,
     primaryIpv6Route,
     ipv4DefaultRouteKey: buildRouteKey(primaryIpv4Route),
@@ -263,13 +265,18 @@ function compareBaseline(baseline = {}, currentLocalSnapshot = {}, currentPublic
 }
 
 function fetchText(url) {
+  return fetchTextWithOptions(url, {});
+}
+
+function fetchTextWithOptions(url, options = {}) {
   return new Promise((resolve, reject) => {
     const request = https.get(url, {
       headers: {
         'User-Agent': 'dc-defense-suite/self-hosted-vpn-agent',
         Accept: 'application/json,text/plain,*/*',
       },
-      timeout: PUBLIC_IP_TIMEOUT_MS,
+      timeout: normalizePositiveInteger(options.timeoutMs, PUBLIC_IP_TIMEOUT_MS),
+      family: Number.parseInt(String(options.family || 0), 10) || undefined,
     }, (response) => {
       const chunks = [];
       response.on('data', chunk => chunks.push(chunk));
@@ -334,6 +341,125 @@ async function detectPublicIp() {
   }
 }
 
+async function probeFreshPublicIpv4() {
+  const providers = [
+    { name: 'api.ipify.org', url: 'https://api.ipify.org?format=json', json: true, field: 'ip', family: 4 },
+    { name: 'ifconfig.me', url: 'https://ifconfig.me/ip', json: false, field: '', family: 4 },
+  ];
+
+  const attempts = providers.map(async (provider) => {
+    const response = await fetchTextWithOptions(provider.url, {
+      family: provider.family,
+      timeoutMs: PUBLIC_IP_TIMEOUT_MS,
+    });
+    if (response.statusCode >= 400) {
+      throw new Error(`HTTP ${response.statusCode}`);
+    }
+
+    if (provider.json) {
+      const parsed = JSON.parse(response.body);
+      const ip = String(parsed[provider.field] || '').trim();
+      if (!ip) {
+        throw new Error('ip empty');
+      }
+
+      return {
+        provider: provider.name,
+        ip,
+      };
+    }
+
+    const ip = String(response.body || '').trim();
+    if (!ip) {
+      throw new Error('ip empty');
+    }
+
+    return {
+      provider: provider.name,
+      ip,
+    };
+  });
+
+  return Promise.any(attempts);
+}
+
+async function collectInterfaceMetrics() {
+  const metricScript = `
+$ErrorActionPreference = 'Stop'
+Get-NetIPInterface -AddressFamily IPv4 |
+Select-Object ifIndex, InterfaceAlias, AutomaticMetric, InterfaceMetric, ConnectionState |
+ConvertTo-Json -Depth 4
+`.trim();
+
+  const raw = await runWindowsCommand(metricScript);
+  return ensureArray(parseWindowsJson(raw)).map(normalizeInterfaceMetricRow);
+}
+
+function normalizeInterfaceMetricRow(row = {}) {
+  const automaticMetricRaw = row.AutomaticMetric;
+  return {
+    ifIndex: Number.parseInt(String(row.ifIndex || row.InterfaceIndex || 0), 10) || 0,
+    interfaceAlias: String(row.InterfaceAlias || '').trim(),
+    automaticMetric: typeof automaticMetricRaw === 'boolean'
+      ? automaticMetricRaw
+      : /true|enabled|yes/i.test(String(automaticMetricRaw || '')),
+    interfaceMetric: Number.parseInt(String(row.InterfaceMetric || 0), 10) || 0,
+    connectionState: String(row.ConnectionState || '').trim(),
+  };
+}
+
+async function applyInterfaceMetricPlan(updates = []) {
+  const normalized = ensureArray(updates)
+    .map((item) => ({
+      ifIndex: Number.parseInt(String(item?.ifIndex || 0), 10) || 0,
+      interfaceMetric: Number.parseInt(String(item?.interfaceMetric || 0), 10) || 0,
+    }))
+    .filter(item => item.ifIndex > 0 && item.interfaceMetric > 0);
+
+  if (normalized.length === 0) {
+    return;
+  }
+
+  const scriptLines = [
+    "$ErrorActionPreference = 'Stop'",
+    ...normalized.map(item => (
+      `Set-NetIPInterface -InterfaceIndex ${item.ifIndex} -AddressFamily IPv4 -AutomaticMetric Disabled -InterfaceMetric ${item.interfaceMetric} | Out-Null`
+    )),
+  ];
+
+  await runWindowsCommand(scriptLines.join('\n'));
+}
+
+async function restoreInterfaceMetrics(metricRows = []) {
+  const normalized = ensureArray(metricRows)
+    .map(normalizeInterfaceMetricRow)
+    .filter(item => item.ifIndex > 0);
+
+  if (normalized.length === 0) {
+    return;
+  }
+
+  const scriptLines = [
+    "$ErrorActionPreference = 'Stop'",
+  ];
+
+  for (const item of normalized) {
+    if (item.automaticMetric) {
+      scriptLines.push(
+        `Set-NetIPInterface -InterfaceIndex ${item.ifIndex} -AddressFamily IPv4 -AutomaticMetric Enabled | Out-Null`,
+      );
+      continue;
+    }
+
+    const safeMetric = Math.max(1, Number.parseInt(String(item.interfaceMetric || 1), 10) || 1);
+    scriptLines.push(
+      `Set-NetIPInterface -InterfaceIndex ${item.ifIndex} -AddressFamily IPv4 -AutomaticMetric Disabled -InterfaceMetric ${safeMetric} | Out-Null`,
+    );
+  }
+
+  await runWindowsCommand(scriptLines.join('\n'));
+}
+
 function normalizePositiveInteger(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ''), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -344,12 +470,16 @@ function normalizePositiveInteger(value, fallback) {
 }
 
 export {
+  applyInterfaceMetricPlan,
   NetworkObserver,
   buildBaseline,
   buildDnsSignature,
   buildRouteKey,
+  collectInterfaceMetrics,
   collectLocalSnapshot,
   compareBaseline,
   ensureArray,
   normalizeRoute,
+  probeFreshPublicIpv4,
+  restoreInterfaceMetrics,
 };

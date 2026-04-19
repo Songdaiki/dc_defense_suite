@@ -7,6 +7,7 @@ const execFileAsync = promisify(execFile);
 const COMMAND_TIMEOUT_MS = 15000;
 const COMMAND_MAX_BUFFER_BYTES = 1024 * 1024 * 8;
 const MANAGED_ACCOUNT_PREFIX = 'DCDSVPNGATE-';
+const RAW_CATALOG_ACCOUNT_PREFIX = 'DCDSVPNRAWCACHE-';
 const SOFTETHER_MIN_REGULATED_NIC_INDEX = 1;
 const SOFTETHER_MAX_REGULATED_NIC_INDEX = 127;
 const DEFAULT_VPNCMD_PATH = resolveDefaultVpncmdPath();
@@ -46,7 +47,19 @@ function buildSoftEtherNicName(index) {
   return `VPN${normalizedIndex}`;
 }
 
-function isSoftEtherNicName(value) {
+function normalizeSoftEtherMaxNicIndex(value, fallback = SOFTETHER_MAX_REGULATED_NIC_INDEX) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  const normalizedFallback = Number.parseInt(String(fallback ?? SOFTETHER_MAX_REGULATED_NIC_INDEX), 10);
+  if (!Number.isFinite(parsed) || parsed < 2) {
+    return Number.isFinite(normalizedFallback) && normalizedFallback >= 2
+      ? normalizedFallback
+      : SOFTETHER_MAX_REGULATED_NIC_INDEX;
+  }
+
+  return parsed;
+}
+
+function isSoftEtherNicName(value, options = {}) {
   const normalized = String(value || '').trim().toUpperCase();
   if (!normalized.startsWith('VPN')) {
     return false;
@@ -66,24 +79,26 @@ function isSoftEtherNicName(value) {
     return false;
   }
 
-  return parsed >= 2 && parsed <= SOFTETHER_MAX_REGULATED_NIC_INDEX && String(parsed) === suffix;
+  const maxNicIndex = normalizeSoftEtherMaxNicIndex(options.maxNicIndex, SOFTETHER_MAX_REGULATED_NIC_INDEX);
+  return parsed >= 2 && parsed <= maxNicIndex && String(parsed) === suffix;
 }
 
-function normalizePreferredSoftEtherNicName(value, fallback = 'VPN2') {
+function normalizePreferredSoftEtherNicName(value, fallback = 'VPN2', options = {}) {
   const normalized = String(value || '').trim().toUpperCase();
-  if (isSoftEtherNicName(normalized)) {
+  if (isSoftEtherNicName(normalized, options)) {
     return normalized;
   }
 
   return String(fallback || 'VPN2').trim().toUpperCase();
 }
 
-function buildSoftEtherNicCandidateList(preferredName = '') {
+function buildSoftEtherNicCandidateList(preferredName = '', options = {}) {
   const candidates = [];
   const seen = new Set();
+  const maxNicIndex = normalizeSoftEtherMaxNicIndex(options.maxNicIndex, SOFTETHER_MAX_REGULATED_NIC_INDEX);
   const pushCandidate = (candidate) => {
     const normalized = String(candidate || '').trim().toUpperCase();
-    if (!isSoftEtherNicName(normalized) || seen.has(normalized)) {
+    if (!isSoftEtherNicName(normalized, { maxNicIndex }) || seen.has(normalized)) {
       return;
     }
 
@@ -91,11 +106,11 @@ function buildSoftEtherNicCandidateList(preferredName = '') {
     candidates.push(normalized);
   };
 
-  if (isSoftEtherNicName(preferredName)) {
+  if (isSoftEtherNicName(preferredName, { maxNicIndex })) {
     pushCandidate(preferredName);
   }
 
-  for (let index = 2; index <= SOFTETHER_MAX_REGULATED_NIC_INDEX; index += 1) {
+  for (let index = 2; index <= maxNicIndex; index += 1) {
     pushCandidate(buildSoftEtherNicName(index));
   }
 
@@ -112,6 +127,16 @@ function buildManagedAccountName(relay = {}, selectedSslPort = 0) {
 
 function isManagedAccountName(value) {
   return String(value || '').trim().toUpperCase().startsWith(MANAGED_ACCOUNT_PREFIX);
+}
+
+function buildRawCatalogAccountName(relay = {}, selectedSslPort = 0) {
+  const relayToken = relay.id || relay.ip || relay.fqdn || 'relay';
+  const portToken = Number.parseInt(String(selectedSslPort || relay.selectedSslPort || 0), 10) || 0;
+  return `${RAW_CATALOG_ACCOUNT_PREFIX}${sanitizeManagedToken(relayToken)}-${portToken || 'port'}`.slice(0, 63);
+}
+
+function isRawCatalogAccountName(value) {
+  return String(value || '').trim().toUpperCase().startsWith(RAW_CATALOG_ACCOUNT_PREFIX);
 }
 
 function quoteVpncmdToken(value) {
@@ -354,6 +379,7 @@ class SoftEtherCli {
   constructor(options = {}) {
     this.vpncmdPath = String(options.vpncmdPath || DEFAULT_VPNCMD_PATH).trim() || DEFAULT_VPNCMD_PATH;
     this.timeoutMs = normalizePositiveInteger(options.timeoutMs, COMMAND_TIMEOUT_MS);
+    this.serializeCommands = options.serializeCommands !== false;
     this.queue = Promise.resolve();
   }
 
@@ -391,6 +417,10 @@ class SoftEtherCli {
         throw new Error(buildVpncmdFailureMessage(error, commandText));
       }
     };
+
+    if (!this.serializeCommands) {
+      return task();
+    }
 
     const previous = this.queue;
     let release = () => {};
@@ -567,9 +597,13 @@ function normalizeNonNegativeInteger(value, fallback) {
 export {
   DEFAULT_VPNCMD_PATH,
   MANAGED_ACCOUNT_PREFIX,
+  RAW_CATALOG_ACCOUNT_PREFIX,
+  buildRawCatalogAccountName,
   buildSoftEtherNicCandidateList,
   buildSoftEtherNicName,
   isSoftEtherNicName,
+  isRawCatalogAccountName,
+  normalizeSoftEtherMaxNicIndex,
   normalizePreferredSoftEtherNicName,
   SoftEtherCli,
   buildManagedAccountName,

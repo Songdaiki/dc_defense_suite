@@ -5,8 +5,10 @@ import { decodeVpnGateDatBuffer } from '../../features/vpngate-prefix/dat-decode
 import { SoftEtherCli, sanitizeManagedToken } from './lib/softether_cli.mjs';
 
 const OFFICIAL_DAT_BASE_URL = 'http://xd.x1.client.api.vpngate2.jp/api/';
+const OFFICIAL_DAT_FETCH_TIMEOUT_MS = 15000;
 const DEFAULT_LIMIT = 200;
 const DEFAULT_NIC_NAME = 'VPN2';
+const DEFAULT_CONCURRENCY = 4;
 const DEFAULT_PREFERRED_COUNTRIES = ['KR', 'JP'];
 const DEFAULT_PREFERRED_PORTS = [443, 995, 1698, 5555, 992, 1194];
 const CONNECT_TIMEOUT_MS = 20000;
@@ -18,6 +20,8 @@ function parseArgs(argv = []) {
   const options = {
     limit: DEFAULT_LIMIT,
     nicName: DEFAULT_NIC_NAME,
+    nicNames: [],
+    concurrency: DEFAULT_CONCURRENCY,
     preferredCountries: [...DEFAULT_PREFERRED_COUNTRIES],
     preferredPorts: [...DEFAULT_PREFERRED_PORTS],
   };
@@ -30,6 +34,19 @@ function parseArgs(argv = []) {
 
     if (arg.startsWith('--nic=')) {
       options.nicName = String(arg.slice('--nic='.length) || DEFAULT_NIC_NAME).trim() || DEFAULT_NIC_NAME;
+      continue;
+    }
+
+    if (arg.startsWith('--nics=')) {
+      options.nicNames = String(arg.slice('--nics='.length) || '')
+        .split(',')
+        .map(value => String(value || '').trim())
+        .filter(Boolean);
+      continue;
+    }
+
+    if (arg.startsWith('--concurrency=')) {
+      options.concurrency = Math.max(1, Number.parseInt(arg.slice('--concurrency='.length), 10) || DEFAULT_CONCURRENCY);
       continue;
     }
 
@@ -58,11 +75,24 @@ function buildRandomSessionId() {
 
 async function fetchLatestHosts() {
   const sessionId = buildRandomSessionId();
-  const response = await fetch(`${OFFICIAL_DAT_BASE_URL}?session_id=${sessionId}`, {
-    method: 'GET',
-    cache: 'no-store',
-    headers: { Accept: '*/*' },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), OFFICIAL_DAT_FETCH_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch(`${OFFICIAL_DAT_BASE_URL}?session_id=${sessionId}`, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: { Accept: '*/*' },
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new Error(`official DAT fetch timeout (${OFFICIAL_DAT_FETCH_TIMEOUT_MS}ms)`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     throw new Error(`official DAT fetch 실패 (HTTP ${response.status})`);
@@ -151,40 +181,35 @@ function buildCandidate(host = {}, preferredCountries = [], preferredPorts = [])
 
 function selectCandidates(hosts = [], options = {}) {
   const candidates = [];
-  const seen = new Set();
 
   for (const host of hosts) {
     const candidate = buildCandidate(host, options.preferredCountries, options.preferredPorts);
     if (!candidate) {
       continue;
     }
-
-    const key = `${candidate.ip}:${candidate.selectedSslPort}`;
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
     candidates.push(candidate);
+    if (candidates.length >= options.limit) {
+      break;
+    }
   }
 
-  candidates.sort((left, right) => {
-    if (left.preferredCountryRank !== right.preferredCountryRank) {
-      return left.preferredCountryRank - right.preferredCountryRank;
-    }
-
-    if (left.preferredPortRank !== right.preferredPortRank) {
-      return left.preferredPortRank - right.preferredPortRank;
-    }
-
-    if (left.verifyDate !== right.verifyDate) {
-      return right.verifyDate - left.verifyDate;
-    }
-
-    return right.score - left.score;
-  });
-
   return candidates.slice(0, options.limit);
+}
+
+async function safeListAccounts(cli, attempts = 3) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await cli.listAccounts();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        await wait(250 * attempt);
+      }
+    }
+  }
+
+  throw lastError || new Error('AccountList 실패');
 }
 
 function wait(ms) {
@@ -217,8 +242,53 @@ async function resolveUsableNicName(cli, preferredName) {
   throw new Error('사용 가능한 SoftEther NIC(VPN/VPN2)가 없습니다.');
 }
 
+async function resolveUsableNicNames(cli, options = {}) {
+  const nicRows = await cli.listNics();
+  const enabledNames = nicRows
+    .filter(row => /enabled/i.test(row.status))
+    .map(row => row.name);
+  const enabledSet = new Set(enabledNames);
+  const preferredPool = Array.isArray(options.nicNames) && options.nicNames.length > 0
+    ? options.nicNames
+    : [options.nicName, 'VPN2', 'VPN3', 'VPN4', 'VPN5', 'VPN6', 'VPN7', 'VPN8', 'VPN9', 'VPN10', 'VPN'];
+  const selected = [];
+  const seen = new Set();
+  const targetCount = Math.max(1, Number.parseInt(String(options.concurrency || 1), 10) || 1);
+
+  for (const rawName of preferredPool) {
+    const nicName = String(rawName || '').trim();
+    if (!nicName || seen.has(nicName) || !enabledSet.has(nicName)) {
+      continue;
+    }
+    seen.add(nicName);
+    selected.push(nicName);
+    if (selected.length >= targetCount) {
+      break;
+    }
+  }
+
+  if (selected.length < targetCount) {
+    for (const nicName of enabledNames) {
+      if (seen.has(nicName)) {
+        continue;
+      }
+      seen.add(nicName);
+      selected.push(nicName);
+      if (selected.length >= targetCount) {
+        break;
+      }
+    }
+  }
+
+  if (selected.length <= 0) {
+    throw new Error('사용 가능한 SoftEther NIC(VPN/VPN2...)가 없습니다.');
+  }
+
+  return selected;
+}
+
 async function cleanupSurveyAccounts(cli) {
-  const rows = await cli.listAccounts();
+  const rows = await safeListAccounts(cli);
   const surveyRows = rows.filter(row => isSurveyAccountName(row.name));
   for (const row of surveyRows) {
     try {
@@ -234,12 +304,39 @@ async function cleanupSurveyAccounts(cli) {
   }
 }
 
+async function assertNoForeignConnectedAccounts(cli) {
+  const rows = await safeListAccounts(cli);
+  const foreignRows = rows.filter((row) => {
+    if (isSurveyAccountName(row.name)) {
+      return false;
+    }
+    return ['CONNECTED', 'CONNECTING'].includes(row.statusKind);
+  });
+
+  if (foreignRows.length <= 0) {
+    return;
+  }
+
+  const detail = foreignRows
+    .map(row => `${row.name}:${row.statusText || row.statusKind}`)
+    .join(', ');
+  throw new Error(`다른 SoftEther 연결이 이미 살아있어서 survey를 시작할 수 없습니다 (${detail})`);
+}
+
 async function waitForConnectOutcome(cli, accountName, timeoutMs = CONNECT_TIMEOUT_MS) {
   const startedAt = Date.now();
   let lastState = 'UNKNOWN';
+  let lastError = '';
 
   while ((Date.now() - startedAt) < timeoutMs) {
-    const rows = await cli.listAccounts();
+    let rows = [];
+    try {
+      rows = await safeListAccounts(cli);
+    } catch (error) {
+      lastError = String(error?.message || error || 'AccountList 실패');
+      await wait(WAIT_STEP_MS);
+      continue;
+    }
     const row = rows.find(item => item.name === accountName) || null;
     if (!row) {
       lastState = 'MISSING';
@@ -270,7 +367,7 @@ async function waitForConnectOutcome(cli, accountName, timeoutMs = CONNECT_TIMEO
   return {
     ok: false,
     state: lastState,
-    reason: 'connect-timeout',
+    reason: lastError ? `connect-timeout (${lastError})` : 'connect-timeout',
   };
 }
 
@@ -283,7 +380,13 @@ async function cleanupAccount(cli, accountName) {
 
   const startedAt = Date.now();
   while ((Date.now() - startedAt) < CLEANUP_TIMEOUT_MS) {
-    const rows = await cli.listAccounts();
+    let rows = [];
+    try {
+      rows = await safeListAccounts(cli);
+    } catch {
+      await wait(WAIT_STEP_MS);
+      continue;
+    }
     const row = rows.find(item => item.name === accountName) || null;
     if (!row || row.statusKind === 'DISCONNECTED') {
       break;
@@ -299,7 +402,7 @@ async function cleanupAccount(cli, accountName) {
 }
 
 async function surveyCandidate(cli, nicName, candidate) {
-  const accountName = `${SURVEY_ACCOUNT_PREFIX}${sanitizeManagedToken(candidate.ip)}-${Date.now().toString(36)}`.slice(0, 63);
+  const accountName = `${SURVEY_ACCOUNT_PREFIX}${sanitizeManagedToken(candidate.ip)}-${sanitizeManagedToken(nicName)}-${randomBytes(3).toString('hex')}`.slice(0, 63);
   const startedAt = Date.now();
   const attemptResults = [];
 
@@ -327,7 +430,7 @@ async function surveyCandidate(cli, nicName, candidate) {
         halfDuplex: false,
         bridgeMode: false,
         monitorMode: false,
-        noRoutingTracking: false,
+        noRoutingTracking: true,
         noQos: true,
       });
       await cli.connectAccount(accountName);
@@ -341,7 +444,6 @@ async function surveyCandidate(cli, nicName, candidate) {
       });
 
       if (outcome.ok) {
-        await cleanupAccount(cli, accountName);
         return {
           ok: true,
           ip: candidate.ip,
@@ -380,36 +482,104 @@ async function surveyCandidate(cli, nicName, candidate) {
   };
 }
 
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
-  const cli = new SoftEtherCli();
-  const nicName = await resolveUsableNicName(cli, options.nicName);
-  await cleanupSurveyAccounts(cli);
-
-  const hosts = await fetchLatestHosts();
-  const candidates = selectCandidates(hosts, options);
-  console.log(`[survey] latest hosts=${hosts.length}, selected candidates=${candidates.length}, nic=${nicName}`);
-
+function buildSummary(results = [], totalHosts = 0, totalCandidates = 0, nicNames = []) {
   const summary = {
-    totalHosts: hosts.length,
-    totalCandidates: candidates.length,
+    totalHosts,
+    totalCandidates,
     success: 0,
     fail: 0,
+    nicNames,
+    byCountry: {},
+    failureReasons: {},
   };
 
-  for (const [index, candidate] of candidates.entries()) {
-    console.log(`[survey] candidate ${index + 1}/${candidates.length}: ${candidate.ip}:${candidate.selectedSslPort} ${candidate.countryShort} attempts=${candidate.portAttempts.join('/')}`);
-    const result = await surveyCandidate(cli, nicName, candidate);
-    if (result.ok) {
-      summary.success += 1;
-      console.log(`[survey-json] ${JSON.stringify({ type: 'result', index: index + 1, ...result })}`);
+  for (const result of results) {
+    if (!result) {
       continue;
     }
 
-    summary.fail += 1;
-    console.log(`[survey-json] ${JSON.stringify({ type: 'result', index: index + 1, ...result })}`);
+    if (result.ok) {
+      summary.success += 1;
+    } else {
+      summary.fail += 1;
+    }
+
+    const countryKey = String(result.countryShort || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
+    if (!summary.byCountry[countryKey]) {
+      summary.byCountry[countryKey] = { total: 0, success: 0, fail: 0 };
+    }
+    summary.byCountry[countryKey].total += 1;
+    if (result.ok) {
+      summary.byCountry[countryKey].success += 1;
+    } else {
+      summary.byCountry[countryKey].fail += 1;
+    }
+
+    if (!result.ok) {
+      const reason = String(result.failureReason || 'unknown-failure').trim() || 'unknown-failure';
+      summary.failureReasons[reason] = (summary.failureReasons[reason] || 0) + 1;
+    }
   }
 
+  return summary;
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+  const bootstrapCli = new SoftEtherCli();
+  const nicNames = await resolveUsableNicNames(bootstrapCli, options);
+  await assertNoForeignConnectedAccounts(bootstrapCli);
+  await cleanupSurveyAccounts(bootstrapCli);
+
+  const hosts = await fetchLatestHosts();
+  const candidates = selectCandidates(hosts, options);
+  console.log(`[survey] latest hosts=${hosts.length}, selected candidates=${candidates.length}, nicPool=${nicNames.join(',')}, concurrency=${nicNames.length}`);
+
+  const results = new Array(candidates.length);
+  let nextIndex = 0;
+  const workerRuns = nicNames.map((nicName, workerIndex) => (async () => {
+    const cli = new SoftEtherCli();
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      if (currentIndex >= candidates.length) {
+        return;
+      }
+
+      const candidate = candidates[currentIndex];
+      console.log(`[survey] worker=${workerIndex + 1} nic=${nicName} candidate ${currentIndex + 1}/${candidates.length}: ${candidate.ip}:${candidate.selectedSslPort} ${candidate.countryShort} attempts=${candidate.portAttempts.join('/')}`);
+      let result;
+      try {
+        result = await surveyCandidate(cli, nicName, candidate);
+      } catch (error) {
+        result = {
+          ok: false,
+          ip: candidate.ip,
+          fqdn: candidate.fqdn || candidate.hostName || '',
+          countryShort: candidate.countryShort,
+          countryFull: candidate.countryFull,
+          selectedSslPort: candidate.selectedSslPort,
+          connectedPort: 0,
+          elapsedMs: 0,
+          attempts: [],
+          failureReason: String(error?.message || error || 'surveyCandidate 실패'),
+        };
+      }
+      results[currentIndex] = {
+        type: 'result',
+        index: currentIndex + 1,
+        worker: workerIndex + 1,
+        nicName,
+        ...result,
+      };
+      console.log(`[survey-json] ${JSON.stringify(results[currentIndex])}`);
+    }
+  })());
+
+  await Promise.all(workerRuns);
+  await cleanupSurveyAccounts(bootstrapCli);
+
+  const summary = buildSummary(results, hosts.length, candidates.length, nicNames);
   console.log(`[survey-json] ${JSON.stringify({ type: 'summary', ...summary })}`);
 }
 

@@ -19,6 +19,10 @@ import {
   Scheduler as BumpPostScheduler,
   normalizeConfig as normalizeBumpPostConfig,
 } from '../features/bump-post/scheduler.js';
+import {
+  Scheduler as SinmungoCommentScheduler,
+  normalizeConfig as normalizeSinmungoCommentConfig,
+} from '../features/sinmungo-comment/scheduler.js';
 import { getAgentBaseUrlValidationMessage } from '../features/self-hosted-vpn/api.js';
 import {
   Scheduler as SelfHostedVpnScheduler,
@@ -87,6 +91,7 @@ const conceptPatrolScheduler = new ConceptPatrolScheduler({
 });
 const hanRefreshIpBanScheduler = new HanRefreshIpBanScheduler();
 const bumpPostScheduler = new BumpPostScheduler();
+const sinmungoCommentScheduler = new SinmungoCommentScheduler();
 const selfHostedVpnScheduler = new SelfHostedVpnScheduler();
 const refluxDatasetCollectorScheduler = new RefluxDatasetCollectorScheduler();
 const refluxOverlayCollectorScheduler = new RefluxOverlayCollectorScheduler();
@@ -108,6 +113,7 @@ const schedulers = {
   conceptPatrol: conceptPatrolScheduler,
   hanRefreshIpBan: hanRefreshIpBanScheduler,
   bumpPost: bumpPostScheduler,
+  sinmungoComment: sinmungoCommentScheduler,
   selfHostedVpn: selfHostedVpnScheduler,
   refluxDatasetCollector: refluxDatasetCollectorScheduler,
   refluxOverlayCollector: refluxOverlayCollectorScheduler,
@@ -169,12 +175,22 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   handleUidRatioWarningTabRemoved(tabId).catch((error) => {
     console.error('[DefenseSuite] uid 경고 탭 제거 정리 실패:', error);
   });
+  if (typeof schedulers.sinmungoComment?.handleTrackedTabRemoved === 'function') {
+    schedulers.sinmungoComment.handleTrackedTabRemoved(tabId).catch((error) => {
+      console.error('[DefenseSuite] 신문고 댓글 인증코드 탭 제거 처리 실패:', error);
+    });
+  }
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   handleUidRatioWarningTabUpdated(tabId, changeInfo, tab).catch((error) => {
     console.error('[DefenseSuite] uid 경고 탭 갱신 처리 실패:', error);
   });
+  if (typeof schedulers.sinmungoComment?.handleTrackedTabUpdated === 'function') {
+    schedulers.sinmungoComment.handleTrackedTabUpdated(tabId, changeInfo, tab).catch((error) => {
+      console.error('[DefenseSuite] 신문고 댓글 인증코드 탭 갱신 처리 실패:', error);
+    });
+  }
 });
 
 chrome.tabs.onActivated.addListener((activeInfo) => {
@@ -223,6 +239,7 @@ async function resumeAllSchedulers() {
     await loadSchedulerStateIfIdle(schedulers.conceptPatrol);
     await loadSchedulerStateIfIdle(schedulers.hanRefreshIpBan);
     await loadSchedulerStateIfIdle(schedulers.bumpPost);
+    await loadSchedulerStateIfIdle(schedulers.sinmungoComment);
     await loadSchedulerStateIfIdle(schedulers.selfHostedVpn);
     await loadSchedulerStateIfIdle(schedulers.refluxDatasetCollector);
     await loadSchedulerStateIfIdle(schedulers.refluxOverlayCollector);
@@ -284,6 +301,7 @@ async function resumeAllSchedulers() {
     await resumeStandaloneScheduler(schedulers.conceptPatrol, '🔁 저장된 개념글순회 상태 복원');
     await resumeStandaloneScheduler(schedulers.hanRefreshIpBan, '🔁 저장된 도배기 갱신 차단 자동 상태 복원');
     await resumeStandaloneScheduler(schedulers.bumpPost, '🔁 저장된 끌올 자동 상태 복원');
+    await resumeStandaloneScheduler(schedulers.sinmungoComment, '🔁 저장된 신문고 댓글 등록 상태 복원');
     await resumeStandaloneScheduler(schedulers.selfHostedVpn, '🔁 저장된 자체 VPN 테스트 상태 복원');
     await resolveUidWarningAutoBanResumeConflict();
     await resumeStandaloneScheduler(schedulers.uidWarningAutoBan, '🔁 저장된 분탕자동차단 상태 복원');
@@ -334,7 +352,32 @@ async function refreshSelfHostedVpnStatusIfNeeded(options = {}) {
     return;
   }
 
+  const force = options.force === true;
+  if (!force && !shouldAutoRefreshSelfHostedVpnStatus(scheduler)) {
+    return;
+  }
+
   await scheduler.refreshStatusFromAgent(options);
+}
+
+function shouldAutoRefreshSelfHostedVpnStatus(scheduler) {
+  const phase = String(scheduler?.phase || '').trim().toUpperCase();
+  const parallelPhase = String(scheduler?.parallelProbe?.phase || '').trim().toUpperCase();
+  const lastSyncAt = String(scheduler?.lastSyncAt || '').trim();
+  const parallelActive = Boolean(
+    scheduler?.parallelProbe?.isRunning
+    || ['PREPARING', 'CONNECTING', 'VERIFYING', 'STOPPING'].includes(parallelPhase),
+  );
+
+  return Boolean(
+    !lastSyncAt
+    || scheduler?.agentReachable !== true
+    || scheduler?.healthOk !== true
+    || scheduler?.isRunning
+    || scheduler?.catalogEnabled
+    || ['PREPARING', 'READY', 'SWITCHING', 'CONNECTING', 'CONNECTED', 'DISCONNECTING'].includes(phase)
+    || parallelActive
+  );
 }
 
 function getSelfHostedVpnPollingTimeoutMs() {
@@ -345,7 +388,7 @@ function getSelfHostedVpnPollingTimeoutMs() {
   const safeDefaultTimeout = Number.isFinite(configuredTimeout) && configuredTimeout > 0
     ? configuredTimeout
     : 3000;
-  return Math.min(safeDefaultTimeout, 3000);
+  return Math.max(safeDefaultTimeout, 3000);
 }
 
 function getAllStatuses() {
@@ -356,6 +399,7 @@ function getAllStatuses() {
     conceptPatrol: schedulers.conceptPatrol.getStatus(),
     hanRefreshIpBan: schedulers.hanRefreshIpBan.getStatus(),
     bumpPost: schedulers.bumpPost.getStatus(),
+    sinmungoComment: schedulers.sinmungoComment.getStatus(),
     selfHostedVpn: schedulers.selfHostedVpn.getStatus(),
     refluxDatasetCollector: schedulers.refluxDatasetCollector.getStatus(),
     refluxOverlayCollector: schedulers.refluxOverlayCollector.getStatus(),
@@ -591,6 +635,99 @@ async function handleMessage(message) {
       await scheduler.stop();
       return { success: true, status: scheduler.getStatus(), statuses: getAllStatuses() };
 
+    case 'refreshManualChallenge':
+      if (message.feature !== 'sinmungoComment') {
+        return {
+          success: false,
+          message: '이 기능은 신문고 댓글 수동 인증코드 새로받기를 지원하지 않습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+      await scheduler.refreshPreparedAnonymousChallenge();
+      return {
+        success: true,
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+      };
+
+    case 'submitManualChallenge':
+      if (message.feature !== 'sinmungoComment') {
+        return {
+          success: false,
+          message: '이 기능은 신문고 댓글 수동 인증코드 제출을 지원하지 않습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+      await scheduler.submitPreparedAnonymousCode(message.code, message.name);
+      return {
+        success: true,
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+      };
+
+    case 'cancelManualChallenge':
+      if (message.feature !== 'sinmungoComment') {
+        return {
+          success: false,
+          message: '이 기능은 신문고 댓글 수동 인증코드 취소를 지원하지 않습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+      await scheduler.stop('🔴 신문고 댓글 등록을 취소했습니다.');
+      return {
+        success: true,
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+      };
+
+    case 'startParallelProbe':
+      if (message.feature !== 'selfHostedVpn') {
+        return {
+          success: false,
+          message: '이 기능은 병렬 3슬롯 시험을 지원하지 않습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+      {
+        const selfHostedVpnStartBlockMessage = getSelfHostedVpnStartBlockMessage();
+        if (selfHostedVpnStartBlockMessage) {
+          return {
+            success: false,
+            message: selfHostedVpnStartBlockMessage,
+            status: scheduler.getStatus(),
+            statuses: getAllStatuses(),
+            sessionFallbackStatus: getDcSessionBrokerStatus(),
+          };
+        }
+      }
+      await scheduler.startParallelProbe();
+      return {
+        success: true,
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+        sessionFallbackStatus: getDcSessionBrokerStatus(),
+      };
+
+    case 'stopParallelProbe':
+      if (message.feature !== 'selfHostedVpn') {
+        return {
+          success: false,
+          message: '이 기능은 병렬 3슬롯 시험을 지원하지 않습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+      await scheduler.stopParallelProbe();
+      return {
+        success: true,
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+      };
+
     case 'getStatus':
       if (message.feature === 'selfHostedVpn') {
         await refreshSelfHostedVpnStatusIfNeeded({
@@ -614,6 +751,69 @@ async function handleMessage(message) {
         success: true,
         status: scheduler.getStatus(),
         statuses: getAllStatuses(),
+      };
+
+    case 'refreshParallelProbeStatus':
+      if (message.feature !== 'selfHostedVpn') {
+        return {
+          success: false,
+          message: '이 기능은 병렬 3슬롯 상태 새로고침을 지원하지 않습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+
+      await refreshSelfHostedVpnStatusIfNeeded({ force: true, logFailures: true });
+      return {
+        success: true,
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+      };
+
+    case 'primeCatalogNics':
+      if (message.feature !== 'selfHostedVpn') {
+        return {
+          success: false,
+          message: '이 기능은 VPN1~200 준비를 지원하지 않습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+
+      await scheduler.primeCatalogNics();
+      return {
+        success: true,
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+      };
+
+    case 'activateCatalogRelay':
+      if (message.feature !== 'selfHostedVpn') {
+        return {
+          success: false,
+          message: '이 기능은 raw 릴레이 클릭 연결을 지원하지 않습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+      {
+        const selfHostedVpnStartBlockMessage = getSelfHostedVpnStartBlockMessage();
+        if (selfHostedVpnStartBlockMessage) {
+          return {
+            success: false,
+            message: selfHostedVpnStartBlockMessage,
+            status: scheduler.getStatus(),
+            statuses: getAllStatuses(),
+            sessionFallbackStatus: getDcSessionBrokerStatus(),
+          };
+        }
+      }
+      await scheduler.activateCatalogRelay(message.relay || {});
+      return {
+        success: true,
+        status: scheduler.getStatus(),
+        statuses: getAllStatuses(),
+        sessionFallbackStatus: getDcSessionBrokerStatus(),
       };
 
     case 'updateConfig': {
@@ -696,6 +896,48 @@ async function handleMessage(message) {
             ...scheduler.config,
             ...message.config,
           });
+        }
+
+        if (message.feature === 'sinmungoComment') {
+          const rawPostNo = message.config.postNo;
+          if (rawPostNo !== undefined) {
+            const trimmedPostNo = String(rawPostNo || '').trim();
+            if (trimmedPostNo && !/^\d+$/.test(trimmedPostNo)) {
+              return {
+                success: false,
+                message: '게시물 번호는 숫자만 입력하세요.',
+                status: scheduler.getStatus(),
+                statuses: getAllStatuses(),
+              };
+            }
+          }
+
+          const rawMemo = message.config.memo;
+          if (rawMemo !== undefined && !String(rawMemo || '').trim()) {
+            return {
+              success: false,
+              message: '댓글 문구를 입력하세요.',
+              status: scheduler.getStatus(),
+              statuses: getAllStatuses(),
+            };
+          }
+
+          message.config = normalizeSinmungoCommentConfig({
+            ...scheduler.config,
+            ...message.config,
+          });
+
+          if (
+            message.config.submitMode === 'anonymous'
+            && String(message.config.password || '').trim().length < 2
+          ) {
+            return {
+              success: false,
+              message: '유동/비회원 테스트 비밀번호는 2자 이상 입력하세요.',
+              status: scheduler.getStatus(),
+              statuses: getAllStatuses(),
+            };
+          }
         }
 
         if (message.feature === 'selfHostedVpn') {
@@ -849,10 +1091,25 @@ async function handleMessage(message) {
           statuses: getAllStatuses(),
         };
       }
-      if (message.feature === 'selfHostedVpn' && scheduler.isRunning) {
+      if (message.feature === 'sinmungoComment' && (scheduler.isRunning || scheduler.startAbortController)) {
         return {
           success: false,
-          message: 'VPN 연결 중에는 상태 기록과 로그를 초기화할 수 없습니다.',
+          message: '신문고 댓글 등록 실행 중에는 통계와 로그를 초기화할 수 없습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+      if (
+        message.feature === 'selfHostedVpn'
+        && (
+          scheduler.isRunning
+          || scheduler.parallelProbe?.isRunning
+          || scheduler.parallelProbe?.phase === 'STOPPING'
+        )
+      ) {
+        return {
+          success: false,
+          message: 'VPN 연결 또는 병렬 3슬롯 시험 실행 중에는 상태 기록과 로그를 초기화할 수 없습니다.',
           status: scheduler.getStatus(),
           statuses: getAllStatuses(),
         };
@@ -1105,16 +1362,38 @@ function resetSchedulerStats(feature, scheduler) {
     return;
   }
 
+  if (feature === 'sinmungoComment') {
+    scheduler.logs = [];
+    scheduler.totalSubmittedCount = 0;
+    scheduler.totalFailedCount = 0;
+    scheduler.lastSubmittedAt = '';
+    scheduler.lastVerifiedAt = '';
+    scheduler.lastSuccessAt = '';
+    scheduler.lastErrorAt = '';
+    scheduler.lastErrorMessage = '';
+    scheduler.lastTargetPostNo = '';
+    scheduler.lastSubmittedMemo = '';
+    scheduler.lastCommentNo = '';
+    if (!scheduler.isRunning) {
+      scheduler.phase = 'IDLE';
+      scheduler.startedAt = '';
+      scheduler.finishedAt = '';
+    }
+    scheduler.pendingChallenge = null;
+    return;
+  }
+
   if (feature === 'selfHostedVpn') {
     scheduler.isRunning = false;
     scheduler.phase = 'IDLE';
+    scheduler.catalogEnabled = false;
     scheduler.healthOk = false;
     scheduler.agentReachable = false;
     scheduler.agentVersion = '';
     scheduler.lastSyncAt = '';
     scheduler.lastHealthAt = '';
     scheduler.operationId = '';
-    scheduler.activeConnectionMode = 'profile';
+    scheduler.activeConnectionMode = 'softether_vpngate_raw';
     scheduler.activeProfileId = '';
     scheduler.activeRelayId = '';
     scheduler.activeRelayIp = '';
@@ -1132,6 +1411,46 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.lastErrorCode = '';
     scheduler.lastErrorMessage = '';
     scheduler.lastSyncCompletedAtMs = 0;
+    scheduler.rawRelayCatalog = {
+      phase: 'IDLE',
+      startedAt: '',
+      completedAt: '',
+      sourceHostCount: 0,
+      usableRelayCount: 0,
+      requestedCandidateCount: 0,
+      provisionableSlotCount: 0,
+      connectedSlotCount: 0,
+      verifiedSlotCount: 0,
+      deadSlotCount: 0,
+      activeSlotId: '',
+      routeOwnerSlotId: '',
+      lastVerifiedAt: '',
+      lastVerifiedPublicIp: '',
+      lastVerifiedPublicIpProvider: '',
+      lastErrorCode: '',
+      lastErrorMessage: '',
+      request: {
+        limit: 200,
+        preferredCountries: ['KR', 'JP'],
+        preferredPorts: [443, 995, 1698, 5555, 992, 1194],
+      },
+      items: [],
+      logs: [],
+    };
+    scheduler.parallelProbe = {
+      isRunning: false,
+      phase: 'IDLE',
+      startedAt: '',
+      completedAt: '',
+      lastVerifiedAt: '',
+      routeOwnerSlotId: '',
+      lastVerifiedPublicIp: '',
+      lastVerifiedPublicIpProvider: '',
+      lastErrorCode: '',
+      lastErrorMessage: '',
+      slots: [],
+      logs: [],
+    };
     scheduler.logs = [];
     return;
   }
@@ -1300,6 +1619,7 @@ async function applySharedConfig(config) {
     || schedulers.conceptPatrol.config.galleryId !== galleryId
     || schedulers.hanRefreshIpBan.config.galleryId !== galleryId
     || schedulers.bumpPost.config.galleryId !== galleryId
+    || schedulers.sinmungoComment.config.galleryId !== galleryId
     || schedulers.post.config.galleryId !== galleryId
     || schedulers.semiPost.config.galleryId !== galleryId
     || schedulers.ip.config.galleryId !== galleryId
@@ -1319,6 +1639,7 @@ async function applySharedConfig(config) {
     schedulers.conceptPatrol.config.galleryId = galleryId;
     schedulers.hanRefreshIpBan.config.galleryId = galleryId;
     schedulers.bumpPost.config.galleryId = galleryId;
+    schedulers.sinmungoComment.config.galleryId = galleryId;
     schedulers.post.config.galleryId = galleryId;
     schedulers.semiPost.config.galleryId = galleryId;
     schedulers.ip.config.galleryId = galleryId;
@@ -1340,6 +1661,7 @@ async function applySharedConfig(config) {
     resetConceptPatrolSchedulerState(`ℹ️ 공통 설정 변경으로 개념글순회 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetHanRefreshIpBanSchedulerState(`ℹ️ 공통 설정 변경으로 도배기 갱신 차단 자동 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetBumpPostSchedulerState(`ℹ️ 공통 설정 변경으로 끌올 자동 상태를 초기화했습니다. (갤러리: ${galleryId})`);
+    resetSinmungoCommentSchedulerState(`ℹ️ 공통 설정 변경으로 신문고 댓글 등록 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetPostSchedulerState(`ℹ️ 공통 설정 변경으로 게시글 분류 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetSemiPostSchedulerState(`ℹ️ 공통 설정 변경으로 반고닉 분류 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetIpSchedulerState(`ℹ️ 공통 설정 변경으로 IP 차단 상태를 초기화했습니다. (갤러리: ${galleryId})`);
@@ -1422,6 +1744,10 @@ function getBusyFeatures() {
     busyFeatures.push('끌올 자동');
   }
 
+  if (isSchedulerBusy(schedulers.sinmungoComment)) {
+    busyFeatures.push('신문고 댓글 등록');
+  }
+
   if (isSchedulerBusy(schedulers.post)) {
     busyFeatures.push('게시글 분류');
   }
@@ -1486,7 +1812,12 @@ function getSelfHostedVpnStartBlockMessage() {
 }
 
 function getConfigUpdateBlockMessage(feature, scheduler, config) {
-  if (!scheduler.isRunning && !scheduler.startAbortController) {
+  const selfHostedVpnParallelActive = feature === 'selfHostedVpn'
+    && (
+      scheduler.parallelProbe?.isRunning
+      || scheduler.parallelProbe?.phase === 'STOPPING'
+    );
+  if (!scheduler.isRunning && !scheduler.startAbortController && !selfHostedVpnParallelActive) {
     return '';
   }
 
@@ -1539,6 +1870,27 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
       && Number(config.intervalMinutes) !== Number(scheduler.config.intervalMinutes);
     if (postNoChanged || durationChanged || intervalChanged) {
       return '끌올 자동 설정은 기능을 정지한 뒤 변경하세요.';
+    }
+  }
+
+  if (feature === 'sinmungoComment') {
+    const trackedConfigKeys = [
+      'postNo',
+      'memo',
+      'submitMode',
+      'password',
+      'replyNo',
+      'name',
+      'gallNickName',
+      'useGallNick',
+      'recommend',
+    ];
+    const hasChangedConfig = trackedConfigKeys.some((key) => (
+      Object.prototype.hasOwnProperty.call(config, key)
+      && normalizeComparableConfigValue(config[key]) !== normalizeComparableConfigValue(scheduler.config[key])
+    ));
+    if (hasChangedConfig) {
+      return '신문고 댓글 등록 설정은 실행이 끝난 뒤 변경하세요.';
     }
   }
 
@@ -1658,6 +2010,16 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
   }
 
   return '';
+}
+
+function normalizeComparableConfigValue(value) {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return String(value);
 }
 
 function getMonitorManualLockMessage(feature, action) {
@@ -1912,6 +2274,38 @@ function resetBumpPostSchedulerState(message) {
   scheduler.totalBumpedCount = 0;
   scheduler.totalFailedCount = 0;
   scheduler.config.postNo = '';
+  scheduler.logs = [];
+  scheduler.log(message);
+}
+
+function resetSinmungoCommentSchedulerState(message) {
+  const scheduler = schedulers.sinmungoComment;
+  scheduler.phase = 'IDLE';
+  scheduler.startedAt = '';
+  scheduler.finishedAt = '';
+  scheduler.lastSubmittedAt = '';
+  scheduler.lastVerifiedAt = '';
+  scheduler.lastSuccessAt = '';
+  scheduler.lastErrorAt = '';
+  scheduler.lastErrorMessage = '';
+  scheduler.lastTargetPostNo = '';
+  scheduler.lastSubmittedMemo = '';
+  scheduler.lastCommentNo = '';
+  scheduler.totalSubmittedCount = 0;
+  scheduler.totalFailedCount = 0;
+  scheduler.pendingChallenge = null;
+  scheduler.config = normalizeSinmungoCommentConfig({
+    ...scheduler.config,
+    postNo: '',
+    submitMode: 'member',
+    memo: '처리완료',
+    replyNo: '',
+    name: 'ㅇㅇ',
+    password: '',
+    gallNickName: 'ㅇㅇ',
+    useGallNick: 'N',
+    recommend: 0,
+  });
   scheduler.logs = [];
   scheduler.log(message);
 }

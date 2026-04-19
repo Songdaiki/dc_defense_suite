@@ -56,20 +56,23 @@ async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
       if (response.status === 429) {
         const backoff = (i + 1) * 2000;
         console.warn(`[API] 레이트 리밋 감지. ${backoff}ms 대기 후 재시도...`);
-        await delay(backoff);
+        await delay(backoff, options.signal);
         continue;
       }
 
       if (response.status === 403) {
         console.warn('[API] ⚠️ 접근 차단 감지. 30초 대기...');
-        await delay(30000);
+        await delay(30000, options.signal);
         continue;
       }
 
       return response;
     } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw error;
+      }
       console.error(`[API] 네트워크 에러: ${error.message}. 재시도 ${i + 1}/${maxRetries}`);
-      await delay(1000);
+      await delay(1000, options.signal);
     }
   }
 
@@ -193,9 +196,10 @@ function extractEsno(html) {
  * @param {number} postNo - 게시물 번호
  * @param {string} esno - e_s_n_o 토큰
  * @param {number} commentPage - 댓글 페이지 (기본 1)
+ * @param {{signal?: AbortSignal}} options - fetch 옵션
  * @returns {Promise<{comments: Array, totalCnt: number}>}
  */
-async function fetchComments(config = {}, postNo, esno, commentPage = 1) {
+async function fetchComments(config = {}, postNo, esno, commentPage = 1, options = {}) {
   const resolved = resolveConfig(config);
   const url = `${resolved.baseUrl}/board/comment/`;
 
@@ -218,6 +222,7 @@ async function fetchComments(config = {}, postNo, esno, commentPage = 1) {
       'Referer': `${resolved.baseUrl}/mgallery/board/view/?id=${resolved.galleryId}&no=${postNo}`,
     },
     body: body.toString(),
+    signal: options.signal,
   });
 
   const data = await response.json();
@@ -391,8 +396,43 @@ async function deleteAndBanComments(config = {}, postNo, commentNos) {
 // 유틸리티
 // ============================================================
 
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function delay(ms, signal) {
+  if (signal?.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, Math.max(0, Number(ms) || 0));
+
+    const handleAbort = () => {
+      cleanup();
+      reject(createAbortError());
+    };
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (signal) {
+        signal.removeEventListener('abort', handleAbort);
+      }
+    };
+
+    if (signal) {
+      signal.addEventListener('abort', handleAbort, { once: true });
+    }
+  });
+}
+
+function createAbortError() {
+  try {
+    return new DOMException('The operation was aborted.', 'AbortError');
+  } catch {
+    const error = new Error('The operation was aborted.');
+    error.name = 'AbortError';
+    return error;
+  }
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {

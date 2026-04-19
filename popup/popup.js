@@ -8,6 +8,7 @@ const DIRTY_FEATURES = {
   conceptPatrol: false,
   hanRefreshIpBan: false,
   bumpPost: false,
+  sinmungoComment: false,
   selfHostedVpn: false,
   refluxDatasetCollector: false,
   refluxOverlayCollector: false,
@@ -33,6 +34,8 @@ let latestSessionFallbackStatus = null;
 let latestUidRatioWarningStatus = null;
 let latestUidWarningAutoBanStatus = null;
 let latestBumpPostStatus = null;
+let latestSinmungoCommentStatus = null;
+let latestRenderedSinmungoCommentChallengeId = '';
 let latestCommentStatus = null;
 let latestPostStatus = null;
 let latestSelfHostedVpnStatus = null;
@@ -41,6 +44,7 @@ let latestRefluxOverlayCollectorStatus = null;
 let latestRefluxOverlayCollectorOverlays = [];
 let latestRefluxOverlayCollectorOverlaysLoaded = false;
 let latestCommentRefluxCollectorStatus = null;
+const SELF_HOSTED_VPN_AGENT_WINDOWS_REPO_PATH = 'C:\\Users\\eorb9\\projects\\dc_defense_suite_repo';
 
 const SESSION_FALLBACK_DOM = {
   keepaliveToggle: document.getElementById('sessionFallbackKeepaliveToggle'),
@@ -164,6 +168,41 @@ const FEATURE_DOM = {
     saveConfigBtn: document.getElementById('bumpPostSaveConfigBtn'),
     resetBtn: document.getElementById('bumpPostResetBtn'),
   },
+  sinmungoComment: {
+    toggleBtn: document.getElementById('sinmungoCommentToggleBtn'),
+    toggleLabel: document.getElementById('sinmungoCommentToggleLabel'),
+    statusText: document.getElementById('sinmungoCommentStatusText'),
+    phaseText: document.getElementById('sinmungoCommentPhaseText'),
+    targetPostNoText: document.getElementById('sinmungoCommentTargetPostNo'),
+    lastSubmittedAtText: document.getElementById('sinmungoCommentLastSubmittedAt'),
+    lastVerifiedAtText: document.getElementById('sinmungoCommentLastVerifiedAt'),
+    lastCommentNoText: document.getElementById('sinmungoCommentLastCommentNo'),
+    totalSubmittedCountText: document.getElementById('sinmungoCommentTotalSubmittedCount'),
+    totalFailedCountText: document.getElementById('sinmungoCommentTotalFailedCount'),
+    lastErrorAtText: document.getElementById('sinmungoCommentLastErrorAt'),
+    metaText: document.getElementById('sinmungoCommentMetaText'),
+    logList: document.getElementById('sinmungoCommentLogList'),
+    postNoInput: document.getElementById('sinmungoCommentPostNo'),
+    submitModeInput: document.getElementById('sinmungoCommentSubmitMode'),
+    memoInput: document.getElementById('sinmungoCommentMemo'),
+    anonymousNameSetting: document.getElementById('sinmungoCommentAnonymousNameSetting'),
+    anonymousNameInput: document.getElementById('sinmungoCommentAnonymousName'),
+    passwordSetting: document.getElementById('sinmungoCommentPasswordSetting'),
+    passwordInput: document.getElementById('sinmungoCommentPassword'),
+    challengeSection: document.getElementById('sinmungoCommentChallengeSection'),
+    challengeMetaText: document.getElementById('sinmungoCommentChallengeMetaText'),
+    challengePreparedAtText: document.getElementById('sinmungoCommentCaptchaPreparedAt'),
+    challengeIdentityText: document.getElementById('sinmungoCommentChallengeIdentityText'),
+    captchaImage: document.getElementById('sinmungoCommentCaptchaImage'),
+    challengeNameItem: document.getElementById('sinmungoCommentChallengeNameItem'),
+    challengeNameInput: document.getElementById('sinmungoCommentChallengeName'),
+    codeInput: document.getElementById('sinmungoCommentCodeInput'),
+    refreshCaptchaBtn: document.getElementById('sinmungoCommentRefreshCaptchaBtn'),
+    submitCaptchaBtn: document.getElementById('sinmungoCommentSubmitCaptchaBtn'),
+    cancelCaptchaBtn: document.getElementById('sinmungoCommentCancelCaptchaBtn'),
+    saveConfigBtn: document.getElementById('sinmungoCommentSaveConfigBtn'),
+    resetBtn: document.getElementById('sinmungoCommentResetBtn'),
+  },
   selfHostedVpn: {
     toggleBtn: document.getElementById('selfHostedVpnToggleBtn'),
     toggleLabel: document.getElementById('selfHostedVpnToggleLabel'),
@@ -186,6 +225,23 @@ const FEATURE_DOM = {
     connectedAtText: document.getElementById('selfHostedVpnConnectedAtText'),
     lastErrorCodeText: document.getElementById('selfHostedVpnLastErrorCodeText'),
     metaText: document.getElementById('selfHostedVpnMetaText'),
+    agentGuideCard: document.getElementById('selfHostedVpnAgentGuideCard'),
+    agentGuideMetaText: document.getElementById('selfHostedVpnAgentGuideMetaText'),
+    agentGuideStatusText: document.getElementById('selfHostedVpnAgentGuideStatusText'),
+    agentGuideAddressText: document.getElementById('selfHostedVpnAgentGuideAddressText'),
+    agentGuideFallbackAddressText: document.getElementById('selfHostedVpnAgentGuideFallbackAddressText'),
+    agentGuideRepoPathText: document.getElementById('selfHostedVpnAgentGuideRepoPathText'),
+    agentGuideCommandLabelText: document.getElementById('selfHostedVpnAgentGuideCommandLabelText'),
+    agentGuideCommandText: document.getElementById('selfHostedVpnAgentGuideCommandText'),
+    parallelStatusText: document.getElementById('selfHostedVpnParallelStatusText'),
+    parallelRouteOwnerText: document.getElementById('selfHostedVpnParallelRouteOwnerText'),
+    parallelVerifiedIpText: document.getElementById('selfHostedVpnParallelVerifiedIpText'),
+    parallelSlotsText: document.getElementById('selfHostedVpnParallelSlotsText'),
+    parallelMetaText: document.getElementById('selfHostedVpnParallelMetaText'),
+    catalogStatusText: document.getElementById('selfHostedVpnCatalogStatusText'),
+    catalogCountText: document.getElementById('selfHostedVpnCatalogCountText'),
+    catalogMetaText: document.getElementById('selfHostedVpnCatalogMetaText'),
+    catalogList: document.getElementById('selfHostedVpnCatalogList'),
     logList: document.getElementById('selfHostedVpnLogList'),
     agentBaseUrlInput: document.getElementById('selfHostedVpnAgentBaseUrl'),
     authTokenInput: document.getElementById('selfHostedVpnAuthToken'),
@@ -199,8 +255,17 @@ const FEATURE_DOM = {
     relayHostUniqueKeyInput: document.getElementById('selfHostedVpnRelayHostUniqueKey'),
     requestTimeoutMsInput: document.getElementById('selfHostedVpnRequestTimeoutMs'),
     actionTimeoutMsInput: document.getElementById('selfHostedVpnActionTimeoutMs'),
+    settingsDetails: document.getElementById('selfHostedVpnSettingsDetails'),
     saveConfigBtn: document.getElementById('selfHostedVpnSaveConfigBtn'),
     refreshBtn: document.getElementById('selfHostedVpnRefreshBtn'),
+    primeNicsBtn: document.getElementById('selfHostedVpnPrimeNicsBtn'),
+    copyAgentStartBtn: document.getElementById('selfHostedVpnCopyAgentStartBtn'),
+    copyAgentFallbackBtn: document.getElementById('selfHostedVpnCopyAgentFallbackBtn'),
+    useFallbackAgentUrlBtn: document.getElementById('selfHostedVpnUseFallbackAgentUrlBtn'),
+    copyAgentStopBtn: document.getElementById('selfHostedVpnCopyAgentStopBtn'),
+    parallelStartBtn: document.getElementById('selfHostedVpnParallelStartBtn'),
+    parallelRefreshBtn: document.getElementById('selfHostedVpnParallelRefreshBtn'),
+    parallelStopBtn: document.getElementById('selfHostedVpnParallelStopBtn'),
     resetBtn: document.getElementById('selfHostedVpnResetBtn'),
   },
   refluxDatasetCollector: {
@@ -469,12 +534,31 @@ const FEATURE_DOM = {
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
+  removeHiddenFeatureTabsFromDom();
   bindTabEvents();
   bindFeatureEvents();
   bindSharedConfigEvents();
   await refreshAllStatuses();
   setInterval(refreshAllStatuses, 1000);
 });
+
+function removeHiddenFeatureTabsFromDom() {
+  const hiddenFeatures = new Set(['sinmungoComment', 'selfHostedVpn']);
+
+  document.querySelectorAll('.tab-button[data-tab]').forEach((button) => {
+    const feature = String(button.dataset.tab || '').trim();
+    if (hiddenFeatures.has(feature)) {
+      button.remove();
+    }
+  });
+
+  document.querySelectorAll('.panel[data-feature]').forEach((panel) => {
+    const feature = String(panel.dataset.feature || '').trim();
+    if (hiddenFeatures.has(feature)) {
+      panel.remove();
+    }
+  });
+}
 
 function bindTabEvents() {
   featureTabs.forEach((button) => {
@@ -493,6 +577,7 @@ function bindFeatureEvents() {
   bindConfigDirtyTracking('conceptPatrol');
   bindConfigDirtyTracking('hanRefreshIpBan');
   bindConfigDirtyTracking('bumpPost');
+  bindConfigDirtyTracking('sinmungoComment');
   bindConfigDirtyTracking('selfHostedVpn');
   bindConfigDirtyTracking('refluxDatasetCollector');
   bindConfigDirtyTracking('refluxOverlayCollector');
@@ -507,6 +592,7 @@ function bindFeatureEvents() {
   bindConceptMonitorEvents();
   bindHanRefreshIpBanEvents();
   bindBumpPostEvents();
+  bindSinmungoCommentEvents();
   bindSelfHostedVpnEvents();
   bindRefluxDatasetCollectorEvents();
   bindRefluxOverlayCollectorEvents();
@@ -1023,19 +1109,60 @@ function bindBumpPostEvents() {
   });
 }
 
-function bindSelfHostedVpnEvents() {
-  const dom = FEATURE_DOM.selfHostedVpn;
+function bindSinmungoCommentEvents() {
+  const dom = FEATURE_DOM.sinmungoComment;
+  const isAnonymousModeSelected = () => String(dom.submitModeInput.value || 'member').trim().toLowerCase() === 'anonymous';
+
+  dom.submitModeInput.addEventListener('change', () => {
+    syncSinmungoCommentModeInputs();
+  });
 
   dom.toggleBtn.addEventListener('change', async () => {
     const action = dom.toggleBtn.checked ? 'start' : 'stop';
 
-    if (action === 'start' && DIRTY_FEATURES.selfHostedVpn) {
-      alert('자체 VPN 테스트 설정을 먼저 저장하세요.');
+    if (action === 'start' && DIRTY_FEATURES.sinmungoComment) {
+      alert('신문고 댓글 설정을 먼저 저장하세요.');
       await refreshAllStatuses();
       return;
     }
 
-    const response = await sendFeatureMessage('selfHostedVpn', { action });
+    if (action === 'start') {
+      const postNo = normalizeSinmungoCommentPostNoInputValue(dom.postNoInput.value);
+      if (!postNo) {
+        alert('게시물 번호를 입력하세요.');
+        dom.postNoInput.focus();
+        await refreshAllStatuses();
+        return;
+      }
+
+      if (!isValidSinmungoCommentPostNo(postNo)) {
+        alert('게시물 번호는 숫자만 입력하세요.');
+        dom.postNoInput.focus();
+        dom.postNoInput.select();
+        await refreshAllStatuses();
+        return;
+      }
+
+      if (!normalizeSinmungoCommentMemoInputValue(dom.memoInput.value)) {
+        alert('댓글 문구를 입력하세요.');
+        dom.memoInput.focus();
+        await refreshAllStatuses();
+        return;
+      }
+
+      if (isAnonymousModeSelected()) {
+        const password = normalizeSinmungoCommentPasswordInputValue(dom.passwordInput.value);
+        if (password.length < 2) {
+          alert('유동/비회원 테스트 비밀번호는 2자 이상 입력하세요.');
+          dom.passwordInput.focus();
+          dom.passwordInput.select();
+          await refreshAllStatuses();
+          return;
+        }
+      }
+    }
+
+    const response = await sendFeatureMessage('sinmungoComment', { action });
     if (!response?.success) {
       if (response?.message) {
         alert(response.message);
@@ -1052,7 +1179,253 @@ function bindSelfHostedVpnEvents() {
   });
 
   dom.saveConfigBtn.addEventListener('click', async () => {
-    const connectionMode = normalizeSelfHostedVpnConnectionMode(dom.connectionModeInput.value);
+    const postNo = normalizeSinmungoCommentPostNoInputValue(dom.postNoInput.value);
+    const memo = normalizeSinmungoCommentMemoInputValue(dom.memoInput.value);
+    const submitMode = String(dom.submitModeInput.value || 'member').trim().toLowerCase();
+    const password = normalizeSinmungoCommentPasswordInputValue(dom.passwordInput.value);
+    const anonymousName = normalizeSinmungoCommentDisplayNameInputValue(dom.anonymousNameInput.value);
+
+    if (postNo && !isValidSinmungoCommentPostNo(postNo)) {
+      alert('게시물 번호는 숫자만 입력하세요.');
+      dom.postNoInput.focus();
+      dom.postNoInput.select();
+      return;
+    }
+
+    if (!memo) {
+      alert('댓글 문구를 입력하세요.');
+      dom.memoInput.focus();
+      return;
+    }
+
+    if (submitMode === 'anonymous' && password.length < 2) {
+      alert('유동/비회원 테스트 비밀번호는 2자 이상 입력하세요.');
+      dom.passwordInput.focus();
+      dom.passwordInput.select();
+      return;
+    }
+
+    const config = {
+      postNo,
+      submitMode,
+      memo,
+      name: submitMode === 'anonymous'
+        ? anonymousName
+        : '',
+      password: submitMode === 'anonymous'
+        ? password
+        : '',
+    };
+
+    const response = await sendFeatureMessage('sinmungoComment', { action: 'updateConfig', config });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    DIRTY_FEATURES.sinmungoComment = false;
+    flashSaved(dom.saveConfigBtn);
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.refreshCaptchaBtn.addEventListener('click', async () => {
+    const response = await sendFeatureMessage('sinmungoComment', { action: 'refreshManualChallenge' });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.submitCaptchaBtn.addEventListener('click', async () => {
+    const pendingChallenge = latestSinmungoCommentStatus?.pendingChallenge || null;
+    const code = normalizeSinmungoCommentChallengeCodeInputValue(dom.codeInput.value);
+    const challengeName = normalizeSinmungoCommentDisplayNameInputValue(dom.challengeNameInput.value);
+
+    if (pendingChallenge?.requiresCode && !code) {
+      alert('인증코드를 입력하세요.');
+      dom.codeInput.focus();
+      return;
+    }
+
+    if (pendingChallenge?.nameEditable && !challengeName) {
+      alert('유동 닉네임을 입력하세요.');
+      dom.challengeNameInput.focus();
+      return;
+    }
+
+    const response = await sendFeatureMessage('sinmungoComment', {
+      action: 'submitManualChallenge',
+      code,
+      name: challengeName,
+    });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.cancelCaptchaBtn.addEventListener('click', async () => {
+    const response = await sendFeatureMessage('sinmungoComment', { action: 'cancelManualChallenge' });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.resetBtn.addEventListener('click', async () => {
+    if (!confirm('신문고 댓글 등록 통계와 로그를 초기화하시겠습니까?')) {
+      return;
+    }
+
+    const response = await sendFeatureMessage('sinmungoComment', { action: 'resetStats' });
+    if (!response?.success) {
+      if (response?.message) {
+        alert(response.message);
+      }
+      await refreshAllStatuses();
+      return;
+    }
+
+    DIRTY_FEATURES.sinmungoComment = false;
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+}
+
+function bindSelfHostedVpnEvents() {
+  const dom = FEATURE_DOM.selfHostedVpn;
+  updateSelfHostedVpnConfigModeFields();
+  const alertSelfHostedVpnFailure = (message = '') => {
+    const normalizedMessage = String(message || '').trim();
+    if (!normalizedMessage) {
+      return;
+    }
+
+    if (/예전 버전|지원하지 않는 경로|HTTP 404/i.test(normalizedMessage)) {
+      alert('실행 중인 local agent가 예전 버전이거나 포트가 꼬였을 수 있습니다. 바로 아래 실행 안내 카드의 기본 실행 명령으로 다시 켜고, 안 되면 대체 포트 명령을 쓰세요.');
+      return;
+    }
+
+    if (/local agent 요청 시간 초과/i.test(normalizedMessage)) {
+      alert('local agent는 살아 있지만 이번 작업 응답이 너무 오래 걸렸습니다.\n\n예를 들어 VPN1~200 준비는 NIC를 많이 만들고 확인하느라 수십 초 이상 걸릴 수 있습니다.\n잠시 후 상태 새로고침으로 확인하거나, 최신 패치 반영 후 다시 시도하세요.\n\n원본 오류:\n' + normalizedMessage);
+      return;
+    }
+
+    if (/(local agent 요청 실패|local agent health 확인 실패|Failed to fetch|fetch failed|ECONNREFUSED|ERR_CONNECTION_REFUSED|ERR_CONNECTION_TIMED_OUT|local agent에 연결할 수 없습니다)/i.test(normalizedMessage)) {
+      alert('local agent가 아직 준비되지 않았습니다. 바로 아래 "local agent 실행 안내" 카드에서 실행 명령을 복사해 PowerShell에서 켠 뒤 다시 시도하세요.');
+      return;
+    }
+
+    alert(normalizedMessage);
+  };
+
+  dom.copyAgentStartBtn?.addEventListener('click', async () => {
+    const guideState = buildSelfHostedVpnAgentGuideState(latestSelfHostedVpnStatus || buildDefaultSelfHostedVpnStatus());
+    updateSelfHostedVpnAgentGuidePreview('primary', guideState);
+    const copied = await copyTextToClipboard(guideState.primaryCommand);
+    if (!copied) {
+      alert('실행 명령 복사에 실패했습니다. 미리보기 박스 내용을 직접 복사하세요.');
+      return;
+    }
+    flashSaved(dom.copyAgentStartBtn, '✅ 복사됨');
+  });
+
+  dom.copyAgentFallbackBtn?.addEventListener('click', async () => {
+    const guideState = buildSelfHostedVpnAgentGuideState(latestSelfHostedVpnStatus || buildDefaultSelfHostedVpnStatus());
+    updateSelfHostedVpnAgentGuidePreview('fallback', guideState);
+    const copied = await copyTextToClipboard(guideState.fallbackCommand);
+    if (!copied) {
+      alert('대체 포트 명령 복사에 실패했습니다. 미리보기 박스 내용을 직접 복사하세요.');
+      return;
+    }
+    flashSaved(dom.copyAgentFallbackBtn, '✅ 복사됨');
+  });
+
+  dom.copyAgentStopBtn?.addEventListener('click', async () => {
+    const guideState = buildSelfHostedVpnAgentGuideState(latestSelfHostedVpnStatus || buildDefaultSelfHostedVpnStatus());
+    updateSelfHostedVpnAgentGuidePreview('stop', guideState);
+    const copied = await copyTextToClipboard(guideState.stopCommand);
+    if (!copied) {
+      alert('종료 명령 복사에 실패했습니다. 미리보기 박스 내용을 직접 복사하세요.');
+      return;
+    }
+    flashSaved(dom.copyAgentStopBtn, '✅ 복사됨');
+  });
+
+  dom.useFallbackAgentUrlBtn?.addEventListener('click', () => {
+    const guideState = buildSelfHostedVpnAgentGuideState(latestSelfHostedVpnStatus || buildDefaultSelfHostedVpnStatus());
+    updateSelfHostedVpnAgentGuidePreview('fallback', guideState);
+    if (dom.settingsDetails) {
+      dom.settingsDetails.open = true;
+    }
+    dom.agentBaseUrlInput.value = guideState.fallbackUrl;
+    DIRTY_FEATURES.selfHostedVpn = true;
+    flashSaved(dom.useFallbackAgentUrlBtn, `${guideState.fallbackPort} 입력됨`);
+    dom.agentBaseUrlInput.focus();
+    dom.agentBaseUrlInput.select();
+  });
+
+  dom.toggleBtn.addEventListener('change', async () => {
+    const action = dom.toggleBtn.checked ? 'start' : 'stop';
+
+    if (action === 'start' && DIRTY_FEATURES.selfHostedVpn) {
+      alert('자체 VPN 테스트 설정을 먼저 저장하세요.');
+      await refreshAllStatuses();
+      return;
+    }
+
+    const response = await sendFeatureMessage('selfHostedVpn', { action });
+    if (!response?.success) {
+      alertSelfHostedVpnFailure(response?.message);
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.saveConfigBtn.addEventListener('click', async () => {
     const relayHostUniqueKey = normalizeSelfHostedVpnHostUniqueKey(dom.relayHostUniqueKeyInput.value);
     if (relayHostUniqueKey && !/^[0-9A-F]{40}$/.test(relayHostUniqueKey)) {
       alert('HostUniqueKey는 40자리 hex 문자열만 입력하세요.');
@@ -1064,8 +1437,8 @@ function bindSelfHostedVpnEvents() {
     const config = {
       agentBaseUrl: dom.agentBaseUrlInput.value.trim(),
       authToken: dom.authTokenInput.value,
-      connectionMode,
-      profileId: dom.profileIdInput.value.trim(),
+      connectionMode: 'softether_vpngate_raw',
+      profileId: '',
       selectedRelayId: dom.relayIdInput.value.trim(),
       selectedSslPort: parseOptionalInt(dom.selectedSslPortInput.value, 0),
       relaySnapshot: {
@@ -1081,9 +1454,7 @@ function bindSelfHostedVpnEvents() {
 
     const response = await sendFeatureMessage('selfHostedVpn', { action: 'updateConfig', config });
     if (!response?.success) {
-      if (response?.message) {
-        alert(response.message);
-      }
+      alertSelfHostedVpnFailure(response?.message);
       await refreshAllStatuses();
       return;
     }
@@ -1100,9 +1471,132 @@ function bindSelfHostedVpnEvents() {
   dom.refreshBtn.addEventListener('click', async () => {
     const response = await sendFeatureMessage('selfHostedVpn', { action: 'refreshStatus' });
     if (!response?.success) {
-      if (response?.message) {
-        alert(response.message);
-      }
+      alertSelfHostedVpnFailure(response?.message);
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.primeNicsBtn.addEventListener('click', async () => {
+    if (DIRTY_FEATURES.selfHostedVpn) {
+      alert('자체 VPN 테스트 설정을 먼저 저장하세요.');
+      await refreshAllStatuses();
+      return;
+    }
+
+    const response = await sendFeatureMessage('selfHostedVpn', { action: 'primeCatalogNics' });
+    if (!response?.success) {
+      alertSelfHostedVpnFailure(response?.message);
+      await refreshAllStatuses();
+      return;
+    }
+
+    const nextStatus = response.statuses?.selfHostedVpn || response.status;
+    const logs = Array.isArray(nextStatus?.logs) ? nextStatus.logs : [];
+    const latestLog = logs[0] || '';
+    if (latestLog) {
+      alert(`VPN1~200 준비 결과\n${latestLog}`);
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.catalogList?.addEventListener('click', async (event) => {
+    const connectButton = event.target.closest('[data-self-hosted-vpn-catalog-connect]');
+    if (!connectButton) {
+      return;
+    }
+
+    const slotId = String(connectButton.dataset.slotId || '').trim();
+    const lookupKey = String(connectButton.dataset.lookupKey || '').trim();
+    if (!slotId && !lookupKey) {
+      return;
+    }
+
+    if (DIRTY_FEATURES.selfHostedVpn) {
+      alert('자체 VPN 테스트 설정을 먼저 저장하세요.');
+      await refreshAllStatuses();
+      return;
+    }
+
+    const catalog = normalizeSelfHostedVpnRawRelayCatalogStatus(latestSelfHostedVpnStatus?.rawRelayCatalog || {});
+    const relay = catalog.items.find((item) => (
+      (slotId && item.slotId === slotId)
+      || (lookupKey && item.lookupKey === lookupKey)
+    ));
+    if (!relay) {
+      alert('선택한 live pool 슬롯을 현재 목록에서 찾지 못했습니다. 먼저 상태를 새로고침하세요.');
+      await refreshAllStatuses();
+      return;
+    }
+
+    const response = await sendFeatureMessage('selfHostedVpn', {
+      action: 'activateCatalogRelay',
+      relay,
+    });
+    if (!response?.success) {
+      alertSelfHostedVpnFailure(response?.message);
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.parallelStartBtn.addEventListener('click', async () => {
+    if (DIRTY_FEATURES.selfHostedVpn) {
+      alert('자체 VPN 테스트 설정을 먼저 저장하세요.');
+      await refreshAllStatuses();
+      return;
+    }
+
+    const response = await sendFeatureMessage('selfHostedVpn', { action: 'startParallelProbe' });
+    if (!response?.success) {
+      alertSelfHostedVpnFailure(response?.message);
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.parallelRefreshBtn.addEventListener('click', async () => {
+    const response = await sendFeatureMessage('selfHostedVpn', { action: 'refreshParallelProbeStatus' });
+    if (!response?.success) {
+      alertSelfHostedVpnFailure(response?.message);
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
+    } else {
+      await refreshAllStatuses();
+    }
+  });
+
+  dom.parallelStopBtn.addEventListener('click', async () => {
+    const response = await sendFeatureMessage('selfHostedVpn', { action: 'stopParallelProbe' });
+    if (!response?.success) {
+      alertSelfHostedVpnFailure(response?.message);
       await refreshAllStatuses();
       return;
     }
@@ -1121,9 +1615,7 @@ function bindSelfHostedVpnEvents() {
 
     const response = await sendFeatureMessage('selfHostedVpn', { action: 'resetStats' });
     if (!response?.success) {
-      if (response?.message) {
-        alert(response.message);
-      }
+      alertSelfHostedVpnFailure(response?.message);
       await refreshAllStatuses();
       return;
     }
@@ -2433,6 +2925,7 @@ function applyStatuses(statuses) {
   updateConceptPatrolUI(statuses.conceptPatrol);
   updateHanRefreshIpBanUI(statuses.hanRefreshIpBan);
   updateBumpPostUI(statuses.bumpPost);
+  updateSinmungoCommentUI(statuses.sinmungoComment);
   updateSelfHostedVpnUI(statuses.selfHostedVpn);
   updateRefluxDatasetCollectorUI(statuses.refluxDatasetCollector);
   updateRefluxOverlayCollectorUI(statuses.refluxOverlayCollector);
@@ -2722,6 +3215,120 @@ function updateBumpPostUI(status) {
   setDisabled(dom.toggleBtn, false);
 }
 
+function updateSinmungoCommentUI(status) {
+  const dom = FEATURE_DOM.sinmungoComment;
+  if (!dom?.toggleBtn) {
+    return;
+  }
+
+  const nextStatus = status || buildDefaultSinmungoCommentStatus();
+  latestSinmungoCommentStatus = nextStatus;
+  const pendingChallenge = normalizeSinmungoCommentPendingChallenge(nextStatus.pendingChallenge);
+  const phase = String(nextStatus.phase || '').trim().toUpperCase();
+  const isRunning = Boolean(nextStatus.isRunning);
+  const isWaitingCode = isRunning && phase === 'WAITING_CODE';
+
+  updateToggle(dom, nextStatus.isRunning);
+  updateStatusText(
+    dom.statusText,
+    getSinmungoCommentStatusLabel(nextStatus),
+    getSinmungoCommentStatusClassName(nextStatus),
+  );
+  dom.phaseText.textContent = nextStatus.phase || 'IDLE';
+  dom.targetPostNoText.textContent = nextStatus.lastTargetPostNo
+    ? `#${nextStatus.lastTargetPostNo}`
+    : (nextStatus.config?.postNo ? `#${nextStatus.config.postNo}` : '-');
+  dom.lastSubmittedAtText.textContent = formatTimestamp(nextStatus.lastSubmittedAt);
+  dom.lastVerifiedAtText.textContent = formatTimestamp(nextStatus.lastVerifiedAt);
+  dom.lastCommentNoText.textContent = nextStatus.lastCommentNo ? `#${nextStatus.lastCommentNo}` : '-';
+  dom.totalSubmittedCountText.textContent = `${nextStatus.totalSubmittedCount ?? 0}회`;
+  dom.totalFailedCountText.textContent = `${nextStatus.totalFailedCount ?? 0}회`;
+  dom.lastErrorAtText.textContent = formatTimestamp(nextStatus.lastErrorAt);
+  dom.metaText.textContent = buildSinmungoCommentMetaText(nextStatus);
+
+  syncFeatureConfigInputs('sinmungoComment', [
+    [dom.postNoInput, nextStatus.config?.postNo ?? ''],
+    [dom.submitModeInput, nextStatus.config?.submitMode ?? 'member'],
+    [dom.memoInput, nextStatus.config?.memo ?? '처리완료'],
+    [dom.anonymousNameInput, nextStatus.config?.name ?? 'ㅇㅇ'],
+    [dom.passwordInput, nextStatus.config?.password ?? ''],
+  ]);
+  syncSinmungoCommentModeInputs(nextStatus);
+  updateSinmungoCommentChallengeUI(nextStatus, pendingChallenge);
+  updateLogList(dom.logList, nextStatus.logs);
+
+  getFeatureConfigInputs('sinmungoComment').forEach((input) => setDisabled(input, isRunning));
+  syncSinmungoCommentModeInputs(nextStatus);
+  setDisabled(dom.saveConfigBtn, isRunning);
+  setDisabled(dom.resetBtn, false);
+  setDisabled(dom.toggleBtn, false);
+  setDisabled(dom.refreshCaptchaBtn, !isWaitingCode);
+  setDisabled(dom.submitCaptchaBtn, !isWaitingCode);
+  setDisabled(dom.cancelCaptchaBtn, !isRunning);
+  setDisabled(dom.codeInput, !isWaitingCode || !pendingChallenge?.requiresCode);
+  setDisabled(dom.challengeNameInput, !isWaitingCode || !pendingChallenge?.nameEditable);
+}
+
+function updateSinmungoCommentChallengeUI(status, pendingChallenge) {
+  const dom = FEATURE_DOM.sinmungoComment;
+  const phase = String(status?.phase || '').trim().toUpperCase();
+  const isPreparing = Boolean(status?.isRunning) && phase === 'PREPARING_CHALLENGE';
+  const isWaitingCode = Boolean(status?.isRunning) && phase === 'WAITING_CODE';
+  const shouldShow = isPreparing || isWaitingCode || Boolean(pendingChallenge?.challengeId);
+  const nextChallengeId = String(pendingChallenge?.challengeId || '').trim();
+
+  dom.challengeSection.hidden = !shouldShow;
+  if (!shouldShow) {
+    latestRenderedSinmungoCommentChallengeId = '';
+    dom.challengePreparedAtText.textContent = '-';
+    dom.challengeIdentityText.textContent = '-';
+    dom.challengeMetaText.textContent = '인증코드가 필요한 글이면 여기에 이미지와 입력칸이 나타납니다.';
+    dom.challengeNameItem.hidden = true;
+    dom.codeInput.value = '';
+    dom.challengeNameInput.value = '';
+    dom.captchaImage.removeAttribute('src');
+    return;
+  }
+
+  dom.challengePreparedAtText.textContent = formatTimestamp(pendingChallenge?.preparedAt);
+  dom.challengeIdentityText.textContent = pendingChallenge?.useGallNick === 'Y'
+    ? `갤닉 고정 (${pendingChallenge.gallNickName || '-'})`
+    : '직접 입력';
+  dom.challengeMetaText.textContent = buildSinmungoCommentChallengeMetaText(status, pendingChallenge);
+  dom.challengeNameItem.hidden = !pendingChallenge?.nameEditable;
+
+  if (!nextChallengeId) {
+    latestRenderedSinmungoCommentChallengeId = '';
+    dom.codeInput.value = '';
+    if (document.activeElement !== dom.challengeNameInput) {
+      dom.challengeNameInput.value = '';
+    }
+  } else if (nextChallengeId !== latestRenderedSinmungoCommentChallengeId) {
+    dom.codeInput.value = '';
+    dom.challengeNameInput.value = pendingChallenge?.anonymousName
+      || status?.config?.name
+      || 'ㅇㅇ';
+    latestRenderedSinmungoCommentChallengeId = nextChallengeId;
+  } else if (
+    pendingChallenge?.nameEditable
+    && document.activeElement !== dom.challengeNameInput
+    && !normalizeSinmungoCommentDisplayNameInputValue(dom.challengeNameInput.value)
+  ) {
+    dom.challengeNameInput.value = pendingChallenge?.anonymousName
+      || status?.config?.name
+      || 'ㅇㅇ';
+  }
+
+  const nextCaptchaImageUrl = String(pendingChallenge?.captchaImageUrl || '').trim();
+  if (nextCaptchaImageUrl) {
+    if (dom.captchaImage.getAttribute('src') !== nextCaptchaImageUrl) {
+      dom.captchaImage.setAttribute('src', nextCaptchaImageUrl);
+    }
+  } else {
+    dom.captchaImage.removeAttribute('src');
+  }
+}
+
 function updateSelfHostedVpnUI(status) {
   const dom = FEATURE_DOM.selfHostedVpn;
   if (!dom?.toggleBtn) {
@@ -2730,6 +3337,9 @@ function updateSelfHostedVpnUI(status) {
 
   const nextStatus = status || buildDefaultSelfHostedVpnStatus();
   latestSelfHostedVpnStatus = nextStatus;
+  const rawRelayCatalog = normalizeSelfHostedVpnRawRelayCatalogStatus(nextStatus.rawRelayCatalog);
+  const parallelProbe = normalizeSelfHostedVpnParallelProbeStatus(nextStatus.parallelProbe);
+  const agentGuideState = buildSelfHostedVpnAgentGuideState(nextStatus);
 
   const ipv4RouteDisplay = getSelfHostedVpnIpv4RouteDisplay(nextStatus);
   const ipv6RouteDisplay = getSelfHostedVpnIpv6RouteDisplay(nextStatus);
@@ -2766,6 +3376,43 @@ function updateSelfHostedVpnUI(status) {
   dom.connectedAtText.textContent = formatTimestamp(nextStatus.connectedAt);
   dom.lastErrorCodeText.textContent = nextStatus.lastErrorCode || '-';
   dom.metaText.textContent = buildSelfHostedVpnMetaText(nextStatus);
+  if (dom.agentGuideCard) {
+    dom.agentGuideCard.className = `manual-utility-card self-hosted-vpn-agent-guide-card${agentGuideState.isWarning ? ' manual-warning-card' : ''}`;
+  }
+  updateStatusText(
+    dom.agentGuideStatusText,
+    agentGuideState.statusText,
+    agentGuideState.statusClassName,
+  );
+  dom.agentGuideMetaText.textContent = agentGuideState.metaText;
+  dom.agentGuideAddressText.textContent = agentGuideState.baseUrl;
+  dom.agentGuideFallbackAddressText.textContent = agentGuideState.fallbackUrl;
+  dom.agentGuideRepoPathText.textContent = agentGuideState.repoPath;
+  dom.copyAgentStartBtn.textContent = `기본 실행 명령 복사`;
+  dom.copyAgentFallbackBtn.textContent = `${agentGuideState.fallbackPort} 대체 명령 복사`;
+  dom.useFallbackAgentUrlBtn.textContent = `${agentGuideState.fallbackPort} 주소 채우기`;
+  dom.copyAgentStopBtn.textContent = `종료 명령 복사`;
+  dom.copyAgentStartBtn.__flashSavedOriginalText = dom.copyAgentStartBtn.textContent;
+  dom.copyAgentFallbackBtn.__flashSavedOriginalText = dom.copyAgentFallbackBtn.textContent;
+  dom.useFallbackAgentUrlBtn.__flashSavedOriginalText = dom.useFallbackAgentUrlBtn.textContent;
+  dom.copyAgentStopBtn.__flashSavedOriginalText = dom.copyAgentStopBtn.textContent;
+  updateSelfHostedVpnAgentGuidePreview('primary', agentGuideState);
+  dom.parallelStatusText.textContent = buildSelfHostedVpnParallelStatusText(parallelProbe);
+  dom.parallelRouteOwnerText.textContent = parallelProbe.routeOwnerSlotId || '-';
+  dom.parallelVerifiedIpText.textContent = buildSelfHostedVpnPublicIpText(
+    parallelProbe.lastVerifiedPublicIp,
+    parallelProbe.lastVerifiedPublicIpProvider,
+  );
+  dom.parallelSlotsText.textContent = buildSelfHostedVpnParallelSlotsText(parallelProbe);
+  dom.parallelMetaText.textContent = buildSelfHostedVpnParallelMetaText(parallelProbe);
+  updateStatusText(
+    dom.catalogStatusText,
+    buildSelfHostedVpnCatalogStatusText(rawRelayCatalog),
+    getSelfHostedVpnCatalogStatusClassName(rawRelayCatalog),
+  );
+  dom.catalogCountText.textContent = buildSelfHostedVpnCatalogCountText(rawRelayCatalog);
+  dom.catalogMetaText.textContent = buildSelfHostedVpnCatalogMetaText(nextStatus, rawRelayCatalog);
+  renderSelfHostedVpnCatalogList(dom.catalogList, nextStatus, rawRelayCatalog, parallelProbe);
 
   syncFeatureConfigInputs('selfHostedVpn', [
     [dom.agentBaseUrlInput, nextStatus.config?.agentBaseUrl ?? 'http://127.0.0.1:8765'],
@@ -2781,14 +3428,23 @@ function updateSelfHostedVpnUI(status) {
     [dom.requestTimeoutMsInput, nextStatus.config?.requestTimeoutMs ?? 3000],
     [dom.actionTimeoutMsInput, nextStatus.config?.actionTimeoutMs ?? 15000],
   ]);
-  updateLogList(dom.logList, nextStatus.logs);
+  updateLogList(dom.logList, buildSelfHostedVpnLogEntries(nextStatus.logs, rawRelayCatalog.logs, parallelProbe.logs));
 
-  const isLocked = Boolean(nextStatus.isRunning);
+  const isLocked = Boolean(nextStatus.isRunning || parallelProbe.isRunning);
+  const singleToggleLocked = Boolean(parallelProbe.isRunning && !nextStatus.isRunning);
   getFeatureConfigInputs('selfHostedVpn').forEach((input) => setDisabled(input, isLocked));
+  updateSelfHostedVpnConfigModeFields({
+    connectionMode: nextStatus.config?.connectionMode ?? 'profile',
+    isLocked,
+  });
   setDisabled(dom.saveConfigBtn, isLocked);
   setDisabled(dom.refreshBtn, false);
+  setDisabled(dom.primeNicsBtn, isLocked);
+  setDisabled(dom.parallelRefreshBtn, false);
+  setDisabled(dom.parallelStartBtn, isLocked);
+  setDisabled(dom.parallelStopBtn, !parallelProbe.isRunning);
   setDisabled(dom.resetBtn, isLocked);
-  setDisabled(dom.toggleBtn, false);
+  setDisabled(dom.toggleBtn, singleToggleLocked);
 }
 
 function updateRefluxDatasetCollectorUI(status) {
@@ -3362,7 +4018,7 @@ function buildDefaultSelfHostedVpnStatus() {
     lastSyncAt: '',
     lastHealthAt: '',
     operationId: '',
-    activeConnectionMode: 'profile',
+    activeConnectionMode: 'softether_vpngate_raw',
     activeProfileId: '',
     activeRelayId: '',
     activeRelayIp: '',
@@ -3379,11 +4035,71 @@ function buildDefaultSelfHostedVpnStatus() {
     connectedAt: '',
     lastErrorCode: '',
     lastErrorMessage: '',
+    catalogEnabled: false,
+    rawRelayCatalog: {
+      phase: 'IDLE',
+      stage: 'IDLE',
+      startedAt: '',
+      completedAt: '',
+      sourceHostCount: 0,
+      usableRelayCount: 0,
+      requestedCandidateCount: 0,
+      logicalSlotCount: 0,
+      requestedPhysicalNicCount: 0,
+      detectedPhysicalNicCapacity: 0,
+      preparedNicCount: 0,
+      connectAttemptedCount: 0,
+      provisionableSlotCount: 0,
+      connectedSlotCount: 0,
+      verifiedSlotCount: 0,
+      deadSlotCount: 0,
+      failedSlotCount: 0,
+      capacityDeferredSlotCount: 0,
+      activeSlotId: '',
+      routeOwnerSlotId: '',
+      lastVerifiedAt: '',
+      lastVerifiedPublicIp: '',
+      lastVerifiedPublicIpProvider: '',
+      lastErrorCode: '',
+      lastErrorMessage: '',
+      availableNicNames: [],
+      preparedNicNames: [],
+      slotQueue: [],
+      request: {
+        limit: 200,
+        logicalSlotCount: 200,
+        requestedPhysicalNicCount: 200,
+        connectConcurrency: 24,
+        nicPrepareConcurrency: 8,
+        verifyConcurrency: 1,
+        experimentalMaxNicIndex: 200,
+        statusPollIntervalMs: 1000,
+        connectTimeoutMs: 45000,
+        preferredCountries: ['KR', 'JP'],
+        preferredPorts: [443, 995, 1698, 5555, 992, 1194],
+      },
+      items: [],
+      logs: [],
+    },
+    parallelProbe: {
+      isRunning: false,
+      phase: 'IDLE',
+      startedAt: '',
+      completedAt: '',
+      lastVerifiedAt: '',
+      routeOwnerSlotId: '',
+      lastVerifiedPublicIp: '',
+      lastVerifiedPublicIpProvider: '',
+      lastErrorCode: '',
+      lastErrorMessage: '',
+      slots: [],
+      logs: [],
+    },
     logs: [],
     config: {
       agentBaseUrl: 'http://127.0.0.1:8765',
       authToken: '',
-      connectionMode: 'profile',
+      connectionMode: 'softether_vpngate_raw',
       profileId: '',
       selectedRelayId: '',
       selectedSslPort: 0,
@@ -3398,6 +4114,139 @@ function buildDefaultSelfHostedVpnStatus() {
       actionTimeoutMs: 15000,
     },
   };
+}
+
+function getSelfHostedVpnAgentBaseUrl(status = {}) {
+  return String(status.config?.agentBaseUrl || '').trim() || 'http://127.0.0.1:8765';
+}
+
+function parseSelfHostedVpnAgentPort(baseUrl) {
+  try {
+    const parsedUrl = new URL(String(baseUrl || '').trim());
+    const rawPort = parsedUrl.port || (parsedUrl.protocol === 'http:' ? '80' : '');
+    const port = Number.parseInt(rawPort, 10);
+    if (port >= 1 && port <= 65535) {
+      return port;
+    }
+  } catch (error) {
+    console.warn('[popup] local agent 주소 파싱 실패:', error.message);
+  }
+
+  return 8765;
+}
+
+function getSelfHostedVpnFallbackAgentPort(primaryPort) {
+  const normalizedPort = Number.parseInt(String(primaryPort || 0), 10) || 8765;
+  if (normalizedPort === 8765) {
+    return 8766;
+  }
+
+  if (normalizedPort >= 65535) {
+    return 8764;
+  }
+
+  return normalizedPort + 1;
+}
+
+function buildSelfHostedVpnAgentUrl(port) {
+  return `http://127.0.0.1:${Number.parseInt(String(port || 0), 10) || 8765}`;
+}
+
+function buildSelfHostedVpnAgentStartCommand(port) {
+  const normalizedPort = Number.parseInt(String(port || 0), 10) || 8765;
+  return [
+    `$port=${normalizedPort}`,
+    '$p=(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess)',
+    'if($p){taskkill /PID $p /F | Out-Null}',
+    `Set-Location '${SELF_HOSTED_VPN_AGENT_WINDOWS_REPO_PATH}'`,
+    '$env:PORT=[string]$port',
+    'node projects\\self_hosted_vpn_agent\\server.mjs',
+  ].join('\n');
+}
+
+function buildSelfHostedVpnAgentStopCommand(port) {
+  const normalizedPort = Number.parseInt(String(port || 0), 10) || 8765;
+  return [
+    `$port=${normalizedPort}`,
+    '$p=(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess)',
+    `if($p){taskkill /PID $p /F}else{Write-Host "포트 ${normalizedPort} 에서 LISTEN 중인 local agent가 없습니다."}`,
+  ].join('\n');
+}
+
+function hasSelfHostedVpnLegacyAgentError(status = {}) {
+  return /예전 버전|지원하지 않는 경로|HTTP 404/i.test(String(status.lastErrorMessage || ''));
+}
+
+function buildSelfHostedVpnAgentGuideState(status = {}) {
+  const baseUrl = getSelfHostedVpnAgentBaseUrl(status);
+  const primaryPort = parseSelfHostedVpnAgentPort(baseUrl);
+  const fallbackPort = getSelfHostedVpnFallbackAgentPort(primaryPort);
+  const fallbackUrl = buildSelfHostedVpnAgentUrl(fallbackPort);
+  const legacyAgentError = hasSelfHostedVpnLegacyAgentError(status);
+
+  let statusText = '⚪ 아직 확인 전';
+  let statusClassName = 'status-muted';
+  if (legacyAgentError) {
+    statusText = '🟠 예전 버전 가능';
+    statusClassName = 'status-warn';
+  } else if (status.agentReachable) {
+    statusText = '🟢 연결됨';
+    statusClassName = 'status-on';
+  } else if (status.lastSyncAt) {
+    statusText = '🔴 실행 안 됨';
+    statusClassName = 'status-off';
+  }
+
+  let metaText = `1. PowerShell 열기 2. 아래 실행 명령 복사 3. 붙여넣고 엔터 4. 돌아와서 '지금 새로고침'을 누르세요.`;
+  if (legacyAgentError) {
+    metaText = `지금은 예전 local agent가 떠 있을 가능성이 큽니다. 먼저 기본 실행 명령으로 현재 포트(${primaryPort})를 정리 후 다시 켜고, 안 되면 ${fallbackPort} 대체 명령과 ${fallbackPort} 주소 채우기를 쓰면 됩니다.`;
+  } else if (status.agentReachable && status.healthOk) {
+    metaText = '지금 local agent는 응답 중입니다. 아래 명령은 agent를 다시 켜거나 포트를 바꿀 때만 쓰면 됩니다.';
+  } else if (status.agentReachable) {
+    metaText = '지금 local agent 자체는 살아 있습니다. 일부 상세 상태 조회가 늦을 수 있지만, agent를 다시 켤 필요는 없습니다.';
+  } else if (status.lastSyncAt) {
+    metaText = `지금 local agent 응답이 없습니다. 현재 주소(${baseUrl}) 기준 실행 명령을 먼저 쓰고, 포트 충돌이면 ${fallbackPort} 대체 명령으로 우회하세요.`;
+  }
+
+  return {
+    baseUrl,
+    fallbackUrl,
+    primaryPort,
+    fallbackPort,
+    repoPath: SELF_HOSTED_VPN_AGENT_WINDOWS_REPO_PATH,
+    statusText,
+    statusClassName,
+    metaText,
+    primaryCommandLabel: `기본 실행 명령 (${primaryPort})`,
+    primaryCommand: buildSelfHostedVpnAgentStartCommand(primaryPort),
+    fallbackCommandLabel: `${fallbackPort} 대체 명령`,
+    fallbackCommand: buildSelfHostedVpnAgentStartCommand(fallbackPort),
+    stopCommandLabel: `종료 명령 (${primaryPort})`,
+    stopCommand: buildSelfHostedVpnAgentStopCommand(primaryPort),
+    isWarning: !status.agentReachable || legacyAgentError,
+  };
+}
+
+function updateSelfHostedVpnAgentGuidePreview(mode, guideState = {}) {
+  const dom = FEATURE_DOM.selfHostedVpn;
+  if (!dom?.agentGuideCommandText || !dom?.agentGuideCommandLabelText) {
+    return;
+  }
+
+  if (mode === 'fallback') {
+    dom.agentGuideCommandLabelText.textContent = guideState.fallbackCommandLabel || '8766 대체 명령';
+    dom.agentGuideCommandText.textContent = guideState.fallbackCommand || '';
+    return;
+  }
+
+  if (mode === 'stop') {
+    dom.agentGuideCommandLabelText.textContent = guideState.stopCommandLabel || '종료 명령';
+    dom.agentGuideCommandText.textContent = guideState.stopCommand || '';
+    return;
+  }
+
+  dom.agentGuideCommandLabelText.textContent = guideState.primaryCommandLabel || '기본 실행 명령';
+  dom.agentGuideCommandText.textContent = guideState.primaryCommand || '';
 }
 
 function buildDefaultBumpPostStatus() {
@@ -3419,6 +4268,34 @@ function buildDefaultBumpPostStatus() {
       postNo: '',
       durationMinutes: 60,
       intervalMinutes: 1,
+    },
+  };
+}
+
+function buildDefaultSinmungoCommentStatus() {
+  return {
+    isRunning: false,
+    phase: 'IDLE',
+    startedAt: '',
+    finishedAt: '',
+    lastSubmittedAt: '',
+    lastVerifiedAt: '',
+    lastSuccessAt: '',
+    lastErrorAt: '',
+    lastErrorMessage: '',
+    lastTargetPostNo: '',
+    lastSubmittedMemo: '',
+    lastCommentNo: '',
+    totalSubmittedCount: 0,
+    totalFailedCount: 0,
+    pendingChallenge: null,
+    logs: [],
+    config: {
+      postNo: '',
+      submitMode: 'member',
+      memo: '처리완료',
+      name: 'ㅇㅇ',
+      password: '',
     },
   };
 }
@@ -3520,12 +4397,28 @@ function getSelfHostedVpnStatusLabel(status = {}) {
     return '⚪ 확인 전';
   }
 
+  if (status.phase === 'READY' && status.lastErrorMessage) {
+    return '🟠 준비 완료 (최근 오류)';
+  }
+
+  if (status.phase === 'PREPARING') {
+    return '🟡 live pool 준비 중';
+  }
+
+  if (status.phase === 'READY') {
+    return '🟢 live pool 준비 완료';
+  }
+
   if (status.phase === 'CONNECTING') {
     return '🟡 연결 시작 중';
   }
 
+  if (status.phase === 'SWITCHING') {
+    return '🟡 owner 전환 중';
+  }
+
   if (status.phase === 'CONNECTED') {
-    return '🟢 연결됨';
+    return '🟢 live pool 연결됨';
   }
 
   if (status.phase === 'DISCONNECTING') {
@@ -3552,11 +4445,15 @@ function getSelfHostedVpnStatusClassName(status = {}) {
     return 'status-muted';
   }
 
-  if (status.phase === 'CONNECTED') {
+  if (status.phase === 'READY' && status.lastErrorMessage) {
+    return 'status-warn';
+  }
+
+  if (['READY', 'CONNECTED'].includes(String(status.phase || ''))) {
     return 'status-on';
   }
 
-  if (['CONNECTING', 'DISCONNECTING', 'ERROR'].includes(String(status.phase || ''))) {
+  if (['PREPARING', 'CONNECTING', 'SWITCHING', 'DISCONNECTING', 'ERROR'].includes(String(status.phase || ''))) {
     return 'status-warn';
   }
 
@@ -3584,7 +4481,7 @@ function getSelfHostedVpnAgentHealthLabel(status = {}) {
     return '🟢 응답 정상';
   }
 
-  return '🟠 일부 응답';
+  return '🟢 응답 확인';
 }
 
 function getSelfHostedVpnAgentHealthClassName(status = {}) {
@@ -3596,7 +4493,7 @@ function getSelfHostedVpnAgentHealthClassName(status = {}) {
     return 'status-off';
   }
 
-  return status.healthOk ? 'status-on' : 'status-warn';
+  return 'status-on';
 }
 
 function buildSelfHostedVpnPublicIpText(ip, provider) {
@@ -3649,6 +4546,16 @@ function normalizeSelfHostedVpnConnectionMode(value) {
     : 'profile';
 }
 
+function updateSelfHostedVpnConfigModeFields(options = {}) {
+  const dom = FEATURE_DOM.selfHostedVpn;
+  if (!dom?.profileIdInput || !dom?.connectionModeInput) {
+    return;
+  }
+
+  dom.connectionModeInput.value = 'softether_vpngate_raw';
+  dom.profileIdInput.value = '';
+}
+
 function normalizeSelfHostedVpnHostUniqueKey(value) {
   return String(value || '')
     .trim()
@@ -3687,7 +4594,7 @@ function getSelfHostedVpnEffectiveProfileId(status = {}) {
 
 function getSelfHostedVpnConnectionModeLabel(status = {}) {
   const connectionMode = normalizeSelfHostedVpnConnectionMode(status.activeConnectionMode || status.config?.connectionMode);
-  return connectionMode === 'softether_vpngate_raw' ? 'SoftEther VPNGate raw' : 'profile';
+  return connectionMode === 'softether_vpngate_raw' ? 'VPNGate raw live pool' : 'VPNGate raw live pool';
 }
 
 function buildSelfHostedVpnRelayText(status = {}) {
@@ -3734,40 +4641,47 @@ function buildSelfHostedVpnSelectedSslPortText(status = {}) {
 }
 
 function buildSelfHostedVpnMetaText(status = {}) {
-  const profileId = getSelfHostedVpnEffectiveProfileId(status);
+  const catalog = normalizeSelfHostedVpnRawRelayCatalogStatus(status.rawRelayCatalog || {});
   const agentBaseUrl = String(status.config?.agentBaseUrl || '').trim() || 'http://127.0.0.1:8765';
   const connectionModeLabel = getSelfHostedVpnConnectionModeLabel(status);
   const relayText = buildSelfHostedVpnRelayText(status);
   const selectedSslPortText = buildSelfHostedVpnSelectedSslPortText(status);
+  const catalogCountText = buildSelfHostedVpnCatalogCountText(catalog);
+  const routeOwnerSlotId = String(catalog.routeOwnerSlotId || '').trim();
+  const activeSlotId = String(catalog.activeSlotId || '').trim();
 
   if (status.lastErrorMessage) {
     return `최근 오류: ${status.lastErrorMessage}`;
   }
 
   if (!status.lastSyncAt) {
-    return `아직 local agent 상태를 읽지 않았습니다. 기본 예시는 ${agentBaseUrl} 이고, 실제 IP 변경은 연결 후 현재 출구 IP가 바뀔 때 확인합니다.`;
+    return `아직 local agent에 한 번도 확인 요청을 보내지 않았습니다. 바로 아래 실행 안내 카드에서 명령을 복사해 먼저 agent를 띄우세요.`;
   }
 
   if (!status.agentReachable) {
-    return `local agent 응답이 없어 상태를 확인하지 못했습니다. agent 실행 여부와 주소(${agentBaseUrl})를 확인하세요.`;
+    return `local agent가 꺼져 있거나 주소가 틀려서 지금은 아무 작업도 진행할 수 없습니다. 아래 실행 안내 카드의 명령으로 먼저 agent를 켠 뒤 주소(${agentBaseUrl})를 확인하세요.`;
+  }
+
+  if (status.phase === 'PREPARING') {
+    return `official raw feed 후보를 실제 슬롯으로 올리고 검증 중입니다. 지금은 ${catalogCountText !== '-' ? catalogCountText : '후보를 준비 중'} 상태입니다.`;
+  }
+
+  if (status.phase === 'READY') {
+    return `live pool 준비가 끝났습니다. 지금은 ${catalogCountText !== '-' ? catalogCountText : '검증 통과 슬롯 준비 완료'} 상태이고, 아래 목록에서 다른 슬롯을 누르면 owner만 전환합니다.`;
+  }
+
+  if (status.phase === 'SWITCHING') {
+    return `지금은 ${routeOwnerSlotId || activeSlotId || '대상 슬롯'} 으로 owner metric을 옮긴 뒤 공인 IP를 다시 확인하는 중입니다.`;
   }
 
   if (status.phase === 'CONNECTING') {
-    if (normalizeSelfHostedVpnConnectionMode(status.activeConnectionMode || status.config?.connectionMode) === 'softether_vpngate_raw') {
-      return `${relayText !== '-' ? relayText : 'raw 릴레이'}:${selectedSslPortText !== '-' ? selectedSslPortText : '미지정 포트'} 로 연결 요청을 보냈고, 터널과 기본 경로가 올라오길 기다리는 중입니다.`;
-    }
-
-    return `${profileId || '미지정 profile'} 연결 요청을 보냈고, 터널과 기본 경로가 올라오길 기다리는 중입니다.`;
+    return `${relayText !== '-' ? relayText : 'raw 릴레이'}:${selectedSslPortText !== '-' ? selectedSslPortText : '미지정 포트'} 로 연결 요청을 보냈고, 터널과 기본 경로가 올라오길 기다리는 중입니다.`;
   }
 
   if (status.phase === 'CONNECTED') {
     const currentPublicIpText = buildSelfHostedVpnPublicIpText(status.currentPublicIp, status.publicIpProvider);
     const ipv4RouteState = status.ipv4DefaultRouteChanged ? 'IPv4 기본경로 변경 감지' : 'IPv4 기본경로 미감지';
-    if (normalizeSelfHostedVpnConnectionMode(status.activeConnectionMode || status.config?.connectionMode) === 'softether_vpngate_raw') {
-      return `${relayText !== '-' ? relayText : '현재 raw 릴레이'}:${selectedSslPortText !== '-' ? selectedSslPortText : '미지정 포트'} 로 연결 중입니다. 현재 출구 IP는 ${currentPublicIpText} 이고, ${ipv4RouteState} 상태입니다.`;
-    }
-
-    return `${profileId || '현재 profile'} 로 연결 중입니다. 현재 출구 IP는 ${currentPublicIpText} 이고, ${ipv4RouteState} 상태입니다.`;
+    return `${activeSlotId || routeOwnerSlotId || '현재 슬롯'} 이 owner입니다. 현재 출구 IP는 ${currentPublicIpText} 이고, ${ipv4RouteState} 상태입니다.`;
   }
 
   if (status.phase === 'DISCONNECTING') {
@@ -3775,10 +4689,503 @@ function buildSelfHostedVpnMetaText(status = {}) {
   }
 
   if (status.healthOk) {
-    return `local agent 응답은 정상입니다. 현재 설정 모드는 ${connectionModeLabel} 이고, 연결 전후 공인 IP와 IPv4 route 변화를 같이 보면서 터널 적용 여부를 확인하면 됩니다.`;
+    return `local agent 응답은 정상입니다. 현재 모드는 ${connectionModeLabel} 이고, 연결을 시작하면 출구 IP와 IPv4 기본경로 변화를 같이 확인합니다.`;
   }
 
-  return 'local agent 응답은 있지만 health/status 일부가 비정상일 수 있습니다. 새로고침이나 agent 로그를 같이 확인하세요.';
+  return `local agent HTTP 응답은 확인됐습니다. 현재 모드는 ${connectionModeLabel} 이고, 일부 상세 상태 조회만 잠깐 늦을 수 있습니다.`;
+}
+
+function normalizeSelfHostedVpnParallelProbeStatus(status = {}) {
+  const rawStatus = status && typeof status === 'object' ? status : {};
+  const slots = Array.isArray(rawStatus.slots)
+    ? rawStatus.slots.map((slot, index) => ({
+      slotId: String(slot?.slotId || `slot-${index + 1}`).trim() || `slot-${index + 1}`,
+      nicName: String(slot?.nicName || '').trim(),
+      phase: String(slot?.phase || 'IDLE').trim().toUpperCase() || 'IDLE',
+      accountName: String(slot?.accountName || '').trim(),
+      connectedAt: String(slot?.connectedAt || '').trim(),
+      lastVerifiedAt: String(slot?.lastVerifiedAt || '').trim(),
+      routeOwned: Boolean(slot?.routeOwned),
+      routeReady: Boolean(slot?.routeReady),
+      exitPublicIp: String(slot?.exitPublicIp || '').trim(),
+      exitPublicIpProvider: String(slot?.exitPublicIpProvider || '').trim(),
+      interfaceAlias: String(slot?.interfaceAlias || '').trim(),
+      interfaceIndex: Number.parseInt(String(slot?.interfaceIndex || 0), 10) || 0,
+      lastErrorCode: String(slot?.lastErrorCode || '').trim(),
+      lastErrorMessage: String(slot?.lastErrorMessage || '').trim(),
+      relay: {
+        id: String(slot?.relay?.id ?? '').trim(),
+        ip: String(slot?.relay?.ip || '').trim(),
+        fqdn: String(slot?.relay?.fqdn || '').trim(),
+        selectedSslPort: Number.parseInt(String(slot?.relay?.selectedSslPort || 0), 10) || 0,
+      },
+    }))
+    : [];
+
+  return {
+    isRunning: Boolean(rawStatus.isRunning),
+    phase: String(rawStatus.phase || 'IDLE').trim().toUpperCase() || 'IDLE',
+    startedAt: String(rawStatus.startedAt || '').trim(),
+    completedAt: String(rawStatus.completedAt || '').trim(),
+    lastVerifiedAt: String(rawStatus.lastVerifiedAt || '').trim(),
+    routeOwnerSlotId: String(rawStatus.routeOwnerSlotId || '').trim(),
+    lastVerifiedPublicIp: String(rawStatus.lastVerifiedPublicIp || '').trim(),
+    lastVerifiedPublicIpProvider: String(rawStatus.lastVerifiedPublicIpProvider || '').trim(),
+    lastErrorCode: String(rawStatus.lastErrorCode || '').trim(),
+    lastErrorMessage: String(rawStatus.lastErrorMessage || '').trim(),
+    slots,
+    logs: Array.isArray(rawStatus.logs)
+      ? rawStatus.logs.map(entry => String(entry || '').trim()).filter(Boolean).slice(0, 20)
+      : [],
+  };
+}
+
+function normalizeSelfHostedVpnRawRelayCatalogItem(item = {}) {
+  const rawItem = item && typeof item === 'object' ? item : {};
+  return {
+    slotId: String(rawItem.slotId || '').trim(),
+    lookupKey: String(rawItem.lookupKey || '').trim(),
+    id: String(rawItem.id ?? '').trim(),
+    ip: String(rawItem.ip || '').trim(),
+    fqdn: String(rawItem.fqdn || '').trim(),
+    hostName: String(rawItem.hostName || '').trim(),
+    countryShort: String(rawItem.countryShort || '').trim().toUpperCase(),
+    countryFull: String(rawItem.countryFull || '').trim(),
+    selectedSslPort: Number.parseInt(String(rawItem.selectedSslPort || 0), 10) || 0,
+    sslPorts: Array.isArray(rawItem.sslPorts)
+      ? rawItem.sslPorts.map(port => Number.parseInt(String(port || 0), 10) || 0).filter(Boolean)
+      : [],
+    udpPort: Number.parseInt(String(rawItem.udpPort || 0), 10) || 0,
+    hostUniqueKey: String(rawItem.hostUniqueKey || '').trim().toUpperCase(),
+    score: Number(rawItem.score || 0),
+    verifyDate: Number(rawItem.verifyDate || 0),
+    accountName: String(rawItem.accountName || '').trim(),
+    accountStatusKind: String(rawItem.accountStatusKind || 'MISSING').trim().toUpperCase() || 'MISSING',
+    accountStatusText: String(rawItem.accountStatusText || '').trim(),
+    preferredNicName: String(rawItem.preferredNicName || '').trim().toUpperCase(),
+    nicName: String(rawItem.nicName || '').trim().toUpperCase(),
+    poolState: String(rawItem.poolState || '').trim().toUpperCase() || 'IDLE',
+    connectAttempted: Boolean(rawItem.connectAttempted),
+    connectAttemptedAt: String(rawItem.connectAttemptedAt || '').trim(),
+    capacityDeferred: Boolean(rawItem.capacityDeferred),
+    nicPreparedAt: String(rawItem.nicPreparedAt || '').trim(),
+    interfaceAlias: String(rawItem.interfaceAlias || '').trim(),
+    interfaceIndex: Number.parseInt(String(rawItem.interfaceIndex || 0), 10) || 0,
+    defaultRouteIfIndex: Number.parseInt(String(rawItem.defaultRouteIfIndex || 0), 10) || 0,
+    routeOwned: Boolean(rawItem.routeOwned),
+    routeReady: Boolean(rawItem.routeReady),
+    connectedAt: String(rawItem.connectedAt || '').trim(),
+    lastVerifiedAt: String(rawItem.lastVerifiedAt || '').trim(),
+    exitPublicIp: String(rawItem.exitPublicIp || '').trim(),
+    exitPublicIpProvider: String(rawItem.exitPublicIpProvider || '').trim(),
+    lastErrorCode: String(rawItem.lastErrorCode || '').trim(),
+    lastErrorMessage: String(rawItem.lastErrorMessage || '').trim(),
+    isActive: Boolean(rawItem.isActive),
+  };
+}
+
+function normalizeSelfHostedVpnRawRelayCatalogStatus(status = {}) {
+  const rawStatus = status && typeof status === 'object' ? status : {};
+  return {
+    phase: String(rawStatus.phase || 'IDLE').trim().toUpperCase() || 'IDLE',
+    stage: String(rawStatus.stage || 'IDLE').trim().toUpperCase() || 'IDLE',
+    startedAt: String(rawStatus.startedAt || '').trim(),
+    completedAt: String(rawStatus.completedAt || '').trim(),
+    sourceHostCount: Number.parseInt(String(rawStatus.sourceHostCount || 0), 10) || 0,
+    usableRelayCount: Number.parseInt(String(
+      rawStatus.usableRelayCount
+      || rawStatus.verifiedSlotCount
+      || 0,
+    ), 10) || 0,
+    requestedCandidateCount: Number.parseInt(String(rawStatus.requestedCandidateCount || 0), 10) || 0,
+    logicalSlotCount: Number.parseInt(String(rawStatus.logicalSlotCount || 0), 10) || 0,
+    requestedPhysicalNicCount: Number.parseInt(String(rawStatus.requestedPhysicalNicCount || 0), 10) || 0,
+    detectedPhysicalNicCapacity: Number.parseInt(String(
+      rawStatus.detectedPhysicalNicCapacity
+      || rawStatus.provisionableSlotCount
+      || 0,
+    ), 10) || 0,
+    preparedNicCount: Number.parseInt(String(rawStatus.preparedNicCount || 0), 10) || 0,
+    connectAttemptedCount: Number.parseInt(String(rawStatus.connectAttemptedCount || 0), 10) || 0,
+    provisionableSlotCount: Number.parseInt(String(rawStatus.provisionableSlotCount || 0), 10) || 0,
+    connectedSlotCount: Number.parseInt(String(rawStatus.connectedSlotCount || 0), 10) || 0,
+    verifiedSlotCount: Number.parseInt(String(rawStatus.verifiedSlotCount || 0), 10) || 0,
+    deadSlotCount: Number.parseInt(String(rawStatus.deadSlotCount || 0), 10) || 0,
+    failedSlotCount: Number.parseInt(String(rawStatus.failedSlotCount || 0), 10) || 0,
+    capacityDeferredSlotCount: Number.parseInt(String(rawStatus.capacityDeferredSlotCount || 0), 10) || 0,
+    activeSlotId: String(rawStatus.activeSlotId || '').trim(),
+    routeOwnerSlotId: String(rawStatus.routeOwnerSlotId || '').trim(),
+    lastVerifiedAt: String(rawStatus.lastVerifiedAt || '').trim(),
+    lastVerifiedPublicIp: String(rawStatus.lastVerifiedPublicIp || '').trim(),
+    lastVerifiedPublicIpProvider: String(rawStatus.lastVerifiedPublicIpProvider || '').trim(),
+    lastErrorCode: String(rawStatus.lastErrorCode || '').trim(),
+    lastErrorMessage: String(rawStatus.lastErrorMessage || '').trim(),
+    availableNicNames: Array.isArray(rawStatus.availableNicNames)
+      ? rawStatus.availableNicNames.map(value => String(value || '').trim().toUpperCase()).filter(Boolean)
+      : [],
+    preparedNicNames: Array.isArray(rawStatus.preparedNicNames)
+      ? rawStatus.preparedNicNames.map(value => String(value || '').trim().toUpperCase()).filter(Boolean)
+      : [],
+    slotQueue: Array.isArray(rawStatus.slotQueue)
+      ? rawStatus.slotQueue.map((entry) => {
+        if (!entry || typeof entry !== 'object') {
+          return null;
+        }
+        return {
+          slotId: String(entry.slotId || '').trim(),
+          poolState: String(entry.poolState || '').trim().toUpperCase(),
+          nicName: String(entry.nicName || '').trim().toUpperCase(),
+          capacityDeferred: Boolean(entry.capacityDeferred),
+          connectAttempted: Boolean(entry.connectAttempted),
+        };
+      }).filter(Boolean)
+      : [],
+    request: {
+      limit: Number.parseInt(String(rawStatus.request?.limit || 200), 10) || 200,
+      logicalSlotCount: Number.parseInt(String(rawStatus.request?.logicalSlotCount || 200), 10) || 200,
+      requestedPhysicalNicCount: Number.parseInt(String(rawStatus.request?.requestedPhysicalNicCount || 200), 10) || 200,
+      connectConcurrency: Number.parseInt(String(rawStatus.request?.connectConcurrency || 24), 10) || 24,
+      nicPrepareConcurrency: Number.parseInt(String(rawStatus.request?.nicPrepareConcurrency || 8), 10) || 8,
+      verifyConcurrency: Number.parseInt(String(rawStatus.request?.verifyConcurrency || 1), 10) || 1,
+      experimentalMaxNicIndex: Number.parseInt(String(rawStatus.request?.experimentalMaxNicIndex || 200), 10) || 200,
+      statusPollIntervalMs: Number.parseInt(String(rawStatus.request?.statusPollIntervalMs || 1000), 10) || 1000,
+      connectTimeoutMs: Number.parseInt(String(rawStatus.request?.connectTimeoutMs || 45000), 10) || 45000,
+      preferredCountries: Array.isArray(rawStatus.request?.preferredCountries)
+        ? rawStatus.request.preferredCountries.map(value => String(value || '').trim().toUpperCase()).filter(Boolean)
+        : ['KR', 'JP'],
+      preferredPorts: Array.isArray(rawStatus.request?.preferredPorts)
+        ? rawStatus.request.preferredPorts.map(value => Number.parseInt(String(value || 0), 10) || 0).filter(Boolean)
+        : [443, 995, 1698, 5555, 992, 1194],
+    },
+    items: Array.isArray(rawStatus.items)
+      ? rawStatus.items.map((item) => normalizeSelfHostedVpnRawRelayCatalogItem(item))
+      : [],
+    logs: Array.isArray(rawStatus.logs)
+      ? rawStatus.logs.map(entry => String(entry || '').trim()).filter(Boolean).slice(0, 20)
+      : [],
+  };
+}
+
+function buildSelfHostedVpnCatalogStatusText(catalog = {}) {
+  if (!catalog.startedAt && (!Array.isArray(catalog.items) || catalog.items.length <= 0)) {
+    return '⚪ 대기';
+  }
+
+  if (catalog.phase === 'PREPARING') {
+    const stageLabelMap = {
+      FETCHING_FEED: 'feed 수집 중',
+      PREPARING_NICS: 'NIC 준비 중',
+      CONNECTING_SLOTS: '슬롯 연결 중',
+      VERIFYING_SLOTS: '검증 중',
+    };
+    const stageLabel = stageLabelMap[String(catalog.stage || '').toUpperCase()] || 'live pool 준비 중';
+    return `🟡 ${stageLabel}`;
+  }
+
+  if (catalog.phase === 'READY') {
+    return '🟢 live pool 준비 완료';
+  }
+
+  if (catalog.phase === 'SWITCHING') {
+    return '🟡 owner 전환 중';
+  }
+
+  if (catalog.phase === 'CONNECTED') {
+    return '🟢 owner 유지 중';
+  }
+
+  if (catalog.lastErrorMessage) {
+    return '🔴 최근 오류';
+  }
+
+  return '⚪ 대기';
+}
+
+function getSelfHostedVpnCatalogStatusClassName(catalog = {}) {
+  if (['READY', 'CONNECTED'].includes(String(catalog.phase || ''))) {
+    return 'status-on';
+  }
+
+  if (['PREPARING', 'SWITCHING'].includes(String(catalog.phase || '')) || catalog.lastErrorMessage) {
+    return 'status-warn';
+  }
+
+  return 'status-muted';
+}
+
+function buildSelfHostedVpnCatalogCountText(catalog = {}) {
+  if (!catalog.startedAt && (!Array.isArray(catalog.items) || catalog.items.length <= 0)) {
+    return '-';
+  }
+
+  const parts = [
+    `후보 ${catalog.requestedCandidateCount || catalog.sourceHostCount || 0}`,
+    `logical ${catalog.logicalSlotCount || catalog.items.length || 0}`,
+    `NIC ${catalog.detectedPhysicalNicCapacity || catalog.provisionableSlotCount || 0}`,
+    `준비 ${catalog.preparedNicCount || 0}`,
+    `시도 ${catalog.connectAttemptedCount || 0}`,
+    `연결 ${catalog.connectedSlotCount || 0}`,
+    `검증 ${catalog.verifiedSlotCount || catalog.usableRelayCount || 0}`,
+  ];
+  if (catalog.capacityDeferredSlotCount) {
+    parts.push(`보류 ${catalog.capacityDeferredSlotCount}`);
+  }
+  if (catalog.failedSlotCount) {
+    parts.push(`실패 ${catalog.failedSlotCount}`);
+  }
+
+  if (catalog.activeSlotId) {
+    parts.push(`활성 ${catalog.activeSlotId}`);
+  }
+  if (catalog.routeOwnerSlotId && catalog.routeOwnerSlotId !== catalog.activeSlotId) {
+    parts.push(`owner ${catalog.routeOwnerSlotId}`);
+  }
+
+  return parts.join(' / ');
+}
+
+function buildSelfHostedVpnCatalogMetaText(status = {}, catalog = {}) {
+  if (catalog.lastErrorMessage) {
+    return `raw catalog 최근 오류: ${catalog.lastErrorMessage}`;
+  }
+
+  if (!catalog.startedAt) {
+    return '토글 ON을 누르면 official raw feed 후보를 200 logical slot으로 만들고, 가능한 NIC만 먼저 준비한 뒤 연결/검증을 순서대로 진행합니다.';
+  }
+
+  if (catalog.phase === 'PREPARING') {
+    const stage = String(catalog.stage || '').toUpperCase();
+    if (stage === 'FETCHING_FEED') {
+      return `official raw feed 후보를 읽어 logical slot으로 만드는 중입니다. 목표 후보 ${catalog.request?.limit || catalog.requestedCandidateCount || 200}개입니다.`;
+    }
+    if (stage === 'PREPARING_NICS') {
+      return `logical slot ${catalog.logicalSlotCount || catalog.items.length || 0}개를 만든 뒤 NIC를 준비하는 중입니다. requested NIC ${catalog.requestedPhysicalNicCount || catalog.request?.requestedPhysicalNicCount || 0}, prepared ${catalog.preparedNicCount || 0}입니다.`;
+    }
+    if (stage === 'CONNECTING_SLOTS') {
+      return `준비된 NIC ${catalog.preparedNicCount || 0}개를 기준으로 병렬 연결 중입니다. connect attempted ${catalog.connectAttemptedCount || 0}, connected ${catalog.connectedSlotCount || 0}, deferred ${catalog.capacityDeferredSlotCount || 0}입니다.`;
+    }
+    if (stage === 'VERIFYING_SLOTS') {
+      return `연결된 slot의 route/public IP를 직렬 검증 중입니다. connected ${catalog.connectedSlotCount || 0}, verified ${catalog.verifiedSlotCount || 0}입니다.`;
+    }
+    return `후보 ${catalog.requestedCandidateCount || catalog.sourceHostCount || 0}개를 준비 중입니다. logical ${catalog.logicalSlotCount || 0}, NIC prepared ${catalog.preparedNicCount || 0}, verified ${catalog.verifiedSlotCount || 0}입니다.`;
+  }
+
+  if (catalog.phase === 'SWITCHING') {
+    return `${catalog.routeOwnerSlotId || catalog.activeSlotId || '대상 슬롯'} 으로 owner를 옮긴 뒤 출구 IP를 다시 확인하는 중입니다.`;
+  }
+
+  if (['READY', 'CONNECTED'].includes(String(catalog.phase || ''))) {
+    const activeHost = buildSelfHostedVpnRelayText(status);
+    const lastVerifiedIpText = buildSelfHostedVpnPublicIpText(
+      catalog.lastVerifiedPublicIp,
+      catalog.lastVerifiedPublicIpProvider,
+    );
+    return `검증 통과 슬롯 ${catalog.verifiedSlotCount || catalog.usableRelayCount || 0}개가 준비돼 있습니다. logical=${catalog.logicalSlotCount || 0}, NIC prepared=${catalog.preparedNicCount || 0}, active=${catalog.activeSlotId || '-'}, owner=${catalog.routeOwnerSlotId || '-'}, 마지막 검증 IP=${lastVerifiedIpText}, 현재 릴레이=${activeHost}.`;
+  }
+
+  return 'live pool 상태를 새로고침해서 active slot, owner slot, 검증 IP를 확인하세요.';
+}
+
+function renderSelfHostedVpnCatalogList(container, status = {}, catalog = {}, parallelProbe = {}) {
+  if (!container) {
+    return;
+  }
+
+  container.replaceChildren();
+
+  const stage = String(catalog.stage || '').toUpperCase();
+  const interestingPoolStates = new Set(['VERIFIED', 'VERIFYING', 'CONNECTED', 'CONNECTING', 'NIC_READY', 'CAPACITY_DEFERRED', 'ERROR']);
+  const visibleItems = Array.isArray(catalog.items)
+    ? catalog.items
+      .filter((item) => interestingPoolStates.has(item.poolState) || item.isActive || item.routeOwned)
+      .sort((left, right) => {
+        const priorityOf = (item) => {
+          if (item.isActive) {
+            return 0;
+          }
+          if (item.routeOwned) {
+            return 1;
+          }
+          if (item.poolState === 'VERIFIED') {
+            return 2;
+          }
+          if (item.poolState === 'VERIFYING') {
+            return 3;
+          }
+          if (item.poolState === 'CONNECTED') {
+            return 4;
+          }
+          if (item.poolState === 'CONNECTING') {
+            return 5;
+          }
+          if (item.poolState === 'NIC_READY') {
+            return 6;
+          }
+          if (item.poolState === 'CAPACITY_DEFERRED') {
+            return 7;
+          }
+          return 8;
+        };
+        const leftPriority = priorityOf(left);
+        const rightPriority = priorityOf(right);
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority;
+        }
+        return String(left.slotId || '').localeCompare(String(right.slotId || ''));
+      })
+      .slice(0, 40)
+    : [];
+
+  if (visibleItems.length <= 0) {
+    const empty = document.createElement('div');
+    empty.className = 'log-empty';
+    empty.textContent = catalog.phase === 'PREPARING'
+      ? `live pool 슬롯을 준비 중입니다. stage=${stage || 'IDLE'}`
+      : '검증 통과 live pool 슬롯이 없습니다.';
+    container.appendChild(empty);
+    return;
+  }
+
+  const connectLocked = parallelProbe.isRunning
+    || ['PREPARING', 'CONNECTING', 'SWITCHING', 'DISCONNECTING'].includes(String(status.phase || '').toUpperCase())
+    || normalizeSelfHostedVpnConnectionMode(status.activeConnectionMode || status.config?.connectionMode) !== 'softether_vpngate_raw'
+    || Boolean(status.lastErrorCode === 'AGENT_UNAVAILABLE' && !status.agentReachable);
+
+  for (const item of visibleItems) {
+    const card = document.createElement('div');
+    card.className = `self-hosted-vpn-catalog-item${item.isActive ? ' is-active' : ''}${item.accountStatusKind === 'MISSING' ? ' is-missing' : ''}${item.routeOwned ? ' is-route-owner' : ''}`;
+
+    const head = document.createElement('div');
+    head.className = 'self-hosted-vpn-catalog-head';
+
+    const textWrap = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'self-hosted-vpn-catalog-title';
+    title.textContent = `${item.ip || item.fqdn || '미지정'}:${item.selectedSslPort || '-'}`;
+
+    const subtitle = document.createElement('div');
+    subtitle.className = 'self-hosted-vpn-catalog-subtitle';
+    subtitle.textContent = [
+      item.slotId || '-',
+      item.countryShort || '-',
+      item.fqdn || item.hostName || '-',
+      item.nicName || '-',
+    ].join(' / ');
+
+    textWrap.append(title, subtitle);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-secondary self-hosted-vpn-catalog-connect-btn';
+    button.dataset.selfHostedVpnCatalogConnect = 'true';
+    button.dataset.slotId = item.slotId || '';
+    button.dataset.lookupKey = item.lookupKey || '';
+
+    const isCurrentActive = Boolean(item.isActive);
+    if (item.poolState === 'CONNECTING') {
+      button.textContent = '연결 중';
+      button.disabled = true;
+    } else if (item.poolState === 'CONNECTED') {
+      button.textContent = '검증 대기';
+      button.disabled = true;
+    } else if (item.poolState === 'VERIFYING') {
+      button.textContent = '검증 중';
+      button.disabled = true;
+    } else if (item.poolState === 'NIC_READY') {
+      button.textContent = 'NIC 준비';
+      button.disabled = true;
+    } else if (item.poolState === 'CAPACITY_DEFERRED') {
+      button.textContent = '보류';
+      button.disabled = true;
+    } else if (item.poolState !== 'VERIFIED' && !isCurrentActive) {
+      button.textContent = '준비 안 됨';
+      button.disabled = true;
+    } else if (String(status.phase || '').toUpperCase() === 'SWITCHING') {
+      button.textContent = item.routeOwned || isCurrentActive ? '전환 중' : '대기';
+      button.disabled = true;
+    } else if (isCurrentActive && String(status.phase || '').toUpperCase() === 'CONNECTED') {
+      button.textContent = '활성';
+      button.disabled = true;
+    } else if (isCurrentActive) {
+      button.textContent = '활성';
+      button.disabled = true;
+    } else {
+      button.textContent = '전환';
+      button.disabled = connectLocked;
+    }
+
+    head.append(textWrap, button);
+
+    const meta = document.createElement('div');
+    meta.className = 'self-hosted-vpn-catalog-meta';
+    const exitIpText = buildSelfHostedVpnPublicIpText(item.exitPublicIp, item.exitPublicIpProvider);
+    const routeStateText = item.routeOwned ? 'owner' : (item.routeReady ? 'ready' : 'idle');
+    meta.textContent = `계정=${item.accountName || '-'} / pool=${item.poolState || '-'} / route=${routeStateText} / 출구IP=${exitIpText} / IF=${item.interfaceAlias || item.nicName || item.preferredNicName || '-'} / connectAttempted=${item.connectAttempted ? 'Y' : 'N'} / score=${item.score || 0}`;
+
+    card.append(head, meta);
+    container.appendChild(card);
+  }
+}
+
+function buildSelfHostedVpnParallelStatusText(parallelProbe = {}) {
+  if (!parallelProbe.startedAt && !parallelProbe.isRunning) {
+    return '대기';
+  }
+
+  const phaseLabels = {
+    PREPARING: '준비 중',
+    CONNECTING: '슬롯 연결 중',
+    VERIFYING: 'route/IP 검증 중',
+    COMPLETE: '검증 완료',
+    STOPPING: '정리 중',
+    ERROR: '최근 오류',
+    IDLE: '정지',
+  };
+  const phaseLabel = phaseLabels[parallelProbe.phase] || parallelProbe.phase || '정지';
+  return parallelProbe.isRunning ? `🟡 ${phaseLabel}` : `⚪ ${phaseLabel}`;
+}
+
+function buildSelfHostedVpnParallelSlotsText(parallelProbe = {}) {
+  if (!Array.isArray(parallelProbe.slots) || parallelProbe.slots.length <= 0) {
+    return '-';
+  }
+
+  return parallelProbe.slots
+    .map((slot) => {
+      const relayHost = String(slot.relay?.ip || slot.relay?.fqdn || '').trim();
+      const relayPort = Number.parseInt(String(slot.relay?.selectedSslPort || 0), 10) || 0;
+      const relayText = relayHost ? `${relayHost}${relayPort ? `:${relayPort}` : ''}` : '-';
+      return `${slot.slotId}/${slot.nicName || '-'}=${slot.phase}(${relayText})`;
+    })
+    .join(' | ');
+}
+
+function buildSelfHostedVpnParallelMetaText(parallelProbe = {}) {
+  if (parallelProbe.lastErrorMessage) {
+    return `병렬 probe 최근 오류: ${parallelProbe.lastErrorMessage}`;
+  }
+
+  if (!parallelProbe.startedAt) {
+    return '병렬 probe를 시작하면 local agent가 최신 official raw feed 3개를 골라 Connected 후 route owner를 바꿔가며 출구 IPv4를 확인합니다.';
+  }
+
+  if (parallelProbe.isRunning) {
+    return `현재 phase=${parallelProbe.phase || '-'} 입니다. 마지막 검증 IP는 ${buildSelfHostedVpnPublicIpText(parallelProbe.lastVerifiedPublicIp, parallelProbe.lastVerifiedPublicIpProvider)} 이고, route owner는 ${parallelProbe.routeOwnerSlotId || '-'} 입니다.`;
+  }
+
+  return `최근 병렬 probe는 ${parallelProbe.phase || 'IDLE'} 로 끝났습니다. 마지막 검증 IP는 ${buildSelfHostedVpnPublicIpText(parallelProbe.lastVerifiedPublicIp, parallelProbe.lastVerifiedPublicIpProvider)} 입니다.`;
+}
+
+function buildSelfHostedVpnLogEntries(singleLogs = [], catalogLogs = [], parallelLogs = []) {
+  const normalizedSingleLogs = Array.isArray(singleLogs) ? singleLogs : [];
+  const normalizedCatalogLogs = Array.isArray(catalogLogs) ? catalogLogs : [];
+  const normalizedParallelLogs = Array.isArray(parallelLogs) ? parallelLogs : [];
+  const merged = [
+    ...normalizedParallelLogs,
+    ...normalizedCatalogLogs,
+    ...normalizedSingleLogs,
+  ].filter(Boolean);
+  return merged.slice(0, 20);
 }
 
 function sanitizeSelfHostedVpnToken(value) {
@@ -3844,6 +5251,154 @@ function buildBumpPostMetaText(status = {}) {
   }
 
   return `${postNo} 글을 시작 즉시 1회 끌올한 뒤 ${intervalMinutes}분마다 반복하고, ${durationMinutes}분이 지나면 자동 정지합니다.`;
+}
+
+function getSinmungoCommentStatusLabel(status = {}) {
+  const phase = String(status.phase || '').trim().toUpperCase();
+  if (status.isRunning && phase === 'PREPARING_CHALLENGE') {
+    return '🟡 인증코드 준비 중';
+  }
+
+  if (status.isRunning && phase === 'WAITING_CODE') {
+    return '🟠 코드 입력 대기';
+  }
+
+  if (status.isRunning) {
+    return '🟡 댓글 등록 중';
+  }
+
+  if (phase === 'SUCCESS') {
+    return '🟢 최근 등록 성공';
+  }
+
+  if (phase === 'ERROR' || status.lastErrorMessage) {
+    return '🔴 최근 등록 실패';
+  }
+
+  return '⚪ 대기';
+}
+
+function getSinmungoCommentStatusClassName(status = {}) {
+  const phase = String(status.phase || '').trim().toUpperCase();
+  if (status.isRunning && phase === 'WAITING_CODE') {
+    return 'status-warn';
+  }
+
+  if (status.isRunning) {
+    return 'status-warn';
+  }
+
+  if (phase === 'SUCCESS') {
+    return 'status-on';
+  }
+
+  if (phase === 'ERROR' || status.lastErrorMessage) {
+    return 'status-warn';
+  }
+
+  return 'status-muted';
+}
+
+function buildSinmungoCommentMetaText(status = {}) {
+  const submitModeLabel = getSinmungoCommentSubmitModeLabel(status.config?.submitMode);
+  const phase = String(status.phase || '').trim().toUpperCase();
+  const targetPostNo = String(status.lastTargetPostNo || status.config?.postNo || '').trim();
+  if (status.isRunning && phase === 'PREPARING_CHALLENGE') {
+    return `[${submitModeLabel}] ${targetPostNo ? `#${targetPostNo}` : '대상 게시물'} 의 유동 댓글 폼과 인증코드 이미지를 준비하는 중입니다.`;
+  }
+
+  if (status.isRunning && phase === 'WAITING_CODE') {
+    return `[${submitModeLabel}] ${targetPostNo ? `#${targetPostNo}` : '대상 게시물'} 에 대한 인증코드 입력 대기 상태입니다. popup 아래 수동입력 영역에서 닉네임과 코드를 넣고 댓글 등록을 누르세요.`;
+  }
+
+  if (status.isRunning) {
+    return `[${submitModeLabel}] ${targetPostNo ? `#${targetPostNo}` : '대상 게시물'} 에 댓글 1개를 등록하고, 목록 재조회로 실제 생성 여부를 확인하는 중입니다.`;
+  }
+
+  if (status.lastErrorMessage) {
+    return `[${submitModeLabel}] 최근 오류: ${status.lastErrorMessage}`;
+  }
+
+  if (phase === 'SUCCESS') {
+    const commentNo = String(status.lastCommentNo || '').trim();
+    return `[${submitModeLabel}] ${targetPostNo ? `#${targetPostNo}` : '대상 게시물'} 에 댓글 등록을 마쳤습니다.${commentNo ? ` 확인된 댓글 번호는 #${commentNo} 입니다.` : ''}`;
+  }
+
+  return `[${submitModeLabel}] 대기 상태입니다. 설정 저장 후 토글 ON을 누르면 댓글 1개를 등록하고, 인증코드가 필요한 글이면 아래 수동입력 영역으로 이어집니다.`;
+}
+
+function getSinmungoCommentSubmitModeLabel(value = '') {
+  return String(value || '').trim().toLowerCase() === 'anonymous'
+    ? '유동용 테스트'
+    : '고닉용 테스트';
+}
+
+function syncSinmungoCommentModeInputs(status = latestSinmungoCommentStatus) {
+  const dom = FEATURE_DOM.sinmungoComment;
+  if (!dom?.submitModeInput || !dom?.passwordInput || !dom?.anonymousNameSetting || !dom?.passwordSetting) {
+    return;
+  }
+
+  const submitMode = String(dom.submitModeInput.value || status?.config?.submitMode || 'member').trim().toLowerCase();
+  const isAnonymousMode = submitMode === 'anonymous';
+  dom.anonymousNameSetting.hidden = !isAnonymousMode;
+  dom.passwordSetting.hidden = !isAnonymousMode;
+  dom.passwordInput.placeholder = isAnonymousMode
+    ? '예: 비회원 테스트용 비밀번호'
+    : '고닉/로그인 테스트에서는 사용하지 않음';
+  dom.anonymousNameInput.placeholder = isAnonymousMode
+    ? '예: ㅇㅇ'
+    : '유동 모드에서만 사용';
+  if (!isAnonymousMode) {
+    dom.passwordInput.value = '';
+  }
+  setDisabled(dom.anonymousNameInput, Boolean(status?.isRunning) || !isAnonymousMode);
+  setDisabled(dom.passwordInput, Boolean(status?.isRunning) || !isAnonymousMode);
+}
+
+function buildSinmungoCommentChallengeMetaText(status = {}, pendingChallenge = null) {
+  const phase = String(status.phase || '').trim().toUpperCase();
+  if (phase === 'PREPARING_CHALLENGE') {
+    return '유동 댓글 인증코드 이미지를 준비하는 중입니다. 잠시만 기다리세요.';
+  }
+
+  if (phase === 'WAITING_CODE' && pendingChallenge?.nameEditable) {
+    return '인증코드 이미지를 보고 코드와 유동 닉네임을 입력한 뒤 댓글 등록을 누르세요.';
+  }
+
+  if (phase === 'WAITING_CODE') {
+    return '인증코드 이미지를 보고 코드를 입력한 뒤 댓글 등록을 누르세요.';
+  }
+
+  if (status.lastErrorMessage) {
+    return `최근 오류: ${status.lastErrorMessage}`;
+  }
+
+  return '인증코드가 필요한 글이면 여기에 이미지와 입력칸이 나타납니다.';
+}
+
+function normalizeSinmungoCommentPendingChallenge(challenge = null) {
+  if (!challenge || typeof challenge !== 'object') {
+    return null;
+  }
+
+  const challengeId = String(challenge.challengeId || '').trim();
+  const postNo = String(challenge.postNo || '').trim();
+  if (!challengeId || !postNo) {
+    return null;
+  }
+
+  return {
+    challengeId,
+    postNo,
+    preparedAt: String(challenge.preparedAt || '').trim(),
+    captchaImageUrl: String(challenge.captchaImageUrl || '').trim(),
+    requiresCode: Boolean(challenge.requiresCode),
+    useGallNick: String(challenge.useGallNick || 'N').trim().toUpperCase() === 'Y' ? 'Y' : 'N',
+    gallNickName: String(challenge.gallNickName || '').trim(),
+    anonymousName: String(challenge.anonymousName || '').trim(),
+    nameEditable: Boolean(challenge.nameEditable),
+  };
 }
 
 function getRefluxDatasetCollectorStatusLabel(status = {}) {
@@ -4410,6 +5965,16 @@ function getFeatureConfigInputs(feature) {
     ];
   }
 
+  if (feature === 'sinmungoComment') {
+    return [
+      dom.postNoInput,
+      dom.submitModeInput,
+      dom.memoInput,
+      dom.anonymousNameInput,
+      dom.passwordInput,
+    ];
+  }
+
   if (feature === 'selfHostedVpn') {
     return [
       dom.agentBaseUrlInput,
@@ -4862,6 +6427,32 @@ function setActiveTab(feature) {
   });
 }
 
+function normalizeSinmungoCommentPostNoInputValue(value) {
+  return String(value || '').trim();
+}
+
+function isValidSinmungoCommentPostNo(value) {
+  return /^\d+$/.test(String(value || '').trim());
+}
+
+function normalizeSinmungoCommentMemoInputValue(value) {
+  return String(value || '')
+    .replace(/\r\n/g, '\n')
+    .trim();
+}
+
+function normalizeSinmungoCommentPasswordInputValue(value) {
+  return String(value || '').trim();
+}
+
+function normalizeSinmungoCommentDisplayNameInputValue(value) {
+  return String(value || '').trim();
+}
+
+function normalizeSinmungoCommentChallengeCodeInputValue(value) {
+  return String(value || '').trim();
+}
+
 function sendFeatureMessage(feature, message) {
   return sendMessage({
     ...message,
@@ -4902,6 +6493,41 @@ function flashSaved(button, successText = '✅ 저장됨') {
     button.textContent = originalText;
     button.__flashSavedTimer = null;
   }, 1500);
+}
+
+async function copyTextToClipboard(text) {
+  const normalizedText = String(text || '');
+  if (!normalizedText) {
+    return false;
+  }
+
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(normalizedText);
+      return true;
+    } catch (error) {
+      console.warn('[popup] clipboard write 실패:', error.message);
+    }
+  }
+
+  const helper = document.createElement('textarea');
+  helper.value = normalizedText;
+  helper.setAttribute('readonly', 'readonly');
+  helper.style.position = 'fixed';
+  helper.style.top = '-9999px';
+  helper.style.left = '-9999px';
+  document.body.appendChild(helper);
+  helper.focus();
+  helper.select();
+
+  try {
+    return document.execCommand('copy');
+  } catch (error) {
+    console.warn('[popup] execCommand copy 실패:', error.message);
+    return false;
+  } finally {
+    helper.remove();
+  }
 }
 
 function syncConfigInput(input, nextValue) {

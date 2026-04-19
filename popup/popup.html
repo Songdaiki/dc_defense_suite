@@ -28,9 +28,10 @@
       <button class="tab-button" data-tab="ip"><span class="tab-label">IP차단<br>삭제</span></button>
       <button class="tab-button tab-warning" data-tab="uidRatioWarning"><span class="tab-label">분탕<br>경고</span></button>
       <button class="tab-button" data-tab="bumpPost"><span class="tab-label">끌올<br>자동</span></button>
+      <button class="tab-button" data-tab="sinmungoComment" hidden><span class="tab-label">신문고<br>댓글</span></button>
       <button class="tab-button" data-tab="refluxDatasetCollector"><span class="tab-label">Local<br>수집</span></button>
       <button class="tab-button" data-tab="refluxOverlayCollector"><span class="tab-label">Dataset<br>수집</span></button>
-      <button class="tab-button" data-tab="selfHostedVpn"><span class="tab-label">자체 VPN<br>테스트</span></button>
+      <button class="tab-button" data-tab="selfHostedVpn" hidden><span class="tab-label">자체 VPN<br>테스트</span></button>
     </nav>
 
     <main class="panels">
@@ -1059,6 +1060,144 @@
         </section>
       </section>
 
+      <section class="panel" data-feature="sinmungoComment" hidden>
+        <div class="feature-header feature-bump-post">
+          <div>
+            <h2>신문고 댓글</h2>
+            <p>게시물 번호와 댓글 문구를 저장한 뒤 토글 ON을 누르면 댓글 1개를 등록하고 자동으로 OFF로 돌아옵니다</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="sinmungoCommentToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="sinmungoCommentToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="sinmungoCommentStatusText" class="status-value status-off">⚪ 대기</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 단계</span>
+            <span id="sinmungoCommentPhaseText" class="status-value">IDLE</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">대상 게시물</span>
+            <span id="sinmungoCommentTargetPostNo" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 등록</span>
+            <span id="sinmungoCommentLastSubmittedAt" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 검증</span>
+            <span id="sinmungoCommentLastVerifiedAt" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 댓글 번호</span>
+            <span id="sinmungoCommentLastCommentNo" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 성공</span>
+            <span id="sinmungoCommentTotalSubmittedCount" class="status-value">0회</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">누적 실패</span>
+            <span id="sinmungoCommentTotalFailedCount" class="status-value">0회</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 오류</span>
+            <span id="sinmungoCommentLastErrorAt" class="status-value">-</span>
+          </div>
+        </div>
+
+        <p id="sinmungoCommentMetaText" class="manual-utility-meta">대기 상태입니다. 설정 저장 후 토글 ON을 누르면 선택한 모드로 댓글 1개를 등록합니다.</p>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label for="sinmungoCommentPostNo">게시물 번호</label>
+              <input type="number" id="sinmungoCommentPostNo" min="1" placeholder="예: 1045755">
+            </div>
+            <div class="setting-item">
+              <label for="sinmungoCommentSubmitMode">테스트 모드</label>
+              <select id="sinmungoCommentSubmitMode">
+                <option value="member">고닉/로그인 테스트</option>
+                <option value="anonymous">유동/비회원 테스트</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <label for="sinmungoCommentMemo">댓글 문구</label>
+              <input type="text" id="sinmungoCommentMemo" maxlength="400" value="처리완료" placeholder="예: 처리완료">
+            </div>
+            <div class="setting-item" id="sinmungoCommentAnonymousNameSetting" hidden>
+              <label for="sinmungoCommentAnonymousName">유동 닉네임 기본값</label>
+              <input type="text" id="sinmungoCommentAnonymousName" maxlength="40" value="ㅇㅇ" placeholder="예: ㅇㅇ">
+            </div>
+            <div class="setting-item" id="sinmungoCommentPasswordSetting" hidden>
+              <label for="sinmungoCommentPassword">유동 비밀번호 (유동 모드에서만)</label>
+              <input type="text" id="sinmungoCommentPassword" maxlength="32" placeholder="예: 비회원 테스트용 비밀번호">
+            </div>
+            <button id="sinmungoCommentSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          </div>
+          <p class="manual-utility-meta">고닉/로그인 테스트는 관리자 로그인 세션이 잡힌 상태에서만 시도합니다. 유동/비회원 테스트는 live 비회원 댓글 폼을 다시 읽어 같은 문맥에서 전송합니다.</p>
+        </details>
+
+        <section id="sinmungoCommentChallengeSection" class="manual-utility-card manual-warning-card" hidden>
+          <div class="manual-utility-header">
+            <div>
+              <h3>유동 수동입력</h3>
+              <p id="sinmungoCommentChallengeMetaText">인증코드가 필요한 글이면 여기에 이미지와 입력칸이 나타납니다.</p>
+            </div>
+          </div>
+
+          <div class="status-grid manual-utility-status-grid">
+            <div class="status-item">
+              <span class="status-label">준비 시각</span>
+              <span id="sinmungoCommentCaptchaPreparedAt" class="status-value">-</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">닉 처리 방식</span>
+              <span id="sinmungoCommentChallengeIdentityText" class="status-value">-</span>
+            </div>
+          </div>
+
+          <div class="sinmungo-comment-captcha-preview">
+            <img id="sinmungoCommentCaptchaImage" alt="신문고 댓글 인증코드 이미지">
+          </div>
+
+          <div class="settings-grid sinmungo-comment-challenge-grid">
+            <div class="setting-item" id="sinmungoCommentChallengeNameItem" hidden>
+              <label for="sinmungoCommentChallengeName">유동 닉네임</label>
+              <input type="text" id="sinmungoCommentChallengeName" maxlength="40" placeholder="예: ㅇㅇ">
+            </div>
+            <div class="setting-item">
+              <label for="sinmungoCommentCodeInput">인증코드</label>
+              <input type="text" id="sinmungoCommentCodeInput" maxlength="16" placeholder="이미지를 보고 입력">
+            </div>
+          </div>
+
+          <div class="action-row">
+            <button id="sinmungoCommentRefreshCaptchaBtn" class="btn btn-secondary">새 코드 받기</button>
+            <button id="sinmungoCommentSubmitCaptchaBtn" class="btn btn-primary">댓글 등록</button>
+            <button id="sinmungoCommentCancelCaptchaBtn" class="btn btn-secondary">취소</button>
+          </div>
+        </section>
+
+        <div class="action-row">
+          <button id="sinmungoCommentResetBtn" class="btn btn-secondary">통계 초기화</button>
+        </div>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="sinmungoCommentLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+      </section>
+
       <section class="panel" data-feature="post">
         <div class="feature-header feature-post">
           <div>
@@ -1644,18 +1783,21 @@
         </section>
       </section>
 
-      <section class="panel" data-feature="selfHostedVpn">
+      <section class="panel" data-feature="selfHostedVpn" hidden>
         <div class="feature-header">
           <div>
             <h2>자체 VPN 테스트</h2>
             <p>local agent에 연결/해제 요청을 보내고, 연결 전후 공인 IP와 route 변화를 함께 확인합니다</p>
           </div>
-          <div class="toggle-section">
-            <label class="toggle-switch">
-              <input type="checkbox" id="selfHostedVpnToggleBtn">
-              <span class="slider"></span>
-            </label>
-            <span id="selfHostedVpnToggleLabel" class="toggle-label">OFF</span>
+          <div class="feature-header-side">
+            <div class="toggle-section">
+              <label class="toggle-switch">
+                <input type="checkbox" id="selfHostedVpnToggleBtn">
+                <span class="slider"></span>
+              </label>
+              <span id="selfHostedVpnToggleLabel" class="toggle-label">OFF</span>
+            </div>
+            <button id="selfHostedVpnPrimeNicsBtn" class="btn btn-secondary feature-inline-mini-setting-save-btn self-hosted-vpn-prime-btn">NIC 200개 준비</button>
           </div>
         </div>
 
@@ -1673,7 +1815,7 @@
             <span id="selfHostedVpnAgentVersionText" class="status-value">-</span>
           </div>
           <div class="status-item">
-            <span class="status-label">profile/식별자</span>
+            <span class="status-label">연결 식별자</span>
             <span id="selfHostedVpnProfileIdText" class="status-value">-</span>
           </div>
           <div class="status-item">
@@ -1717,11 +1859,11 @@
             <span id="selfHostedVpnDnsChangedText" class="status-value">-</span>
           </div>
           <div class="status-item">
-            <span class="status-label">최근 sync</span>
+            <span class="status-label">마지막 확인 시도</span>
             <span id="selfHostedVpnLastSyncAtText" class="status-value">-</span>
           </div>
           <div class="status-item">
-            <span class="status-label">최근 health</span>
+            <span class="status-label">마지막 정상 응답</span>
             <span id="selfHostedVpnLastHealthAtText" class="status-value">-</span>
           </div>
           <div class="status-item">
@@ -1736,7 +1878,89 @@
 
         <p id="selfHostedVpnMetaText" class="manual-utility-meta">local agent와 연결되면 연결 전후 공인 IP와 route 변화를 같이 표시합니다.</p>
 
-        <details class="settings-section">
+        <details class="self-hosted-vpn-guide-details">
+          <summary>local agent 실행 안내</summary>
+          <section id="selfHostedVpnAgentGuideCard" class="manual-utility-card self-hosted-vpn-agent-guide-card">
+            <div class="manual-utility-header">
+              <div>
+                <p id="selfHostedVpnAgentGuideMetaText">PowerShell에 실행 명령을 붙여넣고, agent가 올라오면 아래 새로고침으로 바로 확인할 수 있게 만드는 영역입니다.</p>
+              </div>
+            </div>
+            <div class="status-grid manual-utility-status-grid">
+              <div class="status-item">
+                <span class="status-label">실행 상태</span>
+                <span id="selfHostedVpnAgentGuideStatusText" class="status-value status-muted">확인 전</span>
+              </div>
+              <div class="status-item">
+                <span class="status-label">현재 주소</span>
+                <span id="selfHostedVpnAgentGuideAddressText" class="status-value">http://127.0.0.1:8765</span>
+              </div>
+              <div class="status-item">
+                <span class="status-label">대체 주소</span>
+                <span id="selfHostedVpnAgentGuideFallbackAddressText" class="status-value">http://127.0.0.1:8766</span>
+              </div>
+              <div class="status-item">
+                <span class="status-label">repo 경로</span>
+                <span id="selfHostedVpnAgentGuideRepoPathText" class="status-value">C:\Users\eorb9\projects\dc_defense_suite_repo</span>
+              </div>
+            </div>
+            <div class="self-hosted-vpn-agent-command-head">
+              <strong id="selfHostedVpnAgentGuideCommandLabelText">추천 PowerShell 명령</strong>
+            </div>
+            <pre id="selfHostedVpnAgentGuideCommandText" class="self-hosted-vpn-agent-command-preview"></pre>
+            <div class="action-row self-hosted-vpn-agent-action-row">
+              <button id="selfHostedVpnCopyAgentStartBtn" class="btn btn-secondary">기본 실행 명령 복사</button>
+              <button id="selfHostedVpnCopyAgentFallbackBtn" class="btn btn-secondary">8766 대체 명령 복사</button>
+              <button id="selfHostedVpnUseFallbackAgentUrlBtn" class="btn btn-secondary">8766 주소 채우기</button>
+              <button id="selfHostedVpnCopyAgentStopBtn" class="btn btn-secondary">종료 명령 복사</button>
+            </div>
+          </section>
+        </details>
+
+        <div class="status-grid manual-utility-status-grid">
+          <div class="status-item">
+            <span class="status-label">병렬 3슬롯</span>
+            <span id="selfHostedVpnParallelStatusText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">route owner</span>
+            <span id="selfHostedVpnParallelRouteOwnerText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">마지막 검증 IP</span>
+            <span id="selfHostedVpnParallelVerifiedIpText" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">슬롯 요약</span>
+            <span id="selfHostedVpnParallelSlotsText" class="status-value">-</span>
+          </div>
+        </div>
+        <p id="selfHostedVpnParallelMetaText" class="manual-utility-meta">최신 official raw feed 기준 3개 후보를 local agent가 병렬 Connected 후 route owner를 바꿔가며 검증합니다.</p>
+
+        <section class="manual-utility-card self-hosted-vpn-catalog-card">
+          <div class="manual-utility-header">
+            <div>
+              <h3>raw 릴레이 목록</h3>
+              <p>토글 ON이면 official raw feed를 받아 usable relay를 SoftEther offline 계정으로 캐시합니다. 아래에서 1개를 클릭하면 그 릴레이만 Connected를 시도합니다.</p>
+            </div>
+          </div>
+          <div class="status-grid manual-utility-status-grid">
+            <div class="status-item">
+              <span class="status-label">목록 상태</span>
+              <span id="selfHostedVpnCatalogStatusText" class="status-value status-muted">대기</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">usable/source</span>
+              <span id="selfHostedVpnCatalogCountText" class="status-value">0 / 0</span>
+            </div>
+          </div>
+          <p id="selfHostedVpnCatalogMetaText" class="manual-utility-meta">아직 raw catalog를 준비하지 않았습니다.</p>
+          <div id="selfHostedVpnCatalogList" class="self-hosted-vpn-catalog-list">
+            <div class="log-empty">raw 릴레이 목록이 없습니다.</div>
+          </div>
+        </section>
+
+        <details id="selfHostedVpnSettingsDetails" class="settings-section">
           <summary>설정</summary>
           <div class="settings-grid">
             <div class="setting-item">
@@ -1748,15 +1972,14 @@
               <input type="password" id="selfHostedVpnAuthToken" value="">
             </div>
             <div class="setting-item">
-              <label for="selfHostedVpnConnectionMode">연결 모드</label>
-              <select id="selfHostedVpnConnectionMode">
-                <option value="profile">profile</option>
-                <option value="softether_vpngate_raw">SoftEther VPNGate raw</option>
-              </select>
+              <label>연결 엔진</label>
+              <div class="manual-utility-meta">VPNGate raw 전용으로 고정되어 있습니다. 토글 ON으로 목록을 준비한 뒤 아래 raw 릴레이를 클릭하면 1개씩 연결을 시도합니다.</div>
+              <input type="hidden" id="selfHostedVpnConnectionMode" value="softether_vpngate_raw">
             </div>
             <div class="setting-item">
-              <label for="selfHostedVpnProfileId">profile ID / 호환 식별자</label>
-              <input type="text" id="selfHostedVpnProfileId" value="" spellcheck="false" placeholder="test-profile-01 또는 비워두기">
+              <label>연결 식별자</label>
+              <div class="manual-utility-meta">사용자가 직접 입력하지 않습니다. raw 릴레이 IP/FQDN과 포트로 내부 호환 식별자를 자동 생성합니다.</div>
+              <input type="hidden" id="selfHostedVpnProfileId" value="">
             </div>
             <div class="setting-item">
               <label for="selfHostedVpnRelayId">raw relay ID</label>
@@ -1796,6 +2019,9 @@
 
         <div class="action-row">
           <button id="selfHostedVpnRefreshBtn" class="btn btn-secondary">지금 새로고침</button>
+          <button id="selfHostedVpnParallelStartBtn" class="btn btn-secondary">병렬 3슬롯 시작</button>
+          <button id="selfHostedVpnParallelRefreshBtn" class="btn btn-secondary">병렬 상태 새로고침</button>
+          <button id="selfHostedVpnParallelStopBtn" class="btn btn-secondary">병렬 시험 종료</button>
           <button id="selfHostedVpnResetBtn" class="btn btn-secondary">상태 기록 초기화</button>
         </div>
 

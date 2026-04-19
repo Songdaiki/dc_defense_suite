@@ -3,12 +3,22 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import {
   buildCompatibilityProfileId,
+  buildPublicParallelProbeState,
+  buildPublicRawRelayCatalogState,
   CONNECTION_MODE,
   extractTokenFromRequest,
+  normalizeParallelProbeRequest,
   normalizeConnectRequest,
+  normalizeRawRelayCatalogPrepareRequest,
   normalizeConnectionMode,
+  PARALLEL_PROBE_PHASE,
   SelfHostedVpnAgent,
 } from './server.mjs';
+import {
+  buildRelayCatalog,
+  fetchOfficialVpnGateRelayCatalog,
+  fetchOfficialVpnGateRelays,
+} from './lib/vpngate_feed.mjs';
 import {
   buildDnsSignature,
   buildRouteKey,
@@ -18,12 +28,14 @@ import {
 } from './lib/network_state.mjs';
 import {
   SoftEtherCli,
+  buildRawCatalogAccountName,
   buildSoftEtherNicCandidateList,
   buildSoftEtherNicName,
   classifyAccountListStatus,
   classifySessionStatus,
   extractCsvText,
   isManagedAccountName,
+  isRawCatalogAccountName,
   isSoftEtherNicName,
   normalizePreferredSoftEtherNicName,
   parseAccountListServerEndpoint,
@@ -128,6 +140,524 @@ async function runTests() {
     assert.equal(buildCompatibilityProfileId('vpn 2044', 1698), 'vpngate-vpn-2044-1698');
   });
 
+  await test('parallel probe request defaults to 3 slots', () => {
+    const request = normalizeParallelProbeRequest({});
+    assert.equal(request.limit, 3);
+    assert.deepEqual(request.slotNicNames, ['VPN2', 'VPN3', 'VPN4']);
+  });
+
+  await test('parallel probe request normalizes explicit raw relays', () => {
+    const request = normalizeParallelProbeRequest({
+      relays: [
+        {
+          ip: '121.138.132.127',
+          selectedSslPort: 1698,
+          countryShort: 'kr',
+        },
+      ],
+    });
+    assert.equal(request.relays[0].ip, '121.138.132.127');
+    assert.equal(request.relays[0].selectedSslPort, 1698);
+    assert.equal(request.relays[0].countryShort, 'KR');
+  });
+
+  await test('raw catalog prepare request defaults to 200 relays', () => {
+    const request = normalizeRawRelayCatalogPrepareRequest({});
+    assert.equal(request.limit, 200);
+    assert.equal(request.logicalSlotCount, 200);
+    assert.equal(request.requestedPhysicalNicCount, 200);
+    assert.equal(request.connectConcurrency, 24);
+    assert.equal(request.nicPrepareConcurrency, 8);
+    assert.equal(request.verifyConcurrency, 1);
+    assert.equal(request.experimentalMaxNicIndex, 200);
+    assert.equal(request.statusPollIntervalMs, 1000);
+    assert.equal(request.connectTimeoutMs, 45000);
+    assert.deepEqual(request.preferredCountries, ['KR', 'JP']);
+    assert.ok(request.preferredPorts.includes(443));
+  });
+
+  await test('raw catalog public state derives usable counts from verified slots and keeps item fields', () => {
+    const publicState = buildPublicRawRelayCatalogState({
+      phase: 'READY',
+      stage: 'READY',
+      sourceHostCount: 12,
+      logicalSlotCount: 200,
+      requestedPhysicalNicCount: 200,
+      preparedNicCount: 126,
+      connectAttemptedCount: 126,
+      capacityDeferredSlotCount: 74,
+      items: [
+        {
+          slotId: 'slot-1',
+          id: 'relay-1',
+          ip: '121.142.148.62',
+          selectedSslPort: 995,
+          accountName: 'DCDSVPNRAWCACHE-slot-1',
+          preferredNicName: 'VPN3',
+          accountStatusKind: 'CONNECTED',
+          poolState: 'VERIFIED',
+          isActive: false,
+        },
+      ],
+      logs: ['prepared'],
+    }, {
+      activeAccountName: '',
+    });
+    assert.equal(publicState.phase, 'READY');
+    assert.equal(publicState.stage, 'READY');
+    assert.equal(publicState.usableRelayCount, 1);
+    assert.equal(publicState.logicalSlotCount, 200);
+    assert.equal(publicState.preparedNicCount, 1);
+    assert.equal(publicState.connectAttemptedCount, 0);
+    assert.equal(publicState.capacityDeferredSlotCount, 0);
+    assert.equal(publicState.items[0].id, 'relay-1');
+    assert.equal(publicState.items[0].selectedSslPort, 995);
+    assert.equal(publicState.items[0].preferredNicName, 'VPN3');
+    assert.equal(publicState.items[0].accountStatusKind, 'CONNECTED');
+    assert.equal(publicState.items[0].poolState, 'VERIFIED');
+  });
+
+  await test('agent getStatus collapses stale raw catalog when catalog is off', async () => {
+    const agent = new SelfHostedVpnAgent({ stateFile: 'memory-state.json' });
+    agent.refreshState = async () => agent.state;
+    agent.state.phase = 'IDLE';
+    agent.state.catalogEnabled = false;
+    agent.state.accountName = '';
+    agent.state.rawRelayCatalog = {
+      phase: 'PREPARING',
+      startedAt: '2026-04-19T00:00:00.000Z',
+      sourceHostCount: 12,
+      usableRelayCount: 5,
+      items: [
+        {
+          id: 'relay-1',
+          ip: '121.142.148.62',
+          selectedSslPort: 995,
+          accountName: 'DCDSVPNRAWCACHE-relay-1-995',
+        },
+      ],
+      logs: ['prepare started'],
+    };
+
+    const status = await agent.getStatus();
+
+    assert.equal(status.phase, 'IDLE');
+    assert.equal(status.rawRelayCatalog.phase, 'IDLE');
+    assert.equal(status.rawRelayCatalog.sourceHostCount, 0);
+    assert.equal(status.rawRelayCatalog.usableRelayCount, 0);
+    assert.equal(status.rawRelayCatalog.items.length, 0);
+    assert.deepEqual(status.rawRelayCatalog.logs, ['prepare started']);
+  });
+
+  await test('agent refreshState recovers abandoned raw PREPARING state after restart', async () => {
+    const agent = new SelfHostedVpnAgent({ stateFile: 'memory-state.json' });
+    let restoredMetricCount = 0;
+    let cleanedAccountCount = 0;
+    let routeSnapshotCount = 0;
+
+    agent.softEtherCli = {
+      listAccounts: async () => [],
+      listNics: async () => [],
+    };
+    agent.restoreRawRelayCatalogMetrics = async () => {
+      restoredMetricCount += 1;
+    };
+    agent.cleanupAllRawCatalogAccounts = async () => {
+      cleanedAccountCount += 1;
+    };
+    agent.refreshRawRelayCatalogRouteSnapshot = async () => {
+      routeSnapshotCount += 1;
+    };
+    agent.saveState = async () => {};
+    agent.state.phase = 'PREPARING';
+    agent.state.catalogEnabled = true;
+    agent.state.connectionMode = CONNECTION_MODE.SOFTETHER_VPNGATE_RAW;
+    agent.state.operationId = 'catalog-test';
+    agent.state.rawRelayCatalog = {
+      phase: 'PREPARING',
+      stage: 'CONNECTING_SLOTS',
+      startedAt: '2026-04-19T00:00:00.000Z',
+      sourceHostCount: 12,
+      usableRelayCount: 4,
+      requestedCandidateCount: 12,
+      logicalSlotCount: 4,
+      requestedPhysicalNicCount: 4,
+      items: [
+        {
+          id: 'relay-1',
+          slotId: 'slot-001',
+          ip: '121.142.148.62',
+          selectedSslPort: 995,
+          accountName: 'DCDSVPNRAWCACHE-slot-001',
+          poolState: 'CONNECTING',
+          accountStatusKind: 'MISSING',
+        },
+      ],
+      logs: ['prepare started'],
+    };
+
+    await agent.refreshState({ force: true, includeNetwork: false });
+
+    assert.equal(routeSnapshotCount, 1);
+    assert.equal(restoredMetricCount, 1);
+    assert.equal(cleanedAccountCount, 1);
+    assert.equal(agent.state.phase, 'IDLE');
+    assert.equal(agent.state.catalogEnabled, false);
+    assert.equal(agent.state.operationId, '');
+    assert.equal(agent.state.connectionMode, CONNECTION_MODE.PROFILE);
+    assert.equal(agent.state.rawRelayCatalog.phase, 'IDLE');
+    assert.equal(agent.state.rawRelayCatalog.stage, 'IDLE');
+    assert.equal(agent.state.rawRelayCatalog.items.length, 0);
+    assert.match(agent.state.rawRelayCatalog.logs[0], /agent 재시작으로 이전 raw 준비 상태가 중간에 끊겨 정리 후 IDLE로 복구했습니다/);
+    assert.match(agent.state.rawRelayCatalog.logs[1], /prepare started/);
+  });
+
+  await test('transitionToIdle clears stale raw catalog state', async () => {
+    const agent = new SelfHostedVpnAgent({ stateFile: 'memory-state.json' });
+    agent.saveState = async () => {};
+    agent.state.catalogEnabled = false;
+    agent.state.accountName = '';
+    agent.state.rawRelayCatalog = {
+      phase: 'READY',
+      startedAt: '2026-04-19T00:00:00.000Z',
+      completedAt: '2026-04-19T00:00:02.000Z',
+      sourceHostCount: 3,
+      usableRelayCount: 2,
+      items: [
+        {
+          id: 'relay-3',
+          ip: '121.138.132.127',
+          selectedSslPort: 995,
+          accountName: 'DCDSVPNRAWCACHE-relay-3-995',
+        },
+      ],
+      logs: ['catalog ready'],
+    };
+
+    await agent.transitionToIdle();
+
+    assert.equal(agent.state.rawRelayCatalog.phase, 'IDLE');
+    assert.equal(agent.state.rawRelayCatalog.sourceHostCount, 0);
+    assert.equal(agent.state.rawRelayCatalog.usableRelayCount, 0);
+    assert.equal(agent.state.rawRelayCatalog.items.length, 0);
+    assert.deepEqual(agent.state.rawRelayCatalog.logs, ['catalog ready']);
+  });
+
+  await test('agent getHealth stays lightweight and avoids vpncmd probe', async () => {
+    const agent = new SelfHostedVpnAgent({ stateFile: 'memory-state.json' });
+    let probeCallCount = 0;
+    agent.softEtherCli = {
+      vpncmdPath: 'C:\\Program Files\\SoftEther VPN Client\\vpncmd.exe',
+      isAvailable: async () => true,
+      probeClient: async () => {
+        probeCallCount += 1;
+        throw new Error('probeClient should not run in health check');
+      },
+    };
+
+    const health = await agent.getHealth();
+    const cachedHealth = await agent.getHealth();
+
+    assert.equal(health.ok, true);
+    assert.equal(health.softEtherReady, true);
+    assert.equal(cachedHealth.ok, true);
+    assert.equal(probeCallCount, 0);
+  });
+
+  await test('relay catalog keeps full usable count and sorts preferred candidates before slicing', () => {
+    const catalog = buildRelayCatalog([
+      {
+        ID: 'slow-us',
+        IP: '10.0.0.3',
+        Fqdn: 'slow-us.example',
+        CountryShort: 'US',
+        CountryFull: 'United States',
+        SslPorts: '443 995',
+        Score: 1,
+        VerifyDate: 100,
+      },
+      {
+        ID: 'kr-fast',
+        IP: '10.0.0.1',
+        Fqdn: 'kr-fast.example',
+        CountryShort: 'KR',
+        CountryFull: 'Korea Republic of',
+        SslPorts: '443 995',
+        Score: 50,
+        VerifyDate: 300,
+      },
+      {
+        ID: 'jp-mid',
+        IP: '10.0.0.2',
+        Fqdn: 'jp-mid.example',
+        CountryShort: 'JP',
+        CountryFull: 'Japan',
+        SslPorts: '995 443',
+        Score: 20,
+        VerifyDate: 200,
+      },
+    ], {
+      limit: 2,
+      preferredCountries: ['KR', 'JP'],
+      preferredPorts: [443, 995],
+    });
+
+    assert.equal(catalog.totalHosts, 3);
+    assert.equal(catalog.usableRelayCount, 3);
+    assert.equal(catalog.relays.length, 2);
+    assert.equal(catalog.relays[0].id, 'kr-fast');
+    assert.equal(catalog.relays[1].id, 'jp-mid');
+  });
+
+  await test('parallel probe public state strips internal fields', () => {
+    const publicState = buildPublicParallelProbeState({
+      isRunning: true,
+      operationId: 'probe-1',
+      phase: PARALLEL_PROBE_PHASE.COMPLETE,
+      request: {
+        limit: 3,
+      },
+      lastVerifiedPublicIp: '112.172.66.106',
+      slots: [
+        {
+          slotId: 'slot-1',
+          nicName: 'VPN2',
+          phase: 'CONNECTED',
+        },
+      ],
+    });
+    assert.equal(publicState.isRunning, true);
+    assert.equal(publicState.phase, 'COMPLETE');
+    assert.equal(publicState.lastVerifiedPublicIp, '112.172.66.106');
+    assert.equal(Object.prototype.hasOwnProperty.call(publicState, 'operationId'), false);
+  });
+
+  await test('parallel probe start blocks when foreign SoftEther account is active', async () => {
+    const agent = new SelfHostedVpnAgent({ stateFile: 'memory-state.json' });
+    agent.saveState = async () => {};
+    agent.refreshState = async () => {
+      agent.state.accountRows = [
+        {
+          name: 'VPN Gate Connection',
+          statusKind: 'CONNECTED',
+        },
+      ];
+      return agent.state;
+    };
+
+    await assert.rejects(
+      () => agent.startParallelProbe({}),
+      /다른 연결이 살아 있습니다/,
+    );
+  });
+
+  await test('catalog prepare blocks when multiple agent-owned accounts are already active', async () => {
+    const agent = new SelfHostedVpnAgent({ stateFile: 'memory-state.json' });
+    agent.saveState = async () => {};
+    agent.refreshState = async () => {
+      agent.state.accountRows = [
+        { name: 'DCDSVPNRAWCACHE-relay-1-443', statusKind: 'CONNECTED' },
+        { name: 'DCDSVPNGATE-relay-2-443-abc', statusKind: 'CONNECTED' },
+      ];
+      agent.state.accountName = '';
+      agent.state.phase = 'ERROR';
+      return agent.state;
+    };
+
+    await assert.rejects(
+      () => agent.prepareRawRelayCatalog({}),
+      /agent 관리용 SoftEther 연결이 이미 살아 있습니다/,
+    );
+  });
+
+  await test('catalog activate blocks when multiple single-connection agent accounts are already active', async () => {
+    const agent = new SelfHostedVpnAgent({ stateFile: 'memory-state.json' });
+    agent.saveState = async () => {};
+    agent.refreshState = async () => {
+      agent.state.accountRows = [
+        { name: 'DCDSVPNGATE-relay-1-443-abc', statusKind: 'CONNECTED' },
+        { name: 'DCDSVPNGATE-relay-2-443-def', statusKind: 'CONNECTED' },
+      ];
+      agent.state.accountName = '';
+      agent.state.phase = 'ERROR';
+      agent.state.catalogEnabled = true;
+      agent.state.rawRelayCatalog = {
+        ...agent.state.rawRelayCatalog,
+        items: [
+          {
+            slotId: 'slot-3',
+            id: 'relay-3',
+            ip: '121.138.132.127',
+            fqdn: '',
+            selectedSslPort: 1698,
+            accountName: 'DCDSVPNRAWCACHE-slot-3',
+            accountStatusKind: 'CONNECTED',
+            poolState: 'VERIFIED',
+          },
+        ],
+      };
+      return agent.state;
+    };
+
+    await assert.rejects(
+      () => agent.activateCatalogRelay({
+        relay: {
+          slotId: 'slot-3',
+          id: 'relay-3',
+          ip: '121.138.132.127',
+          selectedSslPort: 1698,
+        },
+      }),
+      /agent 관리용 SoftEther 연결이 이미 살아 있습니다/,
+    );
+  });
+
+  await test('official DAT fetch abort surfaces timeout message', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = async () => {
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      throw error;
+    };
+
+    try {
+      await assert.rejects(
+        () => fetchOfficialVpnGateRelays({ limit: 1 }),
+        /official DAT fetch timeout/,
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  await test('official relay catalog fetch abort surfaces timeout message', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = async () => {
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      throw error;
+    };
+
+    try {
+      await assert.rejects(
+        () => fetchOfficialVpnGateRelayCatalog({ limit: 1 }),
+        /official DAT fetch timeout/,
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  await test('parallel probe route snapshot skips late writes after stop', async () => {
+    const agent = new SelfHostedVpnAgent({ stateFile: 'memory-state.json' });
+    agent.saveState = async () => {};
+    agent.state.parallelProbe = {
+      isRunning: true,
+      operationId: 'probe-1',
+      phase: PARALLEL_PROBE_PHASE.VERIFYING,
+      routeOwnerSlotId: '',
+      slots: [
+        {
+          slotId: 'slot-1',
+          nicName: 'VPN2',
+          phase: 'CONNECTED',
+          interfaceAlias: '',
+          interfaceIndex: 0,
+          defaultRouteIfIndex: 0,
+          routeReady: false,
+          routeOwned: false,
+          relay: {},
+        },
+      ],
+      logs: [],
+    };
+    agent.networkObserver = {
+      getLocalSnapshot: async () => {
+        agent.state.parallelProbe.phase = PARALLEL_PROBE_PHASE.STOPPING;
+        return {
+          primaryIpv4Route: { ifIndex: 77 },
+          ipConfigs: [{ InterfaceAlias: 'VPN2 - VPN Client', InterfaceIndex: 77 }],
+          ipv4DefaultRoutes: [{ ifIndex: 77 }],
+        };
+      },
+    };
+
+    await agent.refreshParallelProbeRouteSnapshot({ operationId: 'probe-1' });
+
+    assert.equal(agent.state.parallelProbe.routeOwnerSlotId, '');
+    assert.equal(agent.state.parallelProbe.slots[0].interfaceIndex, 0);
+    assert.equal(agent.state.parallelProbe.slots[0].routeOwned, false);
+  });
+
+  await test('parallel slot connect skips success log after stop transition', async () => {
+    const agent = new SelfHostedVpnAgent({ stateFile: 'memory-state.json' });
+    agent.saveState = async () => {};
+    agent.ensureSpecificNic = async () => 'VPN2';
+    agent.safeDeleteParallelProbeAccount = async () => {};
+    agent.waitForNamedAccountConnected = async () => ({ name: 'probe-row', statusKind: 'CONNECTED' });
+    agent.refreshParallelProbeRouteSnapshot = async () => {
+      agent.state.parallelProbe.phase = PARALLEL_PROBE_PHASE.STOPPING;
+    };
+    agent.softEtherCli = {
+      createAccount: async () => {},
+      setAccountAnonymous: async () => {},
+      setAccountRetry: async () => {},
+      disableServerCertCheck: async () => {},
+      setAccountDetails: async () => {},
+      connectAccount: async () => {},
+      getAccountStatus: async () => ({
+        connectedAt: '2026-04-19T00:00:00.000Z',
+        underlayProtocol: 'TCP',
+        udpAccelerationActive: false,
+      }),
+    };
+    agent.state.parallelProbe = {
+      isRunning: true,
+      operationId: 'probe-1',
+      phase: PARALLEL_PROBE_PHASE.CONNECTING,
+      routeOwnerSlotId: '',
+      slots: [
+        {
+          slotId: 'slot-1',
+          nicName: 'VPN2',
+          phase: 'IDLE',
+          accountName: '',
+          connectedAt: '',
+          lastVerifiedAt: '',
+          routeOwned: false,
+          routeReady: false,
+          interfaceAlias: '',
+          interfaceIndex: 0,
+          defaultRouteIfIndex: 0,
+          exitPublicIp: '',
+          exitPublicIpProvider: '',
+          lastErrorCode: '',
+          lastErrorMessage: '',
+          underlayProtocol: '',
+          udpAccelerationActive: false,
+          relay: {
+            id: 'relay-1',
+            ip: '121.138.132.127',
+            fqdn: '',
+            countryShort: 'KR',
+            countryFull: 'Korea Republic of',
+            selectedSslPort: 1698,
+            udpPort: 0,
+            hostUniqueKey: '',
+          },
+        },
+      ],
+      logs: [],
+    };
+
+    await agent.connectParallelProbeSlot('probe-1', 'slot-1');
+
+    assert.equal(
+      agent.state.parallelProbe.logs.some(entry => entry.includes('연결 성공')),
+      false,
+    );
+  });
+
   await test('sanitize managed token strips symbols', () => {
     assert.equal(sanitizeManagedToken(' vpn#1 '), 'vpn-1');
   });
@@ -163,6 +693,15 @@ async function runTests() {
   });
   await test('managed account prefix negative', () => {
     assert.equal(isManagedAccountName('VPN Gate Connection'), false);
+  });
+  await test('raw catalog account prefix positive', () => {
+    assert.equal(isRawCatalogAccountName('DCDSVPNRAWCACHE-relay-1-995'), true);
+  });
+  await test('raw catalog account name builder keeps relay id and port', () => {
+    assert.equal(
+      buildRawCatalogAccountName({ id: 'relay-1' }, 995),
+      'DCDSVPNRAWCACHE-relay-1-995',
+    );
   });
 
   await test('account status connected', () => {
@@ -482,6 +1021,56 @@ async function runTests() {
     assert.equal(createdName, 'VPN2');
     assert.equal(nicName, 'VPN2');
     assert.equal(agent.managedNicName, 'VPN2');
+  });
+  await test('primeRawCatalogNics summarizes existing and newly created nic counts', async () => {
+    const agent = new SelfHostedVpnAgent({
+      managedNicName: 'DCDSVPN',
+      stateFile: '/tmp/self-hosted-vpn-agent-test-prime-raw-nics.json',
+    });
+    let createdNames = [];
+    let created = false;
+    agent.refreshState = async () => {
+      agent.state.phase = 'IDLE';
+      agent.state.catalogEnabled = false;
+      agent.state.parallelProbe = buildPublicParallelProbeState({ phase: 'IDLE', isRunning: false });
+      return agent.state;
+    };
+    agent.statusCli.listNics = async () => {
+      if (!created) {
+        return [
+          { name: 'VPN', status: 'Enabled' },
+          { name: 'VPN2', status: 'Enabled' },
+          { name: 'VPN3', status: 'Enabled' },
+        ];
+      }
+
+      return [
+        { name: 'VPN', status: 'Enabled' },
+        { name: 'VPN2', status: 'Enabled' },
+        { name: 'VPN3', status: 'Enabled' },
+        { name: 'VPN4', status: 'Enabled' },
+      ];
+    };
+    agent.createProvisionCli = () => ({
+      createNic: async (nicName) => {
+        createdNames.push(nicName);
+        created = true;
+      },
+    });
+    agent.saveState = async () => {};
+
+    const result = await agent.primeRawCatalogNics({
+      requestedPhysicalNicCount: 3,
+      nicPrepareConcurrency: 3,
+      experimentalMaxNicIndex: 4,
+    });
+
+    assert.equal(result.accepted, true);
+    assert.equal(result.existingNicCount, 2);
+    assert.equal(result.createdNicCount, 1);
+    assert.equal(result.preparedNicCount, 3);
+    assert.equal(result.remainingMissingCount, 0);
+    assert.deepEqual(createdNames, ['VPN4']);
   });
   await test('multiple managed accounts are reported as conflicting', () => {
     const agent = new SelfHostedVpnAgent({

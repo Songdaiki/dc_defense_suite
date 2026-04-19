@@ -40,7 +40,7 @@
 
 다만 이번 재검증으로, 아래 전제를 만족할 때만 "바로 패치 시작 가능"하다고 정리하는 게 맞다.
 
-- 첫 MVP는 `TCP only` 로 간다. 즉 `PortUDP = 0` 이고 `NoUdpAcceleration = true` 로 둔다.
+- 첫 MVP 목표는 `TCP only` 다. 즉 설계상 `PortUDP = 0`, `NoUdpAcceleration = true` 로 둔다. 단, 이 문서는 목표 스펙이고 현재 저장소는 아직 이 두 입력을 실제로 surface하지 않았다.
 - `DeviceName = VPN` 을 서버 스펙처럼 고정하지 말고, 로컬 어댑터 선점 상태를 먼저 본다.
 - temp account는 매 연결마다 새로 만들고, 정리는 `Disconnect -> inactive 확인 -> DeleteAccount` 순서로 한다.
 - headless agent는 `CheckServerCert = false`, `ProxyType = PROXY_DIRECT` 를 명시한다.
@@ -1681,7 +1681,748 @@ stopRawVpn(accountName):
 
 가장 실무적인 표현으로 정리하면:
 
-**지금 문서 기준으로는 "특궁 -> local agent -> SoftEther Client RPC/임시 account -> 공용 릴레이 1개 연결" 구현을 시작해도 된다. 단, 출발점은 `PortUDP=0 + NoUdpAcceleration=true + free adapter preflight + fresh temp account + explicit cleanup` 이어야 한다.**
+**지금 문서 기준으로는 "특궁 -> local agent -> SoftEther Client RPC/임시 account -> 공용 릴레이 1개 연결" 구현 착수 자체는 가능하다. 다만 현재 저장소는 아직 `PortUDP` / `NoUdpAcceleration` 입력을 local agent가 실제로 surface하지 않았으므로, 여기서 말하는 `PortUDP=0 + NoUdpAcceleration=true` 는 "현재 보장값"이 아니라 "패치 목표값"으로 읽어야 한다. 즉 착수 조건은 `free adapter preflight + fresh temp account + explicit cleanup` 이고, TCP-only 보장은 먼저 옵션 입력 경로를 추가한 뒤에야 성립한다.**
 
 그리고 이 구현은 "역공학으로 프로토콜을 새로 짜는 것"이 아니라,
 **공식 오픈소스 코어가 이미 제공하는 계정/세션/연결 경로를 raw feed와 연결하는 작업**이다.
+
+## 13. 병렬 3터널 Connected + route 전환 설계 검증
+
+이 섹션은 사용자가 바로 다음 단계로 원한 아래 설계를, **현재 저장소 코드 + 공식 SoftEther 오픈소스 + 2026-04-19 실측** 으로 다시 검증한 결과다.
+
+- 1. `VPN2/VPN3/VPN4` 같은 별도 NIC에 raw 릴레이 3개를 병렬로 `Connected` 까지 올림
+- 2. 실제 출구 IP 확인은 하나씩 route 우선순위를 바꿔가며 새 요청으로 검증
+- 3. 확인이 끝나면 원래 route 우선순위를 복구
+
+쉽게 예시로 말하면:
+
+- 지금 1개 연결은 `하나 붙이고 IP 확인`
+- 이번 확장 설계는 `3개를 먼저 붙여 놓고, 어느 터널을 기본 출구로 쓸지만 바꿔 가며 확인`
+
+### 13-1. 이번 추가 결론
+
+결론부터 말하면, **구조적으로는 가능** 하다. 다만 **현재 `selfHostedVpn` 단일 상태기계에 작은 패치 1개 넣는 수준은 아니다.**
+
+이번 추가 검증으로 확정된 사실은 이렇다.
+
+- 현재 repo의 local agent / scheduler / popup은 끝까지 **단일 터널 상태 모델** 이다.
+- 공식 SoftEther 클라이언트는 실제로 **OS route를 만지는 로직** 을 갖고 있다.
+- 그런데 account detail의 `/NOTRACK:yes` 옵션을 쓰면, **물리 default route를 지우지 않고도 VPN default route가 같이 살아남는 케이스** 를 이번 PC에서 실제로 확인했다.
+- 같은 방식으로 `VPN3`, `VPN4` 2개를 동시에 올렸을 때도 **두 VPN default route가 공존** 하는 것을 실제로 확인했다.
+
+즉 이번 turn 기준으로 더 정확한 표현은 이거다.
+
+- `병렬 3개 Connected`:
+  - 가능성이 아니라 **현실적인 설계 후보**
+- `route metric만 바꿔서 서로 다른 출구 IP 2개를 눈으로 교차 확인`:
+  - 아직 이 turn에서 최종 실측 완료까지는 못 갔다
+- `현재 single-agent 계약을 거의 안 건드리고 바로 붙이기`:
+  - 불가
+
+### 13-2. 현재 저장소 line-by-line 대조 결과
+
+#### 13-2-1. local agent는 현재 single-slot 상태기계다
+
+[projects/self_hosted_vpn_agent/server.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs:54) 에서 agent는 `managedNicName` 1개만 들고 시작하고, [server.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs:65) 에서 state도 `buildInitialState(this.managedNicName)` 1개로 만든다.
+
+[server.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs:1285) 의 초기 state 필드는 아래처럼 전부 1개씩이다.
+
+- `phase`
+- `operationId`
+- `profileId`
+- `accountName`
+- `activeRelayId`
+- `activeRelayIp`
+- `activeRelayFqdn`
+- `activeSelectedSslPort`
+- `activeAdapterName`
+- `baseline`
+
+쉽게 예시로 말하면:
+
+- 지금 구조는 `주차칸 1개` 다
+- 우리가 하려는 건 `주차칸 3개 + 현재 출차 중인 칸 1개 표시` 다
+
+#### 13-2-2. connect/disconnect 흐름도 1개 account만 가정한다
+
+[server.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs:276) 의 `connectProfile()` 과 [server.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs:314) 의 `connectRawRelay()` 는 둘 다 아래 패턴이다.
+
+- `operationId` 1개 세팅
+- `phase` 1개 세팅
+- `accountName` 1개 세팅
+- `activeAdapterName` 1개 세팅
+- `baseline` 1개 세팅
+
+[server.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs:393) 이후 raw connect 본문도 최종적으로 `accountName`, `activeAdapterName`, `activeSelectedSslPort` 를 단일 값으로 덮어쓴다.
+
+즉 지금 `POST /v1/vpn/connect` 를 3번 병렬 호출하면, 마지막 호출이 이전 상태를 덮어쓰는 방향으로 깨질 가능성이 높다.
+
+#### 13-2-3. 네트워크 레이어는 지금 read-only다
+
+[projects/self_hosted_vpn_agent/lib/network_state.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/network_state.mjs:110) 부터 보면 현재 observer는 아래만 읽는다.
+
+- `Get-NetAdapter`
+- `Get-NetIPConfiguration`
+- `Get-NetRoute -AddressFamily IPv4`
+- `Get-NetRoute -AddressFamily IPv6`
+
+[network_state.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/network_state.mjs:253) 의 `compareBaseline()` 도 결국 `route key가 바뀌었는지` 만 비교한다.
+
+중요한 점은, 현재 repo에는 아래가 없다.
+
+- `Set-NetIPInterface`
+- `New-NetRoute`
+- `Remove-NetRoute`
+- `route add/change/delete`
+
+즉 지금은 `길을 읽는 망원경` 만 있고, `길을 바꾸는 핸들` 은 없다.
+
+#### 13-2-4. SoftEther CLI 래퍼도 multi-slot coordinator는 없다
+
+[projects/self_hosted_vpn_agent/lib/softether_cli.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/softether_cli.mjs:364) 의 `run()` 은 내부 queue로 `vpncmd` 호출을 직렬화한다.
+
+[softether_cli.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/softether_cli.mjs:418), [softether_cli.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/softether_cli.mjs:431), [softether_cli.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/softether_cli.mjs:488), [softether_cli.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/softether_cli.mjs:536), [softether_cli.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/softether_cli.mjs:540), [softether_cli.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/softether_cli.mjs:544) 는 계정/어댑터 CRUD primitive는 제공하지만, 아래는 없다.
+
+- slot 개념
+- 3개 account 생명주기 관리
+- route owner 개념
+- metric restore 개념
+- 검증 라운드 개념
+
+즉 부품은 있는데, 3슬롯 orchestration이 없다.
+
+#### 13-2-5. scheduler와 popup도 single-card UI다
+
+[features/self-hosted-vpn/scheduler.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/features/self-hosted-vpn/scheduler.js:35) 부터 보면 scheduler도 아래 값을 단일 필드로 유지한다.
+
+- `phase`
+- `operationId`
+- `activeProfileId`
+- `activeRelayId`
+- `activeRelayIp`
+- `activeRelayFqdn`
+- `activeSelectedSslPort`
+- `activeAdapterName`
+- `connectedAt`
+
+[scheduler.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/features/self-hosted-vpn/scheduler.js:291) 의 `applyAgentStatus()` 도 status 객체 1개만 먹는다.
+
+[popup/popup.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/popup/popup.js:167) 에서 popup DOM 역시 `activeAdapterText`, `relayText`, `currentPublicIpText` 같은 단일 텍스트 칸 1세트만 들고, [popup/popup.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/popup/popup.js:2725) 의 `updateSelfHostedVpnUI()` 도 그 1세트만 채운다.
+
+즉 연결 엔진만 3개로 바꾸면 끝나는 게 아니라, 최소한 test mode에서는 status contract도 따로 만들어야 한다.
+
+### 13-3. 공식 SoftEther 오픈소스 실제 로직 대조
+
+이번 turn에서 공식 `SoftEtherVPN_Stable` 저장소를 다시 받아서 commit `ed17437af9719ac66acab30faa29e375d613c35f` 기준으로 확인했다.
+
+#### 13-3-1. `AccountCreate` 는 원래부터 NIC 지정형이다
+
+공식 source의 `PcAccountCreate` 는 아래를 직접 받는다.
+
+- `SERVER`
+- `HUB`
+- `USERNAME`
+- `NICNAME`
+
+참고:
+
+- `src/Cedar/Command.c:4217-4266`
+- GitHub: <https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/blob/ed17437af9719ac66acab30faa29e375d613c35f/src/Cedar/Command.c#L4217-L4266>
+
+이 함수는 내부 기본값도 같이 넣는다.
+
+- `NumRetry = INFINITE`
+- `RetryInterval = 15`
+- `MaxConnection = 1`
+- `UseEncrypt = true`
+- `AdditionalConnectionInterval = 1`
+- `DeviceName = NICNAME`
+
+즉 공식 구현 관점에서도 `relay 1개 = account 1개 = NIC 1개` 모델은 자연스럽다.
+
+#### 13-3-2. 공식 클라이언트는 실제로 OS route를 만진다
+
+공식 `ROUTE_TRACKING` 구조체에는 아래가 들어 있다.
+
+- `RouteToServer`
+- `DefaultGatewayByVLan`
+- `RouteToDefaultDns`
+- `RouteToEight`
+- `RouteToNatTServer`
+- `DeletedDefaultGateway`
+
+참고:
+
+- `src/Cedar/VLanWin32.h:117-138`
+- GitHub: <https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/blob/ed17437af9719ac66acab30faa29e375d613c35f/src/Cedar/VLanWin32.h#L117-L138>
+
+`RouteTrackingStart()` 는 실제로 아래를 수행한다.
+
+- 서버 IP로 가는 static route 추가
+- DNS route 추가
+- Azure real server route 추가
+- DHCP release/renew
+- DNS cache flush
+
+참고:
+
+- `src/Cedar/VLanWin32.c:584-799`
+- GitHub: <https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/blob/ed17437af9719ac66acab30faa29e375d613c35f/src/Cedar/VLanWin32.c#L584-L799>
+
+`RouteTrackingMain()` 은 더 직접적이다.  
+`0.0.0.0/0` default gateway를 스캔한 뒤, 자기 VLAN이 default gateway가 되어야 한다고 판단하면 **다른 interface의 default gateway를 지운다.**
+
+참고:
+
+- `src/Cedar/VLanWin32.c:366-537`
+- GitHub: <https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/blob/ed17437af9719ac66acab30faa29e375d613c35f/src/Cedar/VLanWin32.c#L366-L537>
+
+`RouteTrackingStop()` 은 세션 종료 시 삭제해 둔 default gateway를 복구하려고 시도한다.
+
+참고:
+
+- `src/Cedar/VLanWin32.c:801-990`
+- GitHub: <https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/blob/ed17437af9719ac66acab30faa29e375d613c35f/src/Cedar/VLanWin32.c#L801-L990>
+
+즉 중요한 해석은 이거다.
+
+- `VPNGate 목록 -> 2차 API로 route 바꾸기` 가 아니다
+- **SoftEther 클라이언트 세션 자체가 로컬 Windows route를 조정한다**
+
+### 13-4. `/NOTRACK=yes` 가 이번 설계의 핵심 실마리다
+
+공식 help text에는 `/NOTRACK:yes` 가 이렇게 설명된다.
+
+- `"Specify \"yes\" will disable the adjustments of routing table. Normally \"no\" is specified."`
+
+참고:
+
+- `src/bin/hamcore/strtable_en.stb:6658-6668`
+- GitHub: <https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/blob/ed17437af9719ac66acab30faa29e375d613c35f/src/bin/hamcore/strtable_en.stb#L6658-L6668>
+
+또 공식 `Session.c` 에서는 `NoRoutingTracking` 이 켜지면 `ClientModeAndUseVLan` 을 false로 내린다.
+
+참고:
+
+- `src/Cedar/Session.c:2015-2020`
+- GitHub: <https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/blob/ed17437af9719ac66acab30faa29e375d613c35f/src/Cedar/Session.c#L2015-L2020>
+
+처음에는 이걸 보고 "`NOTRACK=yes` 면 route도 안 생기고 그냥 unusable 아닐까?" 를 의심하는 게 맞다.
+
+그런데 이번 PC 실측은 오히려 설계 쪽에 좋은 결과가 나왔다.
+
+#### 13-4-1. 실측 1: `NOTRACK=yes` 단일 account
+
+실험 조건:
+
+- relay:
+  - `219.100.37.114:443`
+- NIC:
+  - `VPN3`
+- account detail:
+  - `/NOTRACK:yes`
+
+실측 결과:
+
+- account 상태:
+  - `Connected`
+- 공인 IPv4:
+  - 연결 전 `1.210.3.152`
+  - 연결 후 `219.100.37.240`
+- IPv4 default route:
+  - 연결 전:
+    - `이더넷` 1개
+  - 연결 후:
+    - `이더넷`
+    - `VPN3 - VPN Client`
+
+쉽게 예시로 말하면:
+
+- `NOTRACK=no` 는 공식 SoftEther가 다른 default gateway를 밀어내며 길을 정리하려 드는 모드
+- `NOTRACK=yes` 단일 실측은 `기존 길은 남기고, VPN 길도 하나 더 생긴 상태` 로 보였다
+
+이건 병렬 다중 터널 설계에 유리하다.
+
+#### 13-4-2. 실측 2: `NOTRACK=yes` 2개 동시 account
+
+실험 조건:
+
+- relay:
+  - 둘 다 `219.100.37.114:443`
+- NIC:
+  - `VPN3`
+  - `VPN4`
+- account detail:
+  - 둘 다 `/NOTRACK:yes`
+
+실측 결과:
+
+- `VPN3` account:
+  - `Connected`
+- `VPN4` account:
+  - `Connected`
+- route table:
+  - `이더넷`
+  - `VPN3 - VPN Client`
+  - `VPN4 - VPN Client`
+
+중요한 해석은 이거다.
+
+- 적어도 이번 PC와 이 릴레이 기준에서는
+- **`NOTRACK=yes` 2개 동시 연결이 서로의 default route를 즉시 삭제하지 않았다**
+
+즉 `3개를 먼저 Connected까지 올려 놓는` 설계가 공상은 아니다.
+
+#### 13-4-3. 아직 남아 있는 실측 공백
+
+이번 turn에서 **서로 다른 출구 IP를 가진 2개 릴레이를 동시에 올린 뒤, metric 전환만으로 IP가 A -> B로 바뀌는 것** 까지는 최종 완료하지 못했다.
+
+그래서 문서상 최종 정리는 이렇게 해야 맞다.
+
+- `병렬 connected 자체`:
+  - 실측으로 상당 부분 뒷받침됨
+- `metric 전환만으로 exit IP 교차 검증`:
+  - 아직 마지막 1회 direct proof는 남음
+
+이걸 숨기고 "완전히 끝났다"고 쓰면 과장이다.
+
+### 13-5. 구현 권장 방향
+
+현재 single-agent를 바로 뜯지 말고, **병렬 테스트 전용 coordinator** 를 먼저 따로 두는 게 맞다.
+
+권장 1차 구조는 이거다.
+
+```json
+{
+  "phase": "MULTI_PROBE",
+  "slotCount": 3,
+  "slots": [
+    {
+      "slotId": "slot-1",
+      "nicName": "VPN2",
+      "interfaceAlias": "VPN2 - VPN Client",
+      "accountName": "DCDSVPNGATE-...",
+      "relay": {
+        "id": "...",
+        "ip": "...",
+        "fqdn": "...",
+        "selectedSslPort": 443
+      },
+      "phase": "CONNECTED",
+      "connectedAt": "2026-04-19T...",
+      "lastErrorCode": "",
+      "lastErrorMessage": ""
+    }
+  ],
+  "routeOwnerSlotId": "slot-2",
+  "verification": {
+    "preferredFamily": "ipv4",
+    "provider": "api.ipify.org"
+  }
+}
+```
+
+핵심은 `single connect status` 와 `multi probe status` 를 분리하는 것이다.
+
+예를 들면:
+
+- 기존:
+  - `/v1/vpn/connect`
+  - `/v1/vpn/status`
+- 신규 test mode:
+  - `/v1/vpn/parallel-probe/start`
+  - `/v1/vpn/parallel-probe/status`
+  - `/v1/vpn/parallel-probe/stop`
+
+이렇게 나누면 기존 popup 흐름을 깨지 않고 실험할 수 있다.
+
+2026-04-19 현재 실제 패치 기준 구현 위치는 아래다.
+
+- local agent endpoint:
+  - [projects/self_hosted_vpn_agent/server.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs)
+  - `GET /v1/vpn/parallel-probe/status`
+  - `POST /v1/vpn/parallel-probe/start`
+  - `POST /v1/vpn/parallel-probe/stop`
+- extension scheduler/API:
+  - [features/self-hosted-vpn/api.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/features/self-hosted-vpn/api.js)
+  - [features/self-hosted-vpn/scheduler.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/features/self-hosted-vpn/scheduler.js)
+- popup/background 액션:
+  - [background/background.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/background/background.js)
+  - [popup/popup.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/popup/popup.js)
+  - [popup/popup.html](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/popup/popup.html)
+
+쉽게 예시로 말하면:
+
+- 기존 toggle:
+  - 단일 `/v1/vpn/connect` 용
+- 새 버튼 3개:
+  - `병렬 3슬롯 시작`
+  - `병렬 상태 새로고침`
+  - `병렬 시험 종료`
+
+즉 single-flow는 그대로 두고, parallel-probe만 옆으로 새 계약을 붙인 형태다.
+
+### 13-6. route 전환은 이렇게 잡는 게 제일 현실적이다
+
+이번 turn에서 Windows cmdlet 존재도 다시 확인했다.
+
+- `Get-NetIPInterface`
+- `Set-NetIPInterface`
+- `Get-NetRoute`
+
+따라서 1차 구현은 `default route add/delete` 를 직접 흉내 내기보다, **interface metric 우선순위 전환 + route 수렴 확인** 으로 가는 게 맞다.
+
+쉽게 예시로 말하면:
+
+- baseline:
+  - `이더넷 = 25`
+  - `VPN2 = 1`
+  - `VPN3 = 1`
+  - `VPN4 = 1`
+- slot-2 검증:
+  - `이더넷 = 50`
+  - `VPN2 = 60`
+  - `VPN3 = 5`
+  - `VPN4 = 60`
+- 새 IPv4 요청 전송
+- 결과 저장
+- 다음 slot으로 metric 재조정
+
+여기서 중요한 건 2개다.
+
+- 반드시 **새 요청** 이어야 한다
+- metric 변경 후 **실제 route table 재조회** 가 필요하다
+
+왜냐하면 기존 소켓은 이전 route를 계속 쓸 수 있기 때문이다.
+
+### 13-7. egress 검증은 기존 `/v1/vpn/egress` 를 그대로 쓰면 안 된다
+
+[projects/self_hosted_vpn_agent/server.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs:165) 의 `/v1/vpn/egress` 는 stale cache 우선이고, [projects/self_hosted_vpn_agent/lib/network_state.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/network_state.mjs:10) 의 public IP cache TTL도 `5000ms` 다.
+
+또 [network_state.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/network_state.mjs:291) 의 provider 순서는 `api64.ipify.org` -> `api.ipify.org` -> `ifconfig.me` 라서, 환경에 따라 IPv6가 먼저 잡힐 수도 있다.
+
+그래서 병렬 route-switch 검증용 helper는 따로 두는 게 맞다.
+
+권장 조건:
+
+- IPv4 강제
+- stale cache 금지
+- slot 전환 직후 새 TCP/TLS 연결 사용
+
+쉽게 예시로 말하면:
+
+- 기존 status card용:
+  - `최근 상태를 빨리 보여주는 캐시 응답`
+- 병렬 전환 검증용:
+  - `metric 바꾼 뒤 진짜로 어느 출구가 타는지 확인하는 fresh IPv4 probe`
+
+### 13-8. 지금 바로 패치할 때의 권장 순서
+
+1. 기존 `/v1/vpn/connect` / popup 계약은 그대로 둔다.
+2. 병렬 실험 전용 coordinator를 별도 파일로 만든다.
+3. 고정 NIC pool `VPN2`, `VPN3`, `VPN4` 를 slot에 바인딩한다.
+4. slot account 생성 시 첫 버전은 `/NOTRACK:yes` 로 둔다.
+5. `Connected` 판정은 `AccountList + AccountStatusGet` 둘 다 본다.
+6. route baseline은 `Get-NetIPInterface + Get-NetRoute` 둘 다 저장한다.
+7. slot별 검증 때만 metric을 바꾼다.
+8. 검증 직후 fresh IPv4 probe를 날린다.
+9. 결과를 slot별로 기록한다.
+10. 끝나면 metric restore 후 모든 temp account를 정리한다.
+
+### 13-9. 이번 설계에서 특히 조심할 점
+
+#### 13-9-1. `NOTRACK=yes` 는 유력한 실마리지만 만능이라고 단정하면 안 된다
+
+이번 PC 실측에서는 잘 나왔지만, 공식 source상 `NoRoutingTracking` 은 `ClientModeAndUseVLan` 분기에 직접 걸린다.
+
+즉 안전한 표현은 이거다.
+
+- `이번 환경에서는 1개/2개 동시 연결에 유리하게 나왔다`
+- `모든 릴레이/모든 NIC/모든 Windows 상태에서 항상 동일하다고 단정하면 안 된다`
+
+#### 13-9-2. 서로 다른 릴레이 2개의 exit IP 교차 증명은 아직 마지막 1회가 남았다
+
+이번 turn에서 확보한 건:
+
+- 단일 `/NOTRACK=yes` 실측 성공
+- 2개 동시 `/NOTRACK=yes` 실측 성공
+
+아직 남은 건:
+
+- `slot A metric 우선 -> exit IP A`
+- `slot B metric 우선 -> exit IP B`
+
+이건 다음 patch 직전 마지막 현장 검증 항목으로 남기는 게 맞다.
+
+#### 13-9-3. popup 기존 카드에 바로 억지로 넣으면 오히려 더 헷갈린다
+
+현재 popup은 single-card다.  
+그러니 multi probe를 넣는 첫 화면은 아래 중 하나가 맞다.
+
+- 별도 test panel
+- 별도 report export
+- 기존 카드 아래 slot list 추가
+
+지금 카드 1장에 `현재 active slot`, `3개 connected slot`, `route owner`, `검증 결과` 를 한꺼번에 구겨 넣으면 사용자가 더 헷갈린다.
+
+#### 13-9-4. 현재 저장소 구현은 아직 `TCP-only` 를 실제로 강제하지 않는다
+
+문서 앞부분에서는 첫 MVP 목표를 `PortUDP=0 + NoUdpAcceleration=true` 로 잡았지만, **현재 repo 구현은 아직 그 목표를 코드로 강제하지 않는다.**
+
+현재 local wrapper를 실제로 보면:
+
+- [projects/self_hosted_vpn_agent/lib/softether_cli.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/softether_cli.mjs:488) 의 `createAccount()` 는 `SERVER/HUB/USERNAME/NICNAME` 만 넣는다.
+- [softether_cli.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/softether_cli.mjs:513) 의 `setAccountDetails()` 는 `/MAXTCP`, `/INTERVAL`, `/TTL`, `/NOTRACK`, `/NOQOS` 까지만 넣고, `PortUDP` 나 `NoUdpAcceleration` 은 건드리지 않는다.
+- 반대로 [softether_cli.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/softether_cli.mjs:477) 은 `UDP Acceleration is Active` 를 읽어서 상태값으로 노출한다.
+- 실제 실측에서도 `AccountStatusGet` 결과가 `UDP Acceleration is Active = Yes` 로 나왔다.
+
+공식 source는 이 필드를 실제로 갖고 있다.
+
+- `src/Cedar/Connection.h`:
+  - `PortUDP`
+  - `NoUdpAcceleration`
+- `src/Cedar/Client.c`:
+  - RPC pack/unpack에 `PortUDP`, `NoUdpAcceleration` 존재
+- `src/Cedar/Protocol.c`:
+  - `PortUDP != 0` 이면 R-UDP direct 경로 가능
+  - `NoUdpAcceleration == false` 면 UDP acceleration 초기화 가능
+
+즉 지금 정확한 표현은 이거다.
+
+- 문서의 `TCP-only` 는 **설계 목표**
+- 현재 저장소 raw connect는 **아직 그 목표를 보장하지 않는 구현**
+
+쉽게 예시로 말하면:
+
+- 문서 초안:
+  - `첫 버전은 고속도로로 안 빠지고 일반도로(TCP)만 탄다`
+- 현재 코드:
+  - `목적지는 맞게 넣지만, 고속도로 진입 차단 장치는 아직 안 달려 있다`
+
+그래서 이후 성공률/실패율을 해석할 때도 "`지금 구현이 strict TCP-only였는데도 안 붙는다`" 라고 단정하면 안 된다.
+
+#### 13-9-5. route 전환/복구의 기준 키는 `InterfaceAlias` 가 아니라 `ifIndex` 여야 한다
+
+[projects/self_hosted_vpn_agent/lib/network_state.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/network_state.mjs:120) 부터 보면 현재 observer는 `InterfaceAlias` 와 `InterfaceIndex` 를 같이 읽고, [network_state.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/lib/network_state.mjs:191) 의 `normalizeRoute()` 도 `ifIndex` 와 `interfaceAlias` 를 둘 다 유지한다.
+
+이건 좋은 출발점이지만, 병렬 route-switch 쪽에서는 **표시용 이름과 제어용 키를 분리** 해야 한다.
+
+왜냐하면:
+
+- `InterfaceAlias` 는 로컬 언어 영향을 받는다
+- PowerShell -> JSON -> WSL/Node 경로에서 한글 alias가 깨질 수 있다
+- 사용자가 NIC 이름을 바꿀 수도 있다
+
+반면 `ifIndex` 는 route/metric 조작의 기준 키로 훨씬 안정적이다.
+
+그래서 권장 기준은 이거다.
+
+- UI 표시:
+  - `InterfaceAlias`
+- 내부 restore / 비교 / slot binding:
+  - `ifIndex`
+
+쉽게 예시로 말하면:
+
+- 화면에는 `이더넷`, `VPN3 - VPN Client` 를 보여줘도 된다
+- 실제 route owner 판정은 `ifIndex=18`, `ifIndex=42` 같은 숫자로 잡아야 덜 깨진다
+
+#### 13-9-6. 기존 single-agent cleanup/refresh helper를 그대로 재사용하면 multi-slot을 스스로 깨뜨릴 수 있다
+
+현재 single-agent helper 중에는 **병렬 slot과 직접 충돌하는 함수** 가 이미 있다.
+
+- [projects/self_hosted_vpn_agent/server.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs:656) 의 `cleanupManagedInactiveAccounts()`:
+  - disconnected managed account를 전역으로 훑어서 삭제한다
+- [server.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs:923) 의 `performRefresh()`:
+  - tracked account가 없는데 active managed account가 여러 개면 `MULTIPLE_MANAGED_ACCOUNTS` 로 본다
+- [server.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs:1045) 의 `resolveTrackedAccount()`:
+  - `managed_raw` 이면 첫 번째 active managed account 하나만 택한다
+
+즉 지금 helper를 그대로 가져다 쓰면 이런 일이 생길 수 있다.
+
+- slot-1, slot-2, slot-3 를 올려 둠
+- single refresh가 들어옴
+- `첫 번째 active managed account` 하나만 tracked로 잡힘
+- 나머지는 `unexpected multiple` 또는 cleanup 대상으로 오인됨
+
+쉽게 예시로 말하면:
+
+- 원래 helper는 `주차칸 1개 건물 관리인`
+- 우리가 하려는 건 `주차칸 3개를 번호표로 따로 관리하는 주차타워`
+
+그래서 결론은 분명하다.
+
+- multi-probe coordinator는 기존 `selfHostedVpn` state와 **저장 키부터 분리**
+- account cleanup도 **slot scope** 로 제한
+- tracked account도 `global 1개` 가 아니라 `slot별 1개`
+
+#### 13-9-7. background의 "상태 복원" 로그는 실제 reconnect/resume을 의미하지 않는다
+
+[background/background.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/background/background.js:1714) 의 `resumeStandaloneScheduler()` 는 로그를 남긴 뒤 `ensureRunLoop()` 를 호출한다.  
+그런데 [features/self-hosted-vpn/scheduler.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/features/self-hosted-vpn/scheduler.js:481) 의 `ensureRunLoop()` 는 실제로 비어 있다.
+
+즉 현재 self-hosted-vpn에서의 "상태 복원" 은 정확히 말하면:
+
+- 저장된 상태를 읽음
+- UI에 지난 상태를 다시 보여줄 수 있음
+- 하지만 연결 작업이나 probe 라운드를 재개하지는 않음
+
+이 차이를 문서에 명확히 적어 두지 않으면, 나중에 이런 오해가 생긴다.
+
+- popup 로그:
+  - `저장된 자체 VPN 테스트 상태 복원`
+- 개발자 해석:
+  - `아, background가 probe를 다시 돌리나 보다`
+- 실제:
+  - `아니다. 저장 상태만 복원했고 long-running loop는 재개하지 않았다`
+
+그래서 병렬 probe는 반드시 아래 중 하나를 택해야 한다.
+
+- 명시적 재시작 API
+- 재개 가능한 coordinator 상태기계
+- 아니면 cold restart를 정상 정책으로 문서화
+
+#### 13-9-8. 현재 raw 입력의 `udpPort` / `hostUniqueKey` 는 UI와 API를 지나가지만 실제 연결에는 아직 반영되지 않는다
+
+현재 호출 체인을 그대로 따라가 보면:
+
+- [popup/popup.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/popup/popup.js:1071) 에서 `relaySnapshot.udpPort`, `relaySnapshot.hostUniqueKey` 를 저장한다
+- [features/self-hosted-vpn/api.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/features/self-hosted-vpn/api.js:113) 의 `buildConnectRequestBody()` 도 이 값을 `relay` payload에 넣는다
+- [projects/self_hosted_vpn_agent/server.mjs](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs:1375) 의 `normalizeConnectRequest()` 도 이 값을 파싱해 state에 싣는다
+
+그런데 실제 raw 연결을 만드는 [executeRawRelayConnect()](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs:436) 는:
+
+- `serverHost`
+- `serverPort`
+- `hubName=VPNGATE`
+- `username=VPN`
+- `nicName`
+
+까지만 `AccountCreate` 에 넣고, 이후 [setAccountDetails()](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/projects/self_hosted_vpn_agent/server.mjs:452) 에서도 `udpPort` / `hostUniqueKey` 를 쓰지 않는다.
+
+즉 지금 정확한 상태는 이거다.
+
+- UI 입력:
+  - 있음
+- API payload:
+  - 있음
+- agent normalize:
+  - 있음
+- 실제 SoftEther account 설정:
+  - 아직 없음
+
+쉽게 예시로 말하면:
+
+- 현재는 `택배 송장에 참고 메모를 적어 놓기만 한 상태`
+- 실제 배송 기사에게 그 메모를 읽혀서 경로를 바꾸는 단계는 아직 안 붙어 있다
+
+그래서 지금 raw 성공/실패를 해석할 때도:
+
+- `udpPort를 넣었는데도 안 붙는다`
+- `hostUniqueKey를 넣었는데도 반영이 안 된다`
+
+가 아니라, **현재 구현은 애초에 그 두 값을 연결 엔진에 전달하지 않는다** 고 보는 게 맞다.
+
+#### 13-9-9. popup의 일반 상태조회 경로는 사용자가 저장한 `requestTimeoutMs` 를 끝까지 존중하지 않는다
+
+[features/self-hosted-vpn/api.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/features/self-hosted-vpn/api.js:52) 는 저장값 `requestTimeoutMs` 를 config에 넣고, [popup/popup.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/popup/popup.js:1078) 도 이 값을 저장한다.
+
+그런데 background의 일반 상태조회 경로를 보면:
+
+- [background/background.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/background/background.js:340) 의 `getSelfHostedVpnPollingTimeoutMs()` 는 설정값을 읽은 뒤
+- [background/background.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/background/background.js:348) 에서 `Math.min(..., 3000)` 으로 다시 잘라 버린다
+- 그래서 [background/background.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/background/background.js:375) 의 `getAllStatus` 나 [background/background.js](/mnt/c/Users/eorb9/projects/dc_defense_suite_repo/background/background.js:595) 의 `getStatus` 경로는 결국 `3000ms` 상한으로 polling 한다
+
+즉 사용자가 popup에서 예를 들어:
+
+- `requestTimeoutMs = 5000`
+
+을 저장해도, 일반 상태조회 경로는 실제로는:
+
+- `3000ms` 까지만 기다린다
+
+이건 사용자가 봤던 아래 증상과도 직접 연결된다.
+
+- `최근 오류: local agent 요청 시간 초과 (3000ms)`
+- `AGENT_UNAVAILABLE`
+
+쉽게 예시로 말하면:
+
+- 설정 화면:
+  - `5초까지 기다려 주세요`
+- 일반 polling 코드:
+  - `아니, 3초만 기다릴게`
+
+그래서 병렬 probe와 상관없이, **현재 single-flow 상태 UI도 timeout 튜닝 체감이 제한되는 구조** 다.
+
+### 13-10. 정적 검증 체크리스트
+
+아래는 실제 patch 전에 line-by-line로 다시 볼 항목들이다.
+
+- slot 3개가 같은 `managedNicName` 을 공유하지 않는가
+- slot state와 global state가 서로 덮어쓰지 않는가
+- `operationId` 가 slot별/round별로 분리되는가
+- temp account 이름 충돌이 없는가
+- 같은 relay IP에 다른 port일 때도 slot key가 구분되는가
+- 같은 relay를 서로 다른 NIC에 붙일 때 cleanup 충돌이 없는가
+- `AccountList` 에는 있는데 `AccountStatusGet` 이 잠깐 실패하는 케이스를 재시도하는가
+- `Connected` 직후 `activeAdapterName` 대신 실제 Windows `InterfaceAlias` 를 별도로 수집하는가
+- `VPN3` 와 `VPN3 - VPN Client` 를 혼동하지 않는가
+- `Get-NetRoute` 결과가 1개 object와 array 사이를 오갈 때 정상 파싱되는가
+- route metric과 interface metric을 따로 저장하는가
+- restore 시 `AutomaticMetric Enabled/Disabled` 원래 상태를 복원하는가
+- 물리 NIC metric을 올린 뒤 원복 실패하면 안전하게 복구하는가
+- IPv4 route만 바꾸고 IPv6 probe가 응답해 버리는 경우를 막는가
+- egress probe가 stale cache를 읽지 않는가
+- egress probe가 keep-alive 재사용으로 이전 route를 타지 않는가
+- metric 변경 직후 route table 수렴 시간을 기다리는가
+- 수렴 전 probe를 쏘지 않는가
+- slot A가 connected인데도 default route가 안 생긴 경우를 감지하는가
+- slot B가 connected인데도 default route가 안 생긴 경우를 감지하는가
+- 하나의 slot만 실패했을 때 나머지 slot을 유지하는가
+- 한 slot cleanup 실패가 전체 round를 망치지 않는가
+- `vpncmd` queue 직렬화 때문에 polling이 너무 빽빽해지지 않는가
+- background resume 로그가 병렬 probe 로그를 덮어쓰지 않는가
+- popup 새로고침이 병렬 probe 상태를 단일 상태로 오해하지 않는가
+- scheduler 저장 포맷과 multi probe 저장 포맷이 같은 키를 공유하지 않는가
+- 현재 wrapper가 `PortUDP` / `NoUdpAcceleration` 을 실제로 세팅하지 않는다는 점을 성공률 해석에 반영했는가
+- route/metric restore 키를 `InterfaceAlias` 문자열이 아니라 `ifIndex` 중심으로 잡았는가
+- 기존 `cleanupManagedInactiveAccounts()` / `performRefresh()` / `resolveTrackedAccount()` 를 병렬 slot에 재사용하지 않는가
+- "상태 복원" 로그와 실제 probe 재개를 혼동하지 않는가
+- `relay.udpPort` / `relay.hostUniqueKey` 가 실제 연결 엔진까지 전달되는지와, 단지 payload에만 있는 상태인지를 구분했는가
+- 일반 popup polling이 `requestTimeoutMs` 를 3000ms로 다시 clamp한다는 점을 장애 해석에 반영했는가
+- report에 slot별 relay/IP/port/error가 모두 남는가
+- exit IP 검증 실패 시 route snapshot이 같이 남는가
+- restore 후 실제 default route가 baseline으로 돌아왔는지 재확인하는가
+- test 도중 사용자가 수동으로 Manager에서 account를 건드렸을 때 감지하는가
+- NIC가 disabled 상태면 slot을 즉시 fail-fast 하는가
+- `Set-NetIPInterface` 권한 오류를 명확히 surface 하는가
+- 같은 국가 relay끼리 출구 IP가 비슷해서 사람이 오해하지 않도록 raw IP를 그대로 남기는가
+- relay 1개가 오래된 snapshot이라 실패해도 전체 설계를 실패로 오판하지 않는가
+- 10분 feed 갱신 중 relay 정보가 바뀌어도 현재 round는 snapshot 기준으로 유지하는가
+- disconnect 후 temp account 삭제가 누락되지 않는가
+- temp account 삭제는 했지만 default route restore가 안 된 상태를 잡아내는가
+
+### 13-11. 이번 추가 섹션 기준 Go / No-Go
+
+이번 추가 검증 기준으로는 이렇게 정리하는 게 맞다.
+
+- Go:
+  - `병렬 3슬롯 test coordinator` 설계/패치 시작
+  - 첫 버전은 `/NOTRACK:yes` 기반
+  - first-class 목표는 `3개 Connected 유지 + route owner 전환 기록`
+- Conditional Go:
+  - `서로 다른 두 exit IP를 metric 전환만으로 확실히 교차 확인`
+  - 이건 첫 patch 직후 바로 실측
+- No-Go:
+  - 기존 single `/v1/vpn/connect` 계약 위에 억지로 3개 병렬 state를 덮어씌우는 것
+
+가장 쉬운 예시로 정리하면 이렇다.
+
+- 하면 되는 것:
+  - `multi-probe 전용 모드` 를 새로 만든다
+  - `VPN2/VPN3/VPN4` 에 `/NOTRACK=yes` raw account를 올린다
+  - slot별로 metric을 바꿔가며 fresh IPv4 요청으로 출구를 본다
+- 지금 하면 안 되는 것:
+  - 기존 `selfHostedVpn` 단일 카드에 3개 state를 그대로 우겨 넣는다
+  - 기존 `/v1/vpn/status` 1개 응답으로 multi-slot을 억지로 표현한다

@@ -18,7 +18,7 @@ const MIN_ACTION_TIMEOUT_MS = 15000;
 const DEFAULT_CONFIG = {
   agentBaseUrl: 'http://127.0.0.1:8765',
   authToken: '',
-  connectionMode: CONNECTION_MODE.PROFILE,
+  connectionMode: CONNECTION_MODE.SOFTETHER_VPNGATE_RAW,
   profileId: '',
   selectedRelayId: '',
   selectedSslPort: 0,
@@ -28,7 +28,7 @@ const DEFAULT_CONFIG = {
 };
 
 function normalizeConfig(config = {}) {
-  const normalizedConnectionMode = normalizeConnectionMode(config.connectionMode);
+  const normalizedConnectionMode = normalizeConnectionMode(config.connectionMode ?? DEFAULT_CONFIG.connectionMode);
   const normalizedRelaySnapshot = normalizeRelaySnapshot(config.relaySnapshot, config.selectedRelayId);
   const normalizedSelectedSslPort = normalizePort(config.selectedSslPort, DEFAULT_CONFIG.selectedSslPort);
   const normalizedSelectedRelayId = String(
@@ -81,6 +81,13 @@ async function getVpnEgress(config = {}, options = {}) {
   });
 }
 
+async function getParallelProbeStatus(config = {}, options = {}) {
+  return agentRequest(config, '/v1/vpn/parallel-probe/status', {
+    method: 'GET',
+    timeoutMs: options.timeoutMs,
+  });
+}
+
 async function connectVpn(config = {}, options = {}) {
   const resolvedConfig = normalizeConfig(config);
   return agentRequest(resolvedConfig, '/v1/vpn/connect', {
@@ -95,6 +102,64 @@ async function disconnectVpn(config = {}, options = {}) {
     method: 'POST',
     timeoutMs: options.timeoutMs,
     body: {},
+  });
+}
+
+async function startParallelProbe(config = {}, options = {}) {
+  const resolvedConfig = normalizeConfig(config);
+  return agentRequest(resolvedConfig, '/v1/vpn/parallel-probe/start', {
+    method: 'POST',
+    timeoutMs: options.timeoutMs,
+    body: options.body && typeof options.body === 'object' ? options.body : {},
+  });
+}
+
+async function stopParallelProbe(config = {}, options = {}) {
+  return agentRequest(config, '/v1/vpn/parallel-probe/stop', {
+    method: 'POST',
+    timeoutMs: options.timeoutMs,
+    body: {},
+  });
+}
+
+async function prepareRawRelayCatalog(config = {}, options = {}) {
+  const resolvedConfig = normalizeConfig(config);
+  return agentRequest(resolvedConfig, '/v1/vpn/catalog/prepare', {
+    method: 'POST',
+    timeoutMs: options.timeoutMs,
+    body: options.body && typeof options.body === 'object' ? options.body : {},
+  });
+}
+
+async function primeRawRelayCatalogNics(config = {}, options = {}) {
+  const resolvedConfig = normalizeConfig(config);
+  return agentRequest(resolvedConfig, '/v1/vpn/catalog/prime-nics', {
+    method: 'POST',
+    timeoutMs: options.timeoutMs,
+    body: options.body && typeof options.body === 'object' ? options.body : {},
+  });
+}
+
+async function activateCatalogRelay(config = {}, relay = {}, options = {}) {
+  const resolvedConfig = normalizeConfig(config);
+  return agentRequest(resolvedConfig, '/v1/vpn/catalog/activate', {
+    method: 'POST',
+    timeoutMs: options.timeoutMs,
+    body: {
+      slotId: String(relay?.slotId || '').trim(),
+      lookupKey: String(relay?.lookupKey || '').trim(),
+      relay: {
+        id: String(relay?.id ?? '').trim(),
+        fqdn: String(relay?.fqdn || '').trim(),
+        ip: String(relay?.ip || '').trim(),
+        selectedSslPort: normalizePort(relay?.selectedSslPort, 0),
+        sslPorts: normalizePortList(relay?.sslPorts),
+        udpPort: normalizePort(relay?.udpPort, 0),
+        hostUniqueKey: normalizeHostUniqueKey(relay?.hostUniqueKey),
+        accountName: String(relay?.accountName || '').trim(),
+        nicName: String(relay?.nicName || '').trim(),
+      },
+    },
   });
 }
 
@@ -167,7 +232,17 @@ function getConfigValidationMessage(config = {}) {
 
   if (resolvedConfig.connectionMode === CONNECTION_MODE.PROFILE) {
     if (!resolvedConfig.profileId) {
-      return 'profile ID를 입력한 뒤 저장하세요.';
+      const rawRelayConfigured = Boolean(
+        resolvedConfig.selectedRelayId
+        || resolvedConfig.selectedSslPort
+        || resolvedConfig.relaySnapshot.id
+        || resolvedConfig.relaySnapshot.ip
+        || resolvedConfig.relaySnapshot.fqdn,
+      );
+      if (rawRelayConfigured) {
+        return '현재 연결 모드가 profile입니다. raw 목록 클릭 연결을 쓰려면 연결 모드를 SoftEther VPNGate raw로 바꾼 뒤 저장하세요.';
+      }
+      return 'profile 모드에서는 profile ID를 입력한 뒤 저장하세요.';
     }
 
     return '';
@@ -241,7 +316,7 @@ async function agentRequest(config = {}, path = '/', options = {}) {
 
   const data = parseAgentResponseBody(rawText);
   if (!response.ok) {
-    throw new Error(buildAgentFailureMessage(response.status, data, rawText));
+    throw new Error(buildAgentFailureMessage(response.status, data, rawText, path));
   }
 
   return {
@@ -343,7 +418,7 @@ function parseAgentResponseBody(rawText = '') {
   }
 }
 
-function buildAgentFailureMessage(statusCode, data, rawText) {
+function buildAgentFailureMessage(statusCode, data, rawText, path = '') {
   const message = String(
     data?.message
       || data?.error
@@ -351,6 +426,24 @@ function buildAgentFailureMessage(statusCode, data, rawText) {
       || rawText
       || `HTTP ${statusCode}`,
   ).replace(/\s+/g, ' ').trim();
+  const normalizedPath = String(path || '').trim();
+  if (
+    statusCode === 404
+    && ['/v1/vpn/catalog/prepare', '/v1/vpn/catalog/activate'].includes(normalizedPath)
+    && /지원하지 않는 경로|NOT_FOUND/i.test(`${String(data?.error || '')} ${message}`)
+  ) {
+    return [
+      'local agent 응답 실패 (HTTP 404) - 실행 중인 local agent가 예전 버전입니다.',
+      '',
+      'Windows에서 한 번에 다시 실행:',
+      `powershell -NoProfile -Command "$p=(Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess); if($p){taskkill /PID $p /F}; Set-Location 'C:\\Users\\eorb9\\projects\\dc_defense_suite_repo'; node projects\\self_hosted_vpn_agent\\server.mjs"`,
+      '',
+      '포트 충돌을 피해서 8766으로 실행:',
+      `powershell -NoProfile -Command "Set-Location 'C:\\Users\\eorb9\\projects\\dc_defense_suite_repo'; $env:PORT='8766'; node projects\\self_hosted_vpn_agent\\server.mjs"`,
+      '',
+      '그다음 확장 설정의 local agent 주소를 http://127.0.0.1:8766 으로 바꾸세요.',
+    ].join('\n');
+  }
   return message ? `local agent 응답 실패 (HTTP ${statusCode}) - ${message.slice(0, 200)}` : `local agent 응답 실패 (HTTP ${statusCode})`;
 }
 
@@ -427,14 +520,20 @@ export {
   CONNECTION_MODE,
   DEFAULT_CONFIG,
   EMPTY_RELAY_SNAPSHOT,
+  activateCatalogRelay,
   connectVpn,
   disconnectVpn,
   getAgentBaseUrlValidationMessage,
   getAgentHealth,
+  getParallelProbeStatus,
   getConfigValidationMessage,
   getEffectiveProfileId,
+  primeRawRelayCatalogNics,
+  prepareRawRelayCatalog,
   getVpnEgress,
   getVpnStatus,
   normalizeConfig,
   normalizeConnectionMode,
+  startParallelProbe,
+  stopParallelProbe,
 };
