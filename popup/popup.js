@@ -4263,13 +4263,6 @@ function applyAutomationLocks(statuses) {
   const uidWarningAutoBanStatus = statuses.uidWarningAutoBan;
   const trustedPostLocked = Boolean(trustedStatus?.isRunning && (trustedStatus?.ownedPostScheduler || trustedStatus?.ownedIpScheduler));
   const trustedCommentLocked = Boolean(trustedStatus?.isRunning && trustedStatus?.ownedCommentScheduler);
-  const trustedStartLocked = Boolean(
-    monitorStatus?.isRunning
-    || commentMonitorStatus?.isRunning
-    || (postStatus?.isRunning && !trustedStatus?.ownedPostScheduler)
-    || (ipStatus?.isRunning && !trustedStatus?.ownedIpScheduler)
-    || (commentStatus?.isRunning && !trustedStatus?.ownedCommentScheduler)
-  );
   const postIpLocked = Boolean(monitorStatus?.isRunning || trustedPostLocked);
   const monitorUidWarningAutoBanLocked = Boolean(
     monitorStatus?.isRunning && ['ATTACKING', 'RECOVERING'].includes(String(monitorStatus?.phase || '')),
@@ -4284,8 +4277,8 @@ function applyAutomationLocks(statuses) {
   const uidWarningAutoBanDom = FEATURE_DOM.uidWarningAutoBan;
   const ipDom = FEATURE_DOM.ip;
 
-  setDisabled(trustedCommandDefenseDom.toggleBtn, trustedStartLocked && !trustedStatus?.isRunning);
-  setDisabled(commentMonitorDom.toggleBtn, trustedCommentLocked && !commentMonitorStatus?.isRunning);
+  setDisabled(trustedCommandDefenseDom.toggleBtn, false);
+  setDisabled(commentMonitorDom.toggleBtn, false);
   setDisabled(commentMonitorDom.resetBtn, Boolean(commentMonitorStatus?.isRunning));
   setDisabled(commentDom.toggleBtn, commentLocked && !commentStatus?.isRunning);
   setDisabled(commentDom.excludePureHangulInput, commentLocked);
@@ -4294,7 +4287,7 @@ function applyAutomationLocks(statuses) {
   setDisabled(commentDom.vpnGatePrefixSaveBtn, commentLocked);
   setDisabled(commentDom.saveConfigBtn, commentLocked);
   setDisabled(commentDom.resetBtn, commentLocked);
-  setDisabled(monitorDom.toggleBtn, trustedPostLocked && !monitorStatus?.isRunning);
+  setDisabled(monitorDom.toggleBtn, false);
   setDisabled(postDom.toggleBtn, postIpLocked && !postStatus?.isRunning);
   setDisabled(postDom.cjkModeToggleInput, postIpLocked);
   setDisabled(postDom.semiconductorRefluxModeToggleInput, postIpLocked);
