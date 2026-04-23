@@ -75,7 +75,7 @@ function extractActionableManagementRows(html, options = {}) {
   const actionableRows = [];
 
   for (const row of rows) {
-    if (!isPostBlockRow(row)) {
+    if (!isRebannableBlockRow(row)) {
       continue;
     }
 
@@ -151,8 +151,9 @@ function extractPageNumberFromHref(rawHref) {
   }
 }
 
-function isPostBlockRow(row) {
-  return /<em>\s*게시글\s*<\/em>/i.test(String(row?.rowHtml || ''));
+function isRebannableBlockRow(row) {
+  const rowHtml = String(row?.rowHtml || '');
+  return /<em>\s*(?:게시글|댓글)\s*<\/em>/i.test(rowHtml);
 }
 
 function isIpLikeWriterToken(value) {
@@ -233,7 +234,7 @@ export {
   hasDobaeReason,
   isIpLikeWriterToken,
   isLikelyManagementBlockHtml,
-  isPostBlockRow,
+  isRebannableBlockRow,
   MATCH_KIND,
   parseDetectedMaxPage,
   toAvoidNo,
