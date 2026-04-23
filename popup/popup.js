@@ -14,6 +14,7 @@ const DIRTY_FEATURES = {
   refluxOverlayCollector: false,
   commentRefluxCollector: false,
   commentMonitor: false,
+  trustedCommandDefense: false,
   comment: false,
   post: false,
   semiPost: false,
@@ -44,6 +45,8 @@ let latestRefluxOverlayCollectorStatus = null;
 let latestRefluxOverlayCollectorOverlays = [];
 let latestRefluxOverlayCollectorOverlaysLoaded = false;
 let latestCommentRefluxCollectorStatus = null;
+let latestTrustedCommandDefenseStatus = null;
+let draftTrustedCommandDefenseTrustedUsers = [];
 const SELF_HOSTED_VPN_AGENT_WINDOWS_REPO_PATH = 'C:\\Users\\eorb9\\projects\\dc_defense_suite_repo';
 
 const SESSION_FALLBACK_DOM = {
@@ -377,6 +380,35 @@ const FEATURE_DOM = {
     saveConfigBtn: document.getElementById('commentMonitorSaveConfigBtn'),
     resetBtn: document.getElementById('commentMonitorResetBtn'),
   },
+  trustedCommandDefense: {
+    toggleBtn: document.getElementById('trustedCommandDefenseToggleBtn'),
+    toggleLabel: document.getElementById('trustedCommandDefenseToggleLabel'),
+    statusText: document.getElementById('trustedCommandDefenseStatusText'),
+    phaseText: document.getElementById('trustedCommandDefensePhaseText'),
+    lastPollAtText: document.getElementById('trustedCommandDefenseLastPollAt'),
+    seededAtText: document.getElementById('trustedCommandDefenseSeededAt'),
+    lastSeenCommentNoText: document.getElementById('trustedCommandDefenseLastSeenCommentNo'),
+    lastCommandTypeText: document.getElementById('trustedCommandDefenseLastCommandType'),
+    lastCommandCommentNoText: document.getElementById('trustedCommandDefenseLastCommandCommentNo'),
+    lastCommandUserIdText: document.getElementById('trustedCommandDefenseLastCommandUserId'),
+    postDefenseUntilText: document.getElementById('trustedCommandDefensePostDefenseUntil'),
+    commentDefenseUntilText: document.getElementById('trustedCommandDefenseCommentDefenseUntil'),
+    trustedUserCountText: document.getElementById('trustedCommandDefenseTrustedUserCount'),
+    commandPostText: document.getElementById('trustedCommandDefenseCommandPostText'),
+    metaText: document.getElementById('trustedCommandDefenseMetaText'),
+    logList: document.getElementById('trustedCommandDefenseLogList'),
+    commandPostUrlInput: document.getElementById('trustedCommandDefenseCommandPostUrl'),
+    trustedUsersTextInput: document.getElementById('trustedCommandDefenseTrustedUsersText'),
+    trustedUserIdInput: document.getElementById('trustedCommandDefenseTrustedUserIdInput'),
+    trustedUserLabelInput: document.getElementById('trustedCommandDefenseTrustedUserLabelInput'),
+    addTrustedUserBtn: document.getElementById('trustedCommandDefenseAddTrustedUserBtn'),
+    trustedUserList: document.getElementById('trustedCommandDefenseTrustedUserList'),
+    commandPrefixInput: document.getElementById('trustedCommandDefenseCommandPrefix'),
+    pollIntervalSecondsInput: document.getElementById('trustedCommandDefensePollIntervalSeconds'),
+    holdMinutesInput: document.getElementById('trustedCommandDefenseHoldMinutes'),
+    saveConfigBtn: document.getElementById('trustedCommandDefenseSaveConfigBtn'),
+    resetBtn: document.getElementById('trustedCommandDefenseResetBtn'),
+  },
   comment: {
     toggleBtn: document.getElementById('commentToggleBtn'),
     toggleLabel: document.getElementById('commentToggleLabel'),
@@ -583,6 +615,7 @@ function bindFeatureEvents() {
   bindConfigDirtyTracking('refluxOverlayCollector');
   bindConfigDirtyTracking('commentRefluxCollector');
   bindConfigDirtyTracking('commentMonitor');
+  bindConfigDirtyTracking('trustedCommandDefense');
   bindConfigDirtyTracking('comment');
   bindConfigDirtyTracking('post');
   bindConfigDirtyTracking('semiPost');
@@ -598,6 +631,7 @@ function bindFeatureEvents() {
   bindRefluxOverlayCollectorEvents();
   bindCommentRefluxCollectorEvents();
   bindCommentMonitorEvents();
+  bindTrustedCommandDefenseEvents();
   bindCommentEvents();
   bindPostEvents();
   bindSemiPostEvents();
@@ -2162,6 +2196,223 @@ function bindCommentMonitorEvents() {
   });
 }
 
+function normalizeTrustedCommandDefenseTrustedUsers(users = []) {
+  const deduped = [];
+  const seen = new Set();
+
+  for (const user of Array.isArray(users) ? users : []) {
+    const userId = String(user?.userId || '').trim();
+    const label = String(user?.label || '').trim();
+    if (!userId || seen.has(userId)) {
+      continue;
+    }
+
+    seen.add(userId);
+    deduped.push({
+      userId,
+      label: (label || userId).slice(0, 20),
+    });
+  }
+
+  return deduped;
+}
+
+function parseTrustedCommandDefenseTrustedUsersText(value) {
+  const rawText = String(value || '').trim();
+  if (!rawText) {
+    return [];
+  }
+
+  const rows = rawText
+    .split(/[\n,]+/g)
+    .map((row) => String(row || '').trim())
+    .filter(Boolean);
+
+  return normalizeTrustedCommandDefenseTrustedUsers(rows.map((row) => {
+    const [userIdPart, ...labelParts] = row.split(/\s+/);
+    return {
+      userId: String(userIdPart || '').trim(),
+      label: String(labelParts.join(' ') || '').trim(),
+    };
+  }));
+}
+
+function serializeTrustedCommandDefenseTrustedUsers(users = []) {
+  return normalizeTrustedCommandDefenseTrustedUsers(users)
+    .map((user) => {
+      if (!user.label || user.label === user.userId) {
+        return user.userId;
+      }
+      return `${user.userId} ${user.label}`;
+    })
+    .join('\n');
+}
+
+function syncTrustedCommandDefenseTrustedUsersText() {
+  const dom = FEATURE_DOM.trustedCommandDefense;
+  dom.trustedUsersTextInput.value = serializeTrustedCommandDefenseTrustedUsers(draftTrustedCommandDefenseTrustedUsers);
+}
+
+function markTrustedCommandDefenseDirty() {
+  DIRTY_FEATURES.trustedCommandDefense = true;
+}
+
+function renderTrustedCommandDefenseTrustedUsers(users = []) {
+  const dom = FEATURE_DOM.trustedCommandDefense;
+  const normalizedUsers = normalizeTrustedCommandDefenseTrustedUsers(users);
+  const isLocked = Boolean(latestTrustedCommandDefenseStatus?.isRunning);
+
+  if (normalizedUsers.length <= 0) {
+    dom.trustedUserList.innerHTML = '<div class="log-empty">등록된 신뢰 사용자가 없습니다.</div>';
+    return;
+  }
+
+  dom.trustedUserList.innerHTML = '';
+  for (const user of normalizedUsers) {
+    const item = document.createElement('div');
+    item.className = 'trusted-command-user-item';
+
+    const meta = document.createElement('div');
+    meta.className = 'trusted-command-user-meta';
+
+    const label = document.createElement('div');
+    label.className = 'trusted-command-user-label';
+    label.textContent = user.label;
+
+    const userId = document.createElement('div');
+    userId.className = 'trusted-command-user-id';
+    userId.textContent = user.userId;
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'manual-rule-remove-btn';
+    removeBtn.textContent = '삭제';
+    setDisabled(removeBtn, isLocked);
+    removeBtn.addEventListener('click', () => {
+      draftTrustedCommandDefenseTrustedUsers = normalizeTrustedCommandDefenseTrustedUsers(
+        draftTrustedCommandDefenseTrustedUsers.filter((entry) => entry.userId !== user.userId),
+      );
+      syncTrustedCommandDefenseTrustedUsersText();
+      renderTrustedCommandDefenseTrustedUsers(draftTrustedCommandDefenseTrustedUsers);
+      markTrustedCommandDefenseDirty();
+    });
+
+    meta.appendChild(label);
+    meta.appendChild(userId);
+    item.appendChild(meta);
+    item.appendChild(removeBtn);
+    dom.trustedUserList.appendChild(item);
+  }
+}
+
+function bindTrustedCommandDefenseEvents() {
+  const dom = FEATURE_DOM.trustedCommandDefense;
+
+  dom.addTrustedUserBtn.addEventListener('click', () => {
+    const userId = dom.trustedUserIdInput.value.trim();
+    const label = dom.trustedUserLabelInput.value.trim();
+
+    if (!userId) {
+      alert('user_id를 입력하세요.');
+      dom.trustedUserIdInput.focus();
+      return;
+    }
+
+    if (!label) {
+      alert('label을 입력하세요.');
+      dom.trustedUserLabelInput.focus();
+      return;
+    }
+
+    if (label.length > 20) {
+      alert('label은 20자 이하로 입력하세요.');
+      dom.trustedUserLabelInput.focus();
+      return;
+    }
+
+    if (draftTrustedCommandDefenseTrustedUsers.some((entry) => entry.userId === userId)) {
+      alert('이미 등록된 user_id입니다.');
+      dom.trustedUserIdInput.focus();
+      return;
+    }
+
+    draftTrustedCommandDefenseTrustedUsers = normalizeTrustedCommandDefenseTrustedUsers([
+      ...draftTrustedCommandDefenseTrustedUsers,
+      { userId, label },
+    ]);
+    syncTrustedCommandDefenseTrustedUsersText();
+    renderTrustedCommandDefenseTrustedUsers(draftTrustedCommandDefenseTrustedUsers);
+    dom.trustedUserIdInput.value = '';
+    dom.trustedUserLabelInput.value = '';
+    markTrustedCommandDefenseDirty();
+  });
+
+  dom.toggleBtn.addEventListener('change', async () => {
+    if (dom.toggleBtn.checked && DIRTY_FEATURES.trustedCommandDefense) {
+      alert('명령 방어 설정을 먼저 저장하세요.');
+      await refreshAllStatuses();
+      return;
+    }
+
+    const action = dom.toggleBtn.checked ? 'start' : 'stop';
+    const response = await sendFeatureMessage('trustedCommandDefense', { action });
+    if (!response?.success) {
+      alert(response?.message || '명령 방어 토글 처리에 실패했습니다.');
+      await refreshAllStatuses();
+      return;
+    }
+
+    if (action === 'stop') {
+      DIRTY_FEATURES.trustedCommandDefense = false;
+    }
+
+    if (response?.statuses) {
+      applyStatuses(response.statuses);
+    }
+  });
+
+  dom.saveConfigBtn.addEventListener('click', async () => {
+    const config = {
+      commandPostUrl: dom.commandPostUrlInput.value.trim(),
+      trustedUsersText: serializeTrustedCommandDefenseTrustedUsers(draftTrustedCommandDefenseTrustedUsers),
+      commandPrefix: dom.commandPrefixInput.value.trim(),
+      pollIntervalMs: parseOptionalInt(dom.pollIntervalSecondsInput.value, 20) * 1000,
+      holdMs: parseOptionalInt(dom.holdMinutesInput.value, 10) * 60 * 1000,
+    };
+
+    const response = await sendFeatureMessage('trustedCommandDefense', { action: 'updateConfig', config });
+    if (!response?.success) {
+      alert(response?.message || '명령 방어 설정 저장에 실패했습니다.');
+      if (response?.statuses) {
+        applyStatuses(response.statuses);
+      }
+      return;
+    }
+
+    DIRTY_FEATURES.trustedCommandDefense = false;
+    flashSaved(dom.saveConfigBtn);
+    if (response?.statuses) {
+      applyStatuses(response.statuses);
+    }
+  });
+
+  dom.resetBtn.addEventListener('click', async () => {
+    const response = await sendFeatureMessage('trustedCommandDefense', { action: 'resetStats' });
+    if (!response?.success) {
+      alert(response?.message || '명령 방어 통계 초기화에 실패했습니다.');
+      if (response?.statuses) {
+        applyStatuses(response.statuses);
+      }
+      return;
+    }
+
+    DIRTY_FEATURES.trustedCommandDefense = false;
+    if (response?.statuses) {
+      applyStatuses(response.statuses);
+    }
+  });
+}
+
 function bindCommentEvents() {
   const dom = FEATURE_DOM.comment;
 
@@ -2236,7 +2487,7 @@ function bindCommentEvents() {
       refluxSearchGalleryId,
       postConcurrency: parseOptionalInt(dom.postConcurrencyInput.value, 50),
       banOnDelete: dom.banOnDeleteInput.checked,
-      avoidHour: String(Math.max(1, parseOptionalInt(dom.avoidHourInput.value, 1))),
+      avoidHour: String(Math.max(1, parseOptionalInt(dom.avoidHourInput.value, 6))),
     };
 
     const response = await sendFeatureMessage('comment', { action: 'updateConfig', config });
@@ -2920,6 +3171,7 @@ async function refreshAllStatuses() {
 
 function applyStatuses(statuses) {
   latestMonitorStatus = statuses.monitor || latestMonitorStatus;
+  latestTrustedCommandDefenseStatus = statuses.trustedCommandDefense || latestTrustedCommandDefenseStatus;
   syncSharedConfigInputs(statuses);
   updateConceptMonitorUI(statuses.conceptMonitor);
   updateConceptPatrolUI(statuses.conceptPatrol);
@@ -2931,13 +3183,14 @@ function applyStatuses(statuses) {
   updateRefluxOverlayCollectorUI(statuses.refluxOverlayCollector);
   updateCommentRefluxCollectorUI(statuses.commentRefluxCollector);
   updateCommentMonitorUI(statuses.commentMonitor);
+  updateTrustedCommandDefenseUI(statuses.trustedCommandDefense);
   updateMonitorUI(statuses.monitor);
   updateCommentUI(statuses.comment);
   updatePostUI(statuses.post);
   updateSemiPostUI(statuses.semiPost);
   updateUidWarningAutoBanUI(statuses.uidWarningAutoBan);
   updateIpUI(statuses.ip);
-  applyAutomationLocks(statuses.monitor, statuses.commentMonitor, statuses.ip, statuses.uidWarningAutoBan);
+  applyAutomationLocks(statuses);
 }
 
 function updateSessionFallbackUI(status) {
@@ -3690,6 +3943,51 @@ function updateCommentMonitorUI(status) {
   updateLogList(dom.logList, status.logs);
 }
 
+function updateTrustedCommandDefenseUI(status) {
+  if (!status) {
+    return;
+  }
+
+  latestTrustedCommandDefenseStatus = status;
+  const dom = FEATURE_DOM.trustedCommandDefense;
+  updateToggle(dom, status.isRunning);
+  updateStatusText(
+    dom.statusText,
+    getTrustedCommandDefenseStatusLabel(status),
+    getTrustedCommandDefenseStatusClassName(status),
+  );
+  dom.phaseText.textContent = status.phase || 'IDLE';
+  dom.lastPollAtText.textContent = formatTimestamp(status.lastPollAt);
+  dom.seededAtText.textContent = formatTimestamp(status.seededAt);
+  dom.lastSeenCommentNoText.textContent = status.lastSeenCommentNo || '-';
+  dom.lastCommandTypeText.textContent = formatTrustedCommandTypeLabel(status.lastCommandType);
+  dom.lastCommandCommentNoText.textContent = status.lastCommandCommentNo || '-';
+  dom.lastCommandUserIdText.textContent = status.lastCommandUserId || '-';
+  dom.postDefenseUntilText.textContent = formatTrustedHoldUntil(status.postDefenseUntilTs);
+  dom.commentDefenseUntilText.textContent = formatTrustedHoldUntil(status.commentDefenseUntilTs);
+  dom.trustedUserCountText.textContent = `${status.trustedUserCount ?? 0}명`;
+  dom.commandPostText.textContent = buildTrustedCommandPostLabel(status);
+  dom.metaText.textContent = buildTrustedCommandDefenseMetaText(status);
+
+  if (!DIRTY_FEATURES.trustedCommandDefense) {
+    draftTrustedCommandDefenseTrustedUsers = normalizeTrustedCommandDefenseTrustedUsers(
+      Array.isArray(status.config?.trustedUsers) && status.config.trustedUsers.length > 0
+        ? status.config.trustedUsers
+        : parseTrustedCommandDefenseTrustedUsersText(status.config?.trustedUsersText ?? ''),
+    );
+    syncTrustedCommandDefenseTrustedUsersText();
+  }
+
+  syncFeatureConfigInputs('trustedCommandDefense', [
+    [dom.commandPostUrlInput, status.config?.commandPostUrl || status.config?.commandPostNo || ''],
+    [dom.commandPrefixInput, status.config?.commandPrefix ?? '@특갤봇'],
+    [dom.pollIntervalSecondsInput, Math.max(10, Math.round((Number(status.config?.pollIntervalMs) || 20000) / 1000))],
+    [dom.holdMinutesInput, Math.max(1, Math.round((Number(status.config?.holdMs) || 600000) / 60000))],
+  ]);
+  renderTrustedCommandDefenseTrustedUsers(draftTrustedCommandDefenseTrustedUsers);
+  updateLogList(dom.logList, status.logs);
+}
+
 function updateCommentUI(status) {
   if (!status) {
     return;
@@ -3713,7 +4011,7 @@ function updateCommentUI(status) {
     [dom.refluxSearchGalleryIdInput, status.config?.refluxSearchGalleryId ?? ''],
     [dom.postConcurrencyInput, status.config?.postConcurrency ?? 50],
     [dom.banOnDeleteInput, status.config?.banOnDelete ?? true],
-    [dom.avoidHourInput, status.config?.avoidHour ?? '1'],
+    [dom.avoidHourInput, status.config?.avoidHour ?? '6'],
   ]);
   if (!INLINE_SETTING_DIRTY.commentVpnGate) {
     syncConfigInput(dom.useVpnGatePrefixFilterInput, status.config?.useVpnGatePrefixFilter ?? false);
@@ -3954,28 +4252,50 @@ function updateMonitorUI(status) {
   updateLogList(dom.logList, status.logs);
 }
 
-function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uidWarningAutoBanStatus) {
-  const postIpLocked = Boolean(monitorStatus?.isRunning);
+function applyAutomationLocks(statuses) {
+  const monitorStatus = statuses.monitor;
+  const commentMonitorStatus = statuses.commentMonitor;
+  const trustedStatus = statuses.trustedCommandDefense;
+  const commentStatus = statuses.comment;
+  const postStatus = statuses.post;
+  const semiPostStatus = statuses.semiPost;
+  const ipStatus = statuses.ip;
+  const uidWarningAutoBanStatus = statuses.uidWarningAutoBan;
+  const trustedPostLocked = Boolean(trustedStatus?.isRunning && (trustedStatus?.ownedPostScheduler || trustedStatus?.ownedIpScheduler));
+  const trustedCommentLocked = Boolean(trustedStatus?.isRunning && trustedStatus?.ownedCommentScheduler);
+  const trustedStartLocked = Boolean(
+    monitorStatus?.isRunning
+    || commentMonitorStatus?.isRunning
+    || (postStatus?.isRunning && !trustedStatus?.ownedPostScheduler)
+    || (ipStatus?.isRunning && !trustedStatus?.ownedIpScheduler)
+    || (commentStatus?.isRunning && !trustedStatus?.ownedCommentScheduler)
+  );
+  const postIpLocked = Boolean(monitorStatus?.isRunning || trustedPostLocked);
   const monitorUidWarningAutoBanLocked = Boolean(
     monitorStatus?.isRunning && ['ATTACKING', 'RECOVERING'].includes(String(monitorStatus?.phase || '')),
   );
-  const commentLocked = Boolean(commentMonitorStatus?.isRunning);
+  const commentLocked = Boolean(commentMonitorStatus?.isRunning || trustedCommentLocked);
   const commentMonitorDom = FEATURE_DOM.commentMonitor;
+  const trustedCommandDefenseDom = FEATURE_DOM.trustedCommandDefense;
   const commentDom = FEATURE_DOM.comment;
   const postDom = FEATURE_DOM.post;
   const semiPostDom = FEATURE_DOM.semiPost;
+  const monitorDom = FEATURE_DOM.monitor;
   const uidWarningAutoBanDom = FEATURE_DOM.uidWarningAutoBan;
   const ipDom = FEATURE_DOM.ip;
 
-  setDisabled(commentMonitorDom.resetBtn, commentLocked);
-  setDisabled(commentDom.toggleBtn, commentLocked);
+  setDisabled(trustedCommandDefenseDom.toggleBtn, trustedStartLocked && !trustedStatus?.isRunning);
+  setDisabled(commentMonitorDom.toggleBtn, trustedCommentLocked && !commentMonitorStatus?.isRunning);
+  setDisabled(commentMonitorDom.resetBtn, Boolean(commentMonitorStatus?.isRunning));
+  setDisabled(commentDom.toggleBtn, commentLocked && !commentStatus?.isRunning);
   setDisabled(commentDom.excludePureHangulInput, commentLocked);
   setDisabled(commentDom.commentRefluxModeInput, commentLocked);
   setDisabled(commentDom.useVpnGatePrefixFilterInput, commentLocked);
   setDisabled(commentDom.vpnGatePrefixSaveBtn, commentLocked);
   setDisabled(commentDom.saveConfigBtn, commentLocked);
   setDisabled(commentDom.resetBtn, commentLocked);
-  setDisabled(postDom.toggleBtn, postIpLocked);
+  setDisabled(monitorDom.toggleBtn, trustedPostLocked && !monitorStatus?.isRunning);
+  setDisabled(postDom.toggleBtn, postIpLocked && !postStatus?.isRunning);
   setDisabled(postDom.cjkModeToggleInput, postIpLocked);
   setDisabled(postDom.semiconductorRefluxModeToggleInput, postIpLocked);
   setDisabled(postDom.page1NoCutoffModeToggleInput, postIpLocked);
@@ -3983,10 +4303,10 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uid
   setDisabled(postDom.vpnGatePrefixSaveBtn, postIpLocked);
   setDisabled(postDom.saveConfigBtn, postIpLocked);
   setDisabled(postDom.resetBtn, postIpLocked);
-  setDisabled(semiPostDom.toggleBtn, postIpLocked);
+  setDisabled(semiPostDom.toggleBtn, postIpLocked && !semiPostStatus?.isRunning);
   setDisabled(semiPostDom.saveConfigBtn, postIpLocked);
   setDisabled(semiPostDom.resetBtn, postIpLocked);
-  setDisabled(ipDom.toggleBtn, postIpLocked);
+  setDisabled(ipDom.toggleBtn, postIpLocked && !ipStatus?.isRunning);
   setDisabled(ipDom.includeExistingTargetsOnStartInput, postIpLocked);
   setDisabled(ipDom.saveConfigBtn, postIpLocked);
   setDisabled(ipDom.resetBtn, postIpLocked);
@@ -4006,6 +4326,15 @@ function applyAutomationLocks(monitorStatus, commentMonitorStatus, ipStatus, uid
   getFeatureConfigInputs('semiPost').forEach((input) => setDisabled(input, postIpLocked));
   getFeatureConfigInputs('ip').forEach((input) => setDisabled(input, postIpLocked));
   getFeatureConfigInputs('uidWarningAutoBan').forEach((input) => setDisabled(input, monitorUidWarningAutoBanLocked));
+  getFeatureConfigInputs('trustedCommandDefense').forEach((input) => setDisabled(input, Boolean(trustedStatus?.isRunning)));
+  setDisabled(trustedCommandDefenseDom.trustedUserIdInput, Boolean(trustedStatus?.isRunning));
+  setDisabled(trustedCommandDefenseDom.trustedUserLabelInput, Boolean(trustedStatus?.isRunning));
+  setDisabled(trustedCommandDefenseDom.addTrustedUserBtn, Boolean(trustedStatus?.isRunning));
+  setDisabled(trustedCommandDefenseDom.saveConfigBtn, Boolean(trustedStatus?.isRunning));
+  setDisabled(trustedCommandDefenseDom.resetBtn, Boolean(trustedStatus?.isRunning));
+  trustedCommandDefenseDom.trustedUserList
+    ?.querySelectorAll('.manual-rule-remove-btn')
+    .forEach((button) => setDisabled(button, Boolean(trustedStatus?.isRunning)));
 }
 
 function buildDefaultSelfHostedVpnStatus() {
@@ -5921,12 +6250,14 @@ function syncSharedConfigInputs(statuses) {
     || statuses.post?.config?.galleryId
     || statuses.semiPost?.config?.galleryId
     || statuses.ip?.config?.galleryId
+    || statuses.trustedCommandDefense?.config?.galleryId
     || statuses.uidWarningAutoBan?.config?.galleryId
     || statuses.monitor?.config?.galleryId
     || 'thesingularity';
   const headtextId = statuses.post?.config?.headtextId
     || statuses.semiPost?.config?.headtextId
     || statuses.ip?.config?.headtextId
+    || statuses.trustedCommandDefense?.config?.headtextId
     || 130;
 
   syncConfigInput(sharedGalleryIdInput, galleryId);
@@ -6084,6 +6415,16 @@ function getFeatureConfigInputs(feature) {
       dom.releaseNewCommentThresholdInput,
       dom.releaseVerifiedDeleteThresholdInput,
       dom.releaseConsecutiveCountInput,
+    ];
+  }
+
+  if (feature === 'trustedCommandDefense') {
+    return [
+      dom.commandPostUrlInput,
+      dom.trustedUsersTextInput,
+      dom.commandPrefixInput,
+      dom.pollIntervalSecondsInput,
+      dom.holdMinutesInput,
     ];
   }
 
@@ -7058,6 +7399,93 @@ function getCommentMonitorStatusClassName(status) {
   }
 
   return 'status-on';
+}
+
+function getTrustedCommandDefenseStatusLabel(status) {
+  if (!status?.isRunning) {
+    return '🔴 정지';
+  }
+
+  if (status.phase === 'SEEDING') {
+    return '🟡 seed 중';
+  }
+
+  if (status.phase === 'EXECUTING_POST_DEFENSE') {
+    return '🟠 게시물방어 실행 중';
+  }
+
+  if (status.phase === 'EXECUTING_COMMENT_DEFENSE') {
+    return '🟠 댓글방어 실행 중';
+  }
+
+  return '🟢 감시 중';
+}
+
+function getTrustedCommandDefenseStatusClassName(status) {
+  if (!status?.isRunning) {
+    return 'status-off';
+  }
+
+  if (['SEEDING', 'EXECUTING_POST_DEFENSE', 'EXECUTING_COMMENT_DEFENSE'].includes(String(status?.phase || ''))) {
+    return 'status-warn';
+  }
+
+  return 'status-on';
+}
+
+function formatTrustedCommandTypeLabel(value) {
+  if (value === 'post_defense') {
+    return '게시물방어';
+  }
+
+  if (value === 'comment_defense') {
+    return '댓글방어';
+  }
+
+  return '-';
+}
+
+function formatTrustedHoldUntil(untilTs) {
+  const numericUntilTs = Number(untilTs) || 0;
+  if (numericUntilTs <= Date.now()) {
+    return '-';
+  }
+
+  return formatTimestamp(new Date(numericUntilTs).toISOString());
+}
+
+function buildTrustedCommandPostLabel(status = {}) {
+  const galleryId = String(status?.config?.commandGalleryId || status?.config?.galleryId || '').trim();
+  const postNo = String(status?.config?.commandPostNo || '').trim();
+  if (!galleryId || !postNo) {
+    return '-';
+  }
+
+  return `${galleryId} #${postNo}`;
+}
+
+function buildTrustedCommandDefenseMetaText(status = {}) {
+  const parts = [];
+  const postActive = Number(status?.postDefenseUntilTs) > Date.now();
+  const commentActive = Number(status?.commentDefenseUntilTs) > Date.now();
+
+  if (postActive) {
+    parts.push(`게시물방어 유지: ${formatTrustedHoldUntil(status.postDefenseUntilTs)}`);
+  }
+
+  if (commentActive) {
+    parts.push(`댓글방어 유지: ${formatTrustedHoldUntil(status.commentDefenseUntilTs)}`);
+  }
+
+  if (status?.lastCommandAt) {
+    parts.push(`최근 명령: ${formatTimestamp(status.lastCommandAt)} / ${formatTrustedCommandTypeLabel(status.lastCommandType)}`);
+  }
+
+  if (parts.length <= 0) {
+    return '관리용 글 댓글을 20초마다 확인합니다. `@특갤봇 게시물방어` 또는 `@특갤봇 댓글방어`를 쓰면 되고, 신뢰 user_id가 쓴 댓글만 처리합니다.';
+  }
+
+  return parts.join(' / ');
 }
 
 function formatPercent(value) {

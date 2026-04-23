@@ -81,9 +81,9 @@ class Scheduler {
             postConcurrency: 50,   // 한 페이지에서 동시에 처리할 게시물 수
             commentPageConcurrency: 4, // 한 게시물의 댓글 페이지 동시 조회 수
             banOnDelete: true,     // 삭제 시 IP 차단 동시 수행
-            avoidHour: '1',        // IP 차단 시간 (시)
+            avoidHour: '6',        // IP 차단 시간 (시)
             avoidReason: '0',      // 차단 사유 코드 (기타)
-            avoidReasonText: '도배기로 인한 해당 유동IP차단',
+            avoidReasonText: '도배기IP차단(무고한 경우 문의)',
             avoidTypeChk: true,    // IP 차단 여부
             refluxSearchGalleryId: '',
             excludePureHangulManualOnly: false,
@@ -266,6 +266,12 @@ class Scheduler {
     // ============================================================
 
     async processPost(post, sharedEsno = null) {
+        return this.processPostInternal(post, sharedEsno, { requireRunning: true });
+    }
+
+    async processPostInternal(post, sharedEsno = null, options = {}) {
+        const requireRunning = options.requireRunning !== false;
+
         try {
             const postNo = typeof post === 'number' ? post : post.no;
             const commentCount = typeof post === 'number' ? null : post.commentCount;
@@ -286,7 +292,7 @@ class Scheduler {
                 return false;
             }
 
-            if (!this.isRunning) {
+            if (requireRunning && !this.isRunning) {
                 return false;
             }
 
@@ -341,7 +347,7 @@ class Scheduler {
                     return true;
                 }
 
-                if (!this.isRunning) {
+                if (requireRunning && !this.isRunning) {
                     return false;
                 }
 
@@ -356,7 +362,7 @@ class Scheduler {
                             phaseLabel: '즉시',
                         },
                     );
-                    if (!immediateBatchResult.shouldContinue) {
+                    if (requireRunning && !immediateBatchResult.shouldContinue) {
                         this.logCommentRefluxFilterSummary(postNo, refluxPlan.stats);
                         return immediateBatchResult.shouldDelay;
                     }
@@ -378,7 +384,7 @@ class Scheduler {
                     return true;
                 }
 
-                if (!this.isRunning) {
+                if (requireRunning && !this.isRunning) {
                     return false;
                 }
 
@@ -419,7 +425,7 @@ class Scheduler {
                 return true;
             }
 
-            if (!this.isRunning) {
+            if (requireRunning && !this.isRunning) {
                 return false;
             }
 
@@ -441,6 +447,63 @@ class Scheduler {
             this.log(`❌ #${postNo}: 처리 실패 - ${error.message}`);
             await this.saveState();
             return true;
+        }
+    }
+
+    async cleanupPostsOnce(posts, options = {}) {
+        if (this.isRunning) {
+            throw new Error('댓글 방어 실행 중에는 1회성 댓글 청소를 동시에 실행할 수 없습니다.');
+        }
+
+        const normalizedPosts = Array.isArray(posts)
+            ? posts.filter((post) => post && Number(post.no || post) > 0)
+            : [];
+        const logLabel = String(options.logLabel || '1회성 댓글 청소').trim() || '1회성 댓글 청소';
+        const sharedEsno = String(options.sharedEsno || '').trim() || null;
+        const nextSource = normalizeRunSource(options.source, 'manual');
+        const nextAttackMode = normalizeCommentAttackMode(options.attackMode);
+        const previousSource = this.currentSource;
+        const previousAttackMode = this.currentAttackMode;
+
+        await this.ensureDatasetReadyForAttackMode(nextAttackMode);
+        await this.prepareCommentRefluxSearchRuntime(previousAttackMode, nextAttackMode, {
+            forceReset: true,
+        });
+
+        this.currentSource = nextSource;
+        this.currentAttackMode = nextAttackMode;
+
+        this.log(`🧹 ${logLabel}: ${normalizedPosts.length}개 게시물 1회 정리 시작`);
+
+        let processedPostCount = 0;
+
+        try {
+            for (let index = 0; index < normalizedPosts.length; index += 1) {
+                const post = normalizedPosts[index];
+                const shouldDelay = await this.processPostInternal(post, sharedEsno, {
+                    requireRunning: false,
+                });
+                processedPostCount += 1;
+
+                if (shouldDelay && this.config.requestDelay > 0 && index < normalizedPosts.length - 1) {
+                    await delay(this.config.requestDelay);
+                }
+            }
+
+            this.log(`✅ ${logLabel}: ${processedPostCount}개 게시물 1회 정리 완료`);
+            await this.saveState();
+            return {
+                success: true,
+                processedPostCount,
+            };
+        } finally {
+            this.currentSource = previousSource;
+            this.currentAttackMode = previousAttackMode;
+
+            if (!this.isRunning) {
+                this.resetCommentRefluxSearchRuntime();
+                await this.releaseTrackedVpnGatePrefixConsumers();
+            }
         }
     }
 
@@ -967,6 +1030,7 @@ class Scheduler {
                     : [];
                 this.logs = schedulerState.logs || [];
                 this.config = { ...this.config, ...schedulerState.config };
+                const migratedLegacyConfig = normalizeLegacyCommentConfig(this.config);
                 this.config.avoidReasonText = normalizeAvoidReasonText(this.config.avoidReasonText);
                 this.config.refluxSearchGalleryId = String(this.config.refluxSearchGalleryId || '').trim().toLowerCase();
                 this.config.useVpnGatePrefixFilter = Boolean(this.config.useVpnGatePrefixFilter);
@@ -975,6 +1039,9 @@ class Scheduler {
                     schedulerState.isRunning ? 'manual' : '',
                 );
                 this.currentAttackMode = normalizeStoredCommentAttackMode(schedulerState);
+                if (migratedLegacyConfig) {
+                    await this.saveState();
+                }
             }
             if (!this.isRunning) {
                 await this.releaseAllKnownVpnGatePrefixConsumers();
@@ -1125,10 +1192,26 @@ function resolveCommentRefluxSearchGalleryId(config = {}) {
     return String(config?.galleryId || '').trim().toLowerCase();
 }
 
+function normalizeLegacyCommentConfig(config = {}) {
+    let changed = false;
+    const legacyAvoidHour = String(config.avoidHour || '').trim();
+    if (!legacyAvoidHour || legacyAvoidHour === '1') {
+        config.avoidHour = '6';
+        changed = true;
+    }
+
+    return changed;
+}
+
 function normalizeAvoidReasonText(value) {
     const normalized = String(value || '').trim();
-    if (!normalized || normalized === '도배' || normalized === '도배기') {
-        return '도배기로 인한 해당 유동IP차단';
+    if (
+        !normalized
+        || normalized === '도배'
+        || normalized === '도배기'
+        || normalized === '도배기로 인한 해당 유동IP차단'
+    ) {
+        return '도배기IP차단(무고한 경우 문의)';
     }
     return normalized;
 }

@@ -9,7 +9,7 @@ const DEFAULT_CONFIG = {
   cycleIntervalMs: 5 * 60 * 60 * 1000,
   avoidHour: '6',
   avoidReason: '0',
-  avoidReasonText: '도배기로 인한 해당 유동IP차단',
+  avoidReasonText: '도배기IP차단(무고한 경우 문의)',
 };
 
 async function delay(ms) {

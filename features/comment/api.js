@@ -208,18 +208,23 @@ async function fetchComments(config = {}, postNo, esno, commentPage = 1, options
     no: String(postNo),
     cmt_id: resolved.galleryId,
     cmt_no: String(postNo),
+    focus_cno: '',
+    focus_pno: '',
     e_s_n_o: esno,
     comment_page: String(commentPage),
     sort: 'D',
+    prevCnt: '0',
+    board_type: '',
     _GALLTYPE_: resolved.galleryType,
+    secret_article_key: '',
   });
 
   const response = await dcFetchWithRetry(url, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
       'X-Requested-With': 'XMLHttpRequest',
-      'Referer': `${resolved.baseUrl}/mgallery/board/view/?id=${resolved.galleryId}&no=${postNo}`,
+      'Referer': `${resolved.baseUrl}/mgallery/board/view/?id=${resolved.galleryId}&no=${postNo}&page=1`,
     },
     body: body.toString(),
     signal: options.signal,
@@ -272,6 +277,40 @@ async function fetchAllComments(config = {}, postNo, esno, pageConcurrency = 4) 
     return {
       comments: allComments,
       totalCnt: firstPage.totalCnt,
+    };
+  });
+}
+
+/**
+ * 댓글 최근 N페이지 가져오기
+ *
+ * 명령 댓글 polling처럼 "새 댓글만 빠르게 보는" 용도다.
+ * 예를 들어 댓글이 800개여도 1~2페이지만 읽고 끝낸다.
+ *
+ * @param {Object} config
+ * @param {number} postNo
+ * @param {string} esno
+ * @param {number} maxPages
+ * @returns {Promise<{comments: Array, totalCnt: number, fetchedPages: number}>}
+ */
+async function fetchRecentComments(config = {}, postNo, esno, maxPages = 2) {
+  return withDcRequestLease({ feature: 'comment', kind: 'fetchRecentComments' }, async () => {
+    const normalizedMaxPages = Math.max(1, Number(maxPages) || 1);
+    const firstPage = await fetchComments(config, postNo, esno, 1);
+    const allComments = [...firstPage.comments];
+    const firstPageSize = firstPage.comments.length || 20;
+    const totalPages = Math.max(1, Math.ceil(firstPage.totalCnt / firstPageSize));
+    const pagesToFetch = Math.min(normalizedMaxPages, totalPages);
+
+    for (let page = 2; page <= pagesToFetch; page += 1) {
+      const pageResult = await fetchComments(config, postNo, esno, page);
+      allComments.push(...pageResult.comments);
+    }
+
+    return {
+      comments: allComments,
+      totalCnt: firstPage.totalCnt,
+      fetchedPages: pagesToFetch,
     };
   });
 }
@@ -537,7 +576,7 @@ async function deleteAndBanCommentsChunk(resolvedConfig, postNo, ciToken, commen
   body.set('ci_t', ciToken);
   body.set('id', resolvedConfig.galleryId);
   body.set('parent', String(postNo));
-  body.set('avoid_hour', String(resolvedConfig.avoidHour || '1'));
+  body.set('avoid_hour', String(resolvedConfig.avoidHour || '6'));
   body.set('avoid_reason', String(resolvedConfig.avoidReason || '0'));
   body.set('avoid_reason_txt', String(resolvedConfig.avoidReasonText || ''));
   body.set('del_chk', resolvedConfig.delChk === false ? '0' : '1');
@@ -614,6 +653,7 @@ export {
   extractEsno,
   fetchComments,
   fetchAllComments,
+  fetchRecentComments,
   getCiToken,
   deleteComments,
   deleteAndBanComments,

@@ -49,6 +49,11 @@ import {
   normalizeConfig as normalizeCommentRefluxCollectorConfig,
 } from '../features/comment-reflux-collector/scheduler.js';
 import { isValidGalleryId as isValidCommentRefluxCollectorGalleryId } from '../features/comment-reflux-collector/api.js';
+import {
+  Scheduler as TrustedCommentCommandDefenseScheduler,
+  normalizeConfig as normalizeTrustedCommentCommandDefenseConfig,
+} from '../features/trusted-comment-command-defense/scheduler.js';
+import { parseCommandPostTarget } from '../features/trusted-comment-command-defense/parser.js';
 import { Scheduler as PostScheduler } from '../features/post/scheduler.js';
 import { ATTACK_MODE as POST_ATTACK_MODE, normalizeAttackMode as normalizePostAttackMode } from '../features/post/attack-mode.js';
 import {
@@ -99,6 +104,20 @@ const commentRefluxCollectorScheduler = new CommentRefluxCollectorScheduler();
 const postScheduler = new PostScheduler();
 const semiPostScheduler = new SemiPostScheduler();
 const ipScheduler = new IpScheduler();
+const trustedCommandDefenseScheduler = new TrustedCommentCommandDefenseScheduler({
+  commentScheduler,
+  postScheduler,
+  ipScheduler,
+  shouldAllowPostDefenseStart: () => (
+    !schedulers.monitor.isRunning
+    && (!schedulers.post.isRunning || schedulers.trustedCommandDefense.isOwningFeature('post'))
+    && (!schedulers.ip.isRunning || schedulers.trustedCommandDefense.isOwningFeature('ip'))
+  ),
+  shouldAllowCommentDefenseStart: () => (
+    !schedulers.commentMonitor.isRunning
+    && (!schedulers.comment.isRunning || schedulers.trustedCommandDefense.isOwningFeature('comment'))
+  ),
+});
 const uidWarningAutoBanScheduler = new UidWarningAutoBanScheduler();
 const monitorScheduler = new MonitorScheduler({
   postScheduler,
@@ -118,6 +137,7 @@ const schedulers = {
   refluxDatasetCollector: refluxDatasetCollectorScheduler,
   refluxOverlayCollector: refluxOverlayCollectorScheduler,
   commentRefluxCollector: commentRefluxCollectorScheduler,
+  trustedCommandDefense: trustedCommandDefenseScheduler,
   post: postScheduler,
   semiPost: semiPostScheduler,
   ip: ipScheduler,
@@ -244,6 +264,7 @@ async function resumeAllSchedulers() {
     await loadSchedulerStateIfIdle(schedulers.refluxDatasetCollector);
     await loadSchedulerStateIfIdle(schedulers.refluxOverlayCollector);
     await loadSchedulerStateIfIdle(schedulers.commentRefluxCollector);
+    await loadSchedulerStateIfIdle(schedulers.trustedCommandDefense);
     await loadSchedulerStateIfIdle(schedulers.post);
     await loadSchedulerStateIfIdle(schedulers.semiPost);
     await loadSchedulerStateIfIdle(schedulers.ip);
@@ -253,6 +274,11 @@ async function resumeAllSchedulers() {
     const commentMonitorOwnsChild = schedulers.commentMonitor.isRunning;
     const commentMonitorAttacking = commentMonitorOwnsChild
       && schedulers.commentMonitor.phase === COMMENT_MONITOR_PHASE.ATTACKING;
+
+    const trustedCommentDefenseActive = schedulers.trustedCommandDefense.isRunning
+      && schedulers.trustedCommandDefense.isCommentDefenseActive();
+    const trustedPostDefenseActive = schedulers.trustedCommandDefense.isRunning
+      && schedulers.trustedCommandDefense.isPostDefenseActive();
 
     if (commentMonitorAttacking) {
       if (typeof schedulers.comment.setCurrentSource === 'function') {
@@ -274,6 +300,17 @@ async function resumeAllSchedulers() {
       await resumeStandaloneScheduler(schedulers.comment, '🔁 댓글 감시 자동화 관리 대상 댓글 방어 복원');
     } else if (commentMonitorOwnsChild) {
       await stopDormantCommentMonitorChildScheduler();
+      if (trustedCommentDefenseActive) {
+        await schedulers.trustedCommandDefense.ensureOwnedDefensesStarted({
+          allowPostDefense: false,
+          allowCommentDefense: false,
+        });
+      }
+    } else if (trustedCommentDefenseActive) {
+      await schedulers.trustedCommandDefense.ensureOwnedDefensesStarted({
+        allowPostDefense: false,
+        allowCommentDefense: true,
+      });
     } else {
       await resumeStandaloneScheduler(schedulers.comment, '🔁 저장된 실행 상태 복원');
     }
@@ -285,6 +322,17 @@ async function resumeAllSchedulers() {
       // 공격 중 복원은 monitor가 initial sweep 순서를 보장하면서 child를 다시 붙인다.
     } else if (monitorOwnsChildren) {
       await stopDormantMonitorChildSchedulers();
+      if (trustedPostDefenseActive) {
+        await schedulers.trustedCommandDefense.ensureOwnedDefensesStarted({
+          allowPostDefense: false,
+          allowCommentDefense: false,
+        });
+      }
+    } else if (trustedPostDefenseActive) {
+      await schedulers.trustedCommandDefense.ensureOwnedDefensesStarted({
+        allowPostDefense: true,
+        allowCommentDefense: false,
+      });
     } else {
       await resumeStandaloneScheduler(schedulers.post, '🔁 저장된 실행 상태 복원');
       await resumeStandaloneScheduler(schedulers.ip, '🔁 저장된 실행 상태 복원');
@@ -297,6 +345,7 @@ async function resumeAllSchedulers() {
     }
 
     await resumeStandaloneScheduler(schedulers.commentMonitor, '🔁 저장된 댓글 감시 자동화 상태 복원');
+    await resumeStandaloneScheduler(schedulers.trustedCommandDefense, '🔁 저장된 명령 방어 상태 복원');
     await resumeStandaloneScheduler(schedulers.conceptMonitor, '🔁 저장된 개념글 방어 상태 복원');
     await resumeStandaloneScheduler(schedulers.conceptPatrol, '🔁 저장된 개념글순회 상태 복원');
     await resumeStandaloneScheduler(schedulers.hanRefreshIpBan, '🔁 저장된 도배기 갱신 차단 자동 상태 복원');
@@ -404,6 +453,7 @@ function getAllStatuses() {
     refluxDatasetCollector: schedulers.refluxDatasetCollector.getStatus(),
     refluxOverlayCollector: schedulers.refluxOverlayCollector.getStatus(),
     commentRefluxCollector: schedulers.commentRefluxCollector.getStatus(),
+    trustedCommandDefense: schedulers.trustedCommandDefense.getStatus(),
     post: schedulers.post.getStatus(),
     semiPost: schedulers.semiPost.getStatus(),
     ip: schedulers.ip.getStatus(),
@@ -589,6 +639,17 @@ async function handleMessage(message) {
           };
         }
       }
+      if (message.feature === 'trustedCommandDefense') {
+        const trustedCommandDefenseStartBlockMessage = getTrustedCommandDefenseStartBlockMessage();
+        if (trustedCommandDefenseStartBlockMessage) {
+          return {
+            success: false,
+            message: trustedCommandDefenseStartBlockMessage,
+            status: scheduler.getStatus(),
+            statuses: getAllStatuses(),
+          };
+        }
+      }
       if (typeof scheduler.getStartBlockReason === 'function') {
         const guardedStartBlockReason = scheduler.getStartBlockReason();
         if (guardedStartBlockReason) {
@@ -633,6 +694,9 @@ async function handleMessage(message) {
 
     case 'stop':
       await scheduler.stop();
+      if (['comment', 'post', 'ip'].includes(message.feature)) {
+        await schedulers.trustedCommandDefense.handleOwnedChildStopped(message.feature);
+      }
       return { success: true, status: scheduler.getStatus(), statuses: getAllStatuses() };
 
     case 'refreshManualChallenge':
@@ -1018,6 +1082,51 @@ async function handleMessage(message) {
           });
         }
 
+        if (message.feature === 'trustedCommandDefense') {
+          const nextGalleryId = String(message.config.galleryId ?? scheduler.config.galleryId ?? '').trim();
+          const rawCommandPostTarget = Object.prototype.hasOwnProperty.call(message.config, 'commandPostUrl')
+            ? message.config.commandPostUrl
+            : (Object.prototype.hasOwnProperty.call(message.config, 'commandPostNo')
+              ? message.config.commandPostNo
+              : (scheduler.config.commandPostUrl || scheduler.config.commandPostNo || ''));
+          const normalizedRawCommandPostTarget = String(rawCommandPostTarget || '').trim();
+
+          if (
+            Object.prototype.hasOwnProperty.call(message.config, 'commandPostUrl')
+            || Object.prototype.hasOwnProperty.call(message.config, 'commandPostNo')
+          ) {
+            if (normalizedRawCommandPostTarget) {
+              const parsedCommandPostTarget = parseCommandPostTarget(normalizedRawCommandPostTarget, nextGalleryId);
+              if (!parsedCommandPostTarget.success) {
+                return {
+                  success: false,
+                  message: parsedCommandPostTarget.message,
+                  status: scheduler.getStatus(),
+                  statuses: getAllStatuses(),
+                };
+              }
+            }
+          }
+
+          message.config = normalizeTrustedCommentCommandDefenseConfig({
+            ...scheduler.config,
+            ...message.config,
+          });
+
+          if (
+            message.config.commandGalleryId
+            && message.config.galleryId
+            && message.config.commandGalleryId !== message.config.galleryId
+          ) {
+            return {
+              success: false,
+              message: '명령 게시물은 현재 공통 갤과 같은 갤이어야 합니다.',
+              status: scheduler.getStatus(),
+              statuses: getAllStatuses(),
+            };
+          }
+        }
+
         if (message.feature === 'conceptPatrol') {
           message.config = normalizeConceptPatrolConfig({
             ...scheduler.config,
@@ -1118,6 +1227,14 @@ async function handleMessage(message) {
         return {
           success: false,
           message: '임시 overlay 수집 실행 중에는 통계와 로그를 초기화할 수 없습니다.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+        };
+      }
+      if (message.feature === 'trustedCommandDefense' && scheduler.isRunning) {
+        return {
+          success: false,
+          message: '명령 방어 실행 중에는 통계와 로그를 초기화할 수 없습니다.',
           status: scheduler.getStatus(),
           statuses: getAllStatuses(),
         };
@@ -1276,6 +1393,28 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.totalAttackReleased = 0;
     scheduler.reseedRemaining = 1;
     scheduler.logs = [];
+    return;
+  }
+
+  if (feature === 'trustedCommandDefense') {
+    scheduler.phase = 'IDLE';
+    scheduler.pollCount = 0;
+    scheduler.startedAt = '';
+    scheduler.lastPollAt = '';
+    scheduler.seededAt = '';
+    scheduler.seeded = false;
+    scheduler.lastSeenCommentNo = '';
+    scheduler.processedCommandCommentNos = [];
+    scheduler.lastCommandType = '';
+    scheduler.lastCommandCommentNo = '';
+    scheduler.lastCommandUserId = '';
+    scheduler.lastCommandAt = '';
+    scheduler.postDefenseUntilTs = 0;
+    scheduler.commentDefenseUntilTs = 0;
+    scheduler.ownedPostScheduler = false;
+    scheduler.ownedIpScheduler = false;
+    scheduler.ownedCommentScheduler = false;
+    scheduler.postDefenseCutoffPostNo = 0;
     return;
   }
 
@@ -1625,11 +1764,13 @@ async function applySharedConfig(config) {
     || schedulers.ip.config.galleryId !== galleryId
     || schedulers.uidWarningAutoBan.config.galleryId !== galleryId
     || schedulers.monitor.config.galleryId !== galleryId
+    || schedulers.trustedCommandDefense.config.galleryId !== galleryId
   );
   const headtextChanged = Boolean(headtextId) && (
     schedulers.post.config.headtextId !== headtextId
     || schedulers.semiPost.config.headtextId !== headtextId
     || schedulers.ip.config.headtextId !== headtextId
+    || schedulers.trustedCommandDefense.config.headtextId !== headtextId
   );
 
   if (galleryId) {
@@ -1645,6 +1786,7 @@ async function applySharedConfig(config) {
     schedulers.ip.config.galleryId = galleryId;
     schedulers.uidWarningAutoBan.config.galleryId = galleryId;
     schedulers.monitor.config.galleryId = galleryId;
+    schedulers.trustedCommandDefense.config.galleryId = galleryId;
   }
 
   if (headtextId) {
@@ -1652,6 +1794,7 @@ async function applySharedConfig(config) {
     schedulers.semiPost.config.headtextId = headtextId;
     schedulers.ip.config.headtextId = headtextId;
     schedulers.ip.config.headtextName = '';
+    schedulers.trustedCommandDefense.config.headtextId = headtextId;
   }
 
   if (galleryChanged) {
@@ -1667,6 +1810,7 @@ async function applySharedConfig(config) {
     resetIpSchedulerState(`ℹ️ 공통 설정 변경으로 IP 차단 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetUidWarningAutoBanSchedulerState(`ℹ️ 공통 설정 변경으로 분탕자동차단 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     resetMonitorSchedulerState(`ℹ️ 공통 설정 변경으로 감시 자동화 상태를 초기화했습니다. (갤러리: ${galleryId})`);
+    resetTrustedCommandDefenseSchedulerState(`ℹ️ 공통 설정 변경으로 명령 방어 상태를 초기화했습니다. (갤러리: ${galleryId})`);
     await resetConceptRecommendCutCoordinator({ galleryId });
     return;
   }
@@ -1675,6 +1819,7 @@ async function applySharedConfig(config) {
     resetPostSchedulerState(`ℹ️ 공통 설정 변경으로 게시글 분류 상태를 초기화했습니다. (도배기탭 번호: ${headtextId})`);
     resetSemiPostSchedulerState(`ℹ️ 공통 설정 변경으로 반고닉 분류 상태를 초기화했습니다. (도배기탭 번호: ${headtextId})`);
     resetIpSchedulerState(`ℹ️ 공통 설정 변경으로 IP 차단 상태를 초기화했습니다. (도배기탭 번호: ${headtextId})`);
+    resetTrustedCommandDefenseSchedulerState(`ℹ️ 공통 설정 변경으로 명령 방어 상태를 초기화했습니다. (도배기탭 번호: ${headtextId})`);
   }
 }
 
@@ -1768,6 +1913,10 @@ function getBusyFeatures() {
     busyFeatures.push('감시 자동화');
   }
 
+  if (isSchedulerBusy(schedulers.trustedCommandDefense)) {
+    busyFeatures.push('명령 방어');
+  }
+
   if (isSchedulerBusy(schedulers.refluxOverlayCollector)) {
     busyFeatures.push('임시 Overlay 수집');
   }
@@ -1811,6 +1960,30 @@ function getSelfHostedVpnStartBlockMessage() {
   return '';
 }
 
+function getTrustedCommandDefenseStartBlockMessage() {
+  if (schedulers.monitor.isRunning) {
+    return '감시 자동화 실행 중에는 명령 방어를 시작할 수 없습니다.';
+  }
+
+  if (schedulers.commentMonitor.isRunning) {
+    return '댓글 감시 자동화 실행 중에는 명령 방어를 시작할 수 없습니다.';
+  }
+
+  if (schedulers.post.isRunning && !schedulers.trustedCommandDefense.isOwningFeature('post')) {
+    return '게시글 분류가 실행 중일 때는 명령 방어를 시작할 수 없습니다.';
+  }
+
+  if (schedulers.ip.isRunning && !schedulers.trustedCommandDefense.isOwningFeature('ip')) {
+    return 'IP 차단이 실행 중일 때는 명령 방어를 시작할 수 없습니다.';
+  }
+
+  if (schedulers.comment.isRunning && !schedulers.trustedCommandDefense.isOwningFeature('comment')) {
+    return '댓글 방어가 실행 중일 때는 명령 방어를 시작할 수 없습니다.';
+  }
+
+  return '';
+}
+
 function getConfigUpdateBlockMessage(feature, scheduler, config) {
   const selfHostedVpnParallelActive = feature === 'selfHostedVpn'
     && (
@@ -1846,7 +2019,27 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
       ...scheduler.config,
       ...config,
     }) !== resolveRefluxSearchGalleryId(scheduler.config)) {
-    return '역류 검색 갤 ID는 댓글 역류기 방어를 정지한 뒤 변경하세요.';
+      return '역류 검색 갤 ID는 댓글 역류기 방어를 정지한 뒤 변경하세요.';
+  }
+
+  if (feature === 'trustedCommandDefense') {
+    const trackedConfigKeys = [
+      'commandPostUrl',
+      'commandPostNo',
+      'commandGalleryId',
+      'trustedUsersText',
+      'commandPrefix',
+      'pollIntervalMs',
+      'holdMs',
+      'recentCommentPages',
+    ];
+    const hasChangedConfig = trackedConfigKeys.some((key) => (
+      Object.prototype.hasOwnProperty.call(config, key)
+      && normalizeComparableConfigValue(config[key]) !== normalizeComparableConfigValue(scheduler.config[key])
+    ));
+    if (hasChangedConfig) {
+      return '명령 방어 설정은 실행이 끝난 뒤 변경하세요.';
+    }
   }
 
   if (feature === 'conceptMonitor'
@@ -2023,6 +2216,19 @@ function normalizeComparableConfigValue(value) {
 }
 
 function getMonitorManualLockMessage(feature, action) {
+  const trustedPostActive = schedulers.trustedCommandDefense.isRunning
+    && (schedulers.trustedCommandDefense.ownedPostScheduler || schedulers.trustedCommandDefense.ownedIpScheduler);
+  const trustedCommentActive = schedulers.trustedCommandDefense.isRunning
+    && schedulers.trustedCommandDefense.ownedCommentScheduler;
+
+  if (feature === 'monitor' && action === 'start' && trustedPostActive) {
+    return '명령 게시물방어 실행 중에는 감시 자동화를 시작할 수 없습니다.';
+  }
+
+  if (feature === 'commentMonitor' && action === 'start' && trustedCommentActive) {
+    return '명령 댓글방어 실행 중에는 댓글 자동화를 시작할 수 없습니다.';
+  }
+
   const monitorOwnsUidWarningAutoBanLock = schedulers.monitor.isRunning
     && [MONITOR_PHASE.ATTACKING, MONITOR_PHASE.RECOVERING].includes(schedulers.monitor.phase);
 
@@ -2060,6 +2266,16 @@ function getMonitorManualLockMessage(feature, action) {
   const commentMonitorLockedActions = new Set(['start', 'stop', 'updateConfig', 'resetStats']);
   if (schedulers.commentMonitor.isRunning && feature === 'comment' && commentMonitorLockedActions.has(action)) {
     return '댓글 감시 자동화 실행 중에는 댓글 방어를 수동으로 조작할 수 없습니다.';
+  }
+
+  const trustedPostLockedActions = new Set(['start', 'updateConfig', 'resetStats', 'releaseTrackedBans']);
+  if (trustedPostActive && ['post', 'ip'].includes(feature) && trustedPostLockedActions.has(action)) {
+    return '명령 게시물방어 실행 중에는 게시글 분류 / IP 차단을 수동으로 조작할 수 없습니다.';
+  }
+
+  const trustedCommentLockedActions = new Set(['start', 'updateConfig', 'resetStats']);
+  if (trustedCommentActive && feature === 'comment' && trustedCommentLockedActions.has(action)) {
+    return '명령 댓글방어 실행 중에는 댓글 방어를 수동으로 조작할 수 없습니다.';
   }
 
   return '';
@@ -2573,6 +2789,30 @@ function resetMonitorSchedulerState(message) {
   scheduler.managedUidWarningAutoBanBanOnly = false;
   scheduler.totalAttackDetected = 0;
   scheduler.totalAttackReleased = 0;
+  scheduler.logs = [];
+  scheduler.log(message);
+}
+
+function resetTrustedCommandDefenseSchedulerState(message) {
+  const scheduler = schedulers.trustedCommandDefense;
+  scheduler.phase = 'IDLE';
+  scheduler.pollCount = 0;
+  scheduler.startedAt = '';
+  scheduler.lastPollAt = '';
+  scheduler.seededAt = '';
+  scheduler.seeded = false;
+  scheduler.lastSeenCommentNo = '';
+  scheduler.processedCommandCommentNos = [];
+  scheduler.lastCommandType = '';
+  scheduler.lastCommandCommentNo = '';
+  scheduler.lastCommandUserId = '';
+  scheduler.lastCommandAt = '';
+  scheduler.postDefenseUntilTs = 0;
+  scheduler.commentDefenseUntilTs = 0;
+  scheduler.ownedPostScheduler = false;
+  scheduler.ownedIpScheduler = false;
+  scheduler.ownedCommentScheduler = false;
+  scheduler.postDefenseCutoffPostNo = 0;
   scheduler.logs = [];
   scheduler.log(message);
 }

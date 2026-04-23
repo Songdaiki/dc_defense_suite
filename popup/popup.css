@@ -794,7 +794,8 @@ body {
   color: var(--muted) !important;
 }
 
-.settings-section {
+.settings-section,
+.trusted-users-section {
   position: relative;
   margin-bottom: 12px;
   padding: 12px;
@@ -808,18 +809,21 @@ body {
     0 10px 24px rgba(5, 10, 18, 0.22);
 }
 
-.settings-section:not([open]) {
+.settings-section:not([open]),
+.trusted-users-section:not([open]) {
   background:
     radial-gradient(circle at top right, rgba(34, 211, 238, 0.12), transparent 42%),
     linear-gradient(180deg, rgba(25, 35, 49, 0.97), rgba(13, 19, 28, 0.99));
   border-color: rgba(125, 211, 252, 0.16);
 }
 
-.settings-section:not([open])::before {
+.settings-section:not([open])::before,
+.trusted-users-section:not([open])::before {
   background: linear-gradient(180deg, rgba(103, 232, 249, 0.92), rgba(56, 189, 248, 0.42));
 }
 
-.settings-section::before {
+.settings-section::before,
+.trusted-users-section::before {
   content: '';
   position: absolute;
   inset: 0 auto 0 0;
@@ -828,14 +832,16 @@ body {
   background: linear-gradient(180deg, rgba(125, 211, 252, 0.86), rgba(56, 189, 248, 0.36));
 }
 
-.settings-section[open] {
+.settings-section[open],
+.trusted-users-section[open] {
   border-color: rgba(148, 163, 184, 0.22);
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.04),
     0 14px 30px rgba(5, 10, 18, 0.28);
 }
 
-.settings-section summary {
+.settings-section summary,
+.trusted-users-section summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -847,15 +853,18 @@ body {
   list-style: none;
 }
 
-.settings-section summary::-webkit-details-marker {
+.settings-section summary::-webkit-details-marker,
+.trusted-users-section summary::-webkit-details-marker {
   display: none;
 }
 
-.settings-section summary::marker {
+.settings-section summary::marker,
+.trusted-users-section summary::marker {
   display: none;
 }
 
-.settings-section summary::after {
+.settings-section summary::after,
+.trusted-users-section summary::after {
   content: '펼치기';
   display: inline-flex;
   align-items: center;
@@ -870,17 +879,20 @@ body {
   font-weight: 700;
 }
 
-.settings-section[open] summary::after {
+.settings-section[open] summary::after,
+.trusted-users-section[open] summary::after {
   content: '접기';
   background: rgba(148, 163, 184, 0.14);
   border-color: rgba(148, 163, 184, 0.18);
 }
 
-.settings-section summary:hover::after {
+.settings-section summary:hover::after,
+.trusted-users-section summary:hover::after {
   background: rgba(148, 163, 184, 0.18);
 }
 
-.settings-section:not([open]) summary:hover::after {
+.settings-section:not([open]) summary:hover::after,
+.trusted-users-section:not([open]) summary:hover::after {
   background: rgba(125, 211, 252, 0.18);
 }
 
@@ -985,6 +997,24 @@ body {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.setting-help {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.setting-help code,
+.manual-utility-meta code,
+.feature-header p code {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f4f8ff;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 11px;
 }
 
 .subfeature-divider {
@@ -1157,6 +1187,90 @@ body {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.trusted-command-settings-grid .trusted-command-setting-item {
+  display: block;
+}
+
+.trusted-command-settings-grid .trusted-command-setting-item label {
+  display: block;
+  margin-bottom: 8px;
+  word-break: keep-all;
+}
+
+.trusted-command-settings-grid .trusted-command-setting-item input {
+  width: 100%;
+  text-align: left;
+}
+
+.trusted-command-settings-grid .trusted-command-setting-item .setting-help {
+  margin-top: 8px;
+}
+
+.trusted-command-user-entry-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.trusted-command-users-help {
+  margin-top: 10px;
+}
+
+.trusted-command-user-entry-grid .setting-item {
+  display: block;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+.trusted-command-user-entry-grid .setting-item input {
+  width: 100%;
+  text-align: left;
+}
+
+.trusted-command-user-entry-grid .btn {
+  width: auto;
+  min-width: 112px;
+}
+
+.trusted-command-user-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.trusted-command-user-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(8, 15, 26, 0.92);
+  border: 1px solid rgba(86, 130, 171, 0.24);
+}
+
+.trusted-command-user-meta {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.trusted-command-user-label {
+  font-weight: 700;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.trusted-command-user-id {
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-all;
 }
 
 .btn {

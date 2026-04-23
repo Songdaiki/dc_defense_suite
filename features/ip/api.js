@@ -8,7 +8,7 @@ const DEFAULT_CONFIG = {
   headtextName: '',
   avoidHour: '6',
   avoidReason: '0',
-  avoidReasonText: '도배기로 인한 해당 유동IP차단',
+  avoidReasonText: '도배기IP차단(무고한 경우 문의)',
   delChk: false,
   avoidTypeChk: false,
   banBatchSize: 20,

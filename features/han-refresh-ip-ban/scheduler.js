@@ -535,7 +535,12 @@ function normalizeConfig(config = {}) {
 
 function normalizeAvoidReasonText(value) {
   const normalized = String(value || '').trim();
-  if (!normalized || normalized === '도배' || normalized === '도배기') {
+  if (
+    !normalized
+    || normalized === '도배'
+    || normalized === '도배기'
+    || normalized === '도배기로 인한 해당 유동IP차단'
+  ) {
     return DEFAULT_CONFIG.avoidReasonText;
   }
   return normalized;

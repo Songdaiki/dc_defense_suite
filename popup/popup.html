@@ -19,6 +19,7 @@
     <nav class="tabs" aria-label="기능 선택">
       <button class="tab-button tab-automation is-active" data-tab="monitor"><span class="tab-label">게시물<br>자동화</span></button>
       <button class="tab-button tab-automation" data-tab="commentMonitor"><span class="tab-label">댓글<br>자동화</span></button>
+      <button class="tab-button tab-automation" data-tab="trustedCommandDefense"><span class="tab-label">명령<br>방어</span></button>
       <button class="tab-button tab-automation" data-tab="conceptMonitor"><span class="tab-label">개념글<br>방어</span></button>
       <button class="tab-button tab-automation" data-tab="conceptPatrol"><span class="tab-label">개념글<br>순회</span></button>
       <button class="tab-button tab-automation" data-tab="hanRefreshIpBan"><span class="tab-label">도배기갱신<br>차단자동</span></button>
@@ -426,6 +427,130 @@
         </section>
       </section>
 
+      <section class="panel" data-feature="trustedCommandDefense">
+        <div class="feature-header feature-comment-monitor">
+          <div>
+            <h2>명령 방어</h2>
+            <p>신뢰 user_id가 관리용 글 댓글에 <code>@특갤봇 게시물방어</code> 또는 <code>@특갤봇 댓글방어</code>를 남기면 10분씩 강제 실행합니다</p>
+          </div>
+          <div class="toggle-section">
+            <label class="toggle-switch">
+              <input type="checkbox" id="trustedCommandDefenseToggleBtn">
+              <span class="slider"></span>
+            </label>
+            <span id="trustedCommandDefenseToggleLabel" class="toggle-label">OFF</span>
+          </div>
+        </div>
+
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">상태</span>
+            <span id="trustedCommandDefenseStatusText" class="status-value status-off">🔴 정지</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">현재 단계</span>
+            <span id="trustedCommandDefensePhaseText" class="status-value">IDLE</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 폴링</span>
+            <span id="trustedCommandDefenseLastPollAt" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">seed 완료</span>
+            <span id="trustedCommandDefenseSeededAt" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">마지막 확인 댓글</span>
+            <span id="trustedCommandDefenseLastSeenCommentNo" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">최근 명령</span>
+            <span id="trustedCommandDefenseLastCommandType" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">명령 댓글 번호</span>
+            <span id="trustedCommandDefenseLastCommandCommentNo" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">명령 user_id</span>
+            <span id="trustedCommandDefenseLastCommandUserId" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">게시물방어 유지</span>
+            <span id="trustedCommandDefensePostDefenseUntil" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">댓글방어 유지</span>
+            <span id="trustedCommandDefenseCommentDefenseUntil" class="status-value">-</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">신뢰 사용자 수</span>
+            <span id="trustedCommandDefenseTrustedUserCount" class="status-value">0명</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">명령 게시물</span>
+            <span id="trustedCommandDefenseCommandPostText" class="status-value">-</span>
+          </div>
+        </div>
+
+        <p id="trustedCommandDefenseMetaText" class="manual-utility-meta">관리용 글 댓글을 20초마다 최근 2페이지까지 확인합니다. 실제 댓글 명령은 <code>@특갤봇 게시물방어</code>, <code>@특갤봇 댓글방어</code> 입니다.</p>
+
+        <details class="settings-section">
+          <summary>설정</summary>
+          <div class="settings-grid trusted-command-settings-grid">
+            <div class="setting-item trusted-command-setting-item">
+              <label for="trustedCommandDefenseCommandPostUrl">명령 게시물 링크/번호</label>
+              <input type="text" id="trustedCommandDefenseCommandPostUrl" placeholder="예: https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=123456">
+            </div>
+            <div class="setting-item trusted-command-setting-item">
+              <label for="trustedCommandDefenseCommandPrefix">호출어 (@특갤봇)</label>
+              <input type="text" id="trustedCommandDefenseCommandPrefix" value="@특갤봇" spellcheck="false">
+              <p class="setting-help">보통 그대로 두면 됩니다. 실제 댓글은 <code>@특갤봇 게시물방어</code>, <code>@특갤봇 댓글방어</code>처럼 쓰면 됩니다.</p>
+            </div>
+            <div class="setting-item trusted-command-setting-item">
+              <label for="trustedCommandDefensePollIntervalSeconds">폴링 주기 (초)</label>
+              <input type="number" id="trustedCommandDefensePollIntervalSeconds" min="10" max="300" value="20">
+            </div>
+            <div class="setting-item trusted-command-setting-item">
+              <label for="trustedCommandDefenseHoldMinutes">방어 유지 시간 (분)</label>
+              <input type="number" id="trustedCommandDefenseHoldMinutes" min="1" max="60" value="10">
+            </div>
+          </div>
+        </details>
+
+        <details class="trusted-users-section">
+          <summary>신뢰 사용자</summary>
+          <p class="setting-help trusted-command-users-help">신문고봇처럼 <code>user_id + label</code>을 직접 등록합니다. 실제 판정은 <code>user_id</code> 기준입니다.</p>
+
+          <div class="trusted-command-user-entry-grid">
+            <div class="setting-item">
+              <label for="trustedCommandDefenseTrustedUserIdInput">user_id</label>
+              <input type="text" id="trustedCommandDefenseTrustedUserIdInput" placeholder="image8481" spellcheck="false">
+            </div>
+            <div class="setting-item">
+              <label for="trustedCommandDefenseTrustedUserLabelInput">label</label>
+              <input type="text" id="trustedCommandDefenseTrustedUserLabelInput" maxlength="20" placeholder="だいき">
+            </div>
+            <button id="trustedCommandDefenseAddTrustedUserBtn" class="btn btn-primary" type="button">신뢰 사용자 추가</button>
+          </div>
+
+          <div id="trustedCommandDefenseTrustedUserList" class="trusted-command-user-list">
+            <div class="log-empty">등록된 신뢰 사용자가 없습니다.</div>
+          </div>
+          <textarea id="trustedCommandDefenseTrustedUsersText" rows="5" placeholder="예: trusted_admin&#10;trusted_mod 부매니저" hidden></textarea>
+        </details>
+
+        <div class="action-row">
+          <button id="trustedCommandDefenseSaveConfigBtn" class="btn btn-primary">설정 저장</button>
+          <button id="trustedCommandDefenseResetBtn" class="btn btn-secondary">통계 초기화</button>
+        </div>
+
+        <section class="log-section">
+          <h3>최근 로그</h3>
+          <div id="trustedCommandDefenseLogList" class="log-list"><div class="log-empty">로그가 없습니다.</div></div>
+        </section>
+      </section>
+
       <section class="panel" data-feature="hanRefreshIpBan">
         <div class="feature-header feature-han-refresh-ip-ban">
           <div>
@@ -605,7 +730,7 @@
             </div>
             <div class="setting-item">
               <label for="commentAvoidHour">차단 시간 (시)</label>
-              <input type="number" id="commentAvoidHour" min="1" max="720" value="1">
+              <input type="number" id="commentAvoidHour" min="1" max="720" value="6">
             </div>
             <button id="commentSaveConfigBtn" class="btn btn-primary">설정 저장</button>
           </div>
