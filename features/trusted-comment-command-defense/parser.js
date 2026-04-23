@@ -161,15 +161,16 @@ function parseTrustedCommand(comment, commandPrefix = '@특갤봇') {
   }
 
   const normalizedPrefix = String(commandPrefix || '').trim().replace(/\s+/g, ' ');
-  const normalizedMemo = normalizeCommentMemo(comment?.memo).replace(/\s+/g, ' ').trim();
-  if (!normalizedPrefix || !normalizedMemo.startsWith(normalizedPrefix)) {
+  const normalizedMemo = normalizeTrustedCommandMemo(comment?.memo);
+  const prefixIndex = normalizedPrefix ? normalizedMemo.indexOf(normalizedPrefix) : -1;
+  if (!normalizedPrefix || prefixIndex < 0) {
     return {
       success: false,
       reason: '명령 prefix 없음',
     };
   }
 
-  const body = normalizedMemo.slice(normalizedPrefix.length).trim();
+  const body = normalizedMemo.slice(prefixIndex + normalizedPrefix.length).trim();
   if (!body) {
     return {
       success: false,
@@ -202,6 +203,13 @@ function parseTrustedCommand(comment, commandPrefix = '@특갤봇') {
     success: false,
     reason: '허용되지 않은 명령',
   };
+}
+
+function normalizeTrustedCommandMemo(memo) {
+  return normalizeCommentMemo(memo)
+    .replace(/\s*-\s*dc(?:side)?\s*app\s*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function sortCommentsByNo(comments = []) {
