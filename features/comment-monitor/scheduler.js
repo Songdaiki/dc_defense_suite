@@ -45,12 +45,15 @@ const PHASE = {
 };
 
 class Scheduler {
-  constructor({ commentScheduler } = {}) {
+  constructor({ commentScheduler, isTrustedOwnedFeature } = {}) {
     if (!commentScheduler) {
       throw new Error('CommentMonitorScheduler는 comment scheduler 의존성이 필요합니다.');
     }
 
     this.commentScheduler = commentScheduler;
+    this.isTrustedOwnedFeature = typeof isTrustedOwnedFeature === 'function'
+      ? isTrustedOwnedFeature
+      : () => false;
 
     this.isRunning = false;
     this.runPromise = null;
@@ -89,7 +92,9 @@ class Scheduler {
   }
 
   getStartBlockReason() {
-    if (this.commentScheduler.isRunning || this.commentScheduler.runPromise) {
+    const commentBlocked = (this.commentScheduler.isRunning || this.commentScheduler.runPromise)
+      && !this.isTrustedOwnedFeature('comment');
+    if (commentBlocked) {
       return '댓글 감시 자동화를 시작하기 전에 댓글 방어를 먼저 정지하세요.';
     }
 
@@ -422,6 +427,10 @@ class Scheduler {
 
   async ensureManagedDefenseStarted() {
     if (!this.isRunning || this.phase !== PHASE.ATTACKING) {
+      return;
+    }
+
+    if (this.isTrustedOwnedFeature('comment')) {
       return;
     }
 
@@ -773,8 +782,7 @@ class Scheduler {
   }
 
   async stopManagedDefense() {
-    const shouldStopComment = this.managedCommentStarted
-      || (this.phase === PHASE.ATTACKING && (this.commentScheduler.isRunning || this.commentScheduler.runPromise));
+    const shouldStopComment = this.managedCommentStarted;
 
     if (!shouldStopComment) {
       return;

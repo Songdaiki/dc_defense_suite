@@ -86,9 +86,12 @@ import {
   toggleUidRatioWarningForActiveTab,
 } from './uid-ratio-warning.js';
 
+let trustedCommandDefenseScheduler = null;
+
 const commentScheduler = new CommentScheduler();
 const commentMonitorScheduler = new CommentMonitorScheduler({
   commentScheduler,
+  isTrustedOwnedFeature: (feature) => trustedCommandDefenseScheduler?.isOwningFeature(feature) === true,
 });
 const conceptMonitorScheduler = new ConceptMonitorScheduler();
 const conceptPatrolScheduler = new ConceptPatrolScheduler({
@@ -104,17 +107,17 @@ const commentRefluxCollectorScheduler = new CommentRefluxCollectorScheduler();
 const postScheduler = new PostScheduler();
 const semiPostScheduler = new SemiPostScheduler();
 const ipScheduler = new IpScheduler();
-const trustedCommandDefenseScheduler = new TrustedCommentCommandDefenseScheduler({
+trustedCommandDefenseScheduler = new TrustedCommentCommandDefenseScheduler({
   commentScheduler,
   postScheduler,
   ipScheduler,
   shouldAllowPostDefenseStart: () => (
-    !schedulers.monitor.isRunning
+    !isMonitorManagingPostAxis()
     && (!schedulers.post.isRunning || schedulers.trustedCommandDefense.isOwningFeature('post'))
     && (!schedulers.ip.isRunning || schedulers.trustedCommandDefense.isOwningFeature('ip'))
   ),
   shouldAllowCommentDefenseStart: () => (
-    !schedulers.commentMonitor.isRunning
+    !isCommentMonitorManagingCommentAxis()
     && (!schedulers.comment.isRunning || schedulers.trustedCommandDefense.isOwningFeature('comment'))
   ),
 });
@@ -123,6 +126,7 @@ const monitorScheduler = new MonitorScheduler({
   postScheduler,
   ipScheduler,
   uidWarningAutoBanScheduler,
+  isTrustedOwnedFeature: (feature) => trustedCommandDefenseScheduler?.isOwningFeature(feature) === true,
 });
 
 const schedulers = {
@@ -271,16 +275,26 @@ async function resumeAllSchedulers() {
     await loadSchedulerStateIfIdle(schedulers.uidWarningAutoBan);
     await loadSchedulerStateIfIdle(schedulers.monitor);
 
-    const commentMonitorOwnsChild = schedulers.commentMonitor.isRunning;
-    const commentMonitorAttacking = commentMonitorOwnsChild
-      && schedulers.commentMonitor.phase === COMMENT_MONITOR_PHASE.ATTACKING;
-
     const trustedCommentDefenseActive = schedulers.trustedCommandDefense.isRunning
       && schedulers.trustedCommandDefense.isCommentDefenseActive();
     const trustedPostDefenseActive = schedulers.trustedCommandDefense.isRunning
       && schedulers.trustedCommandDefense.isPostDefenseActive();
 
-    if (commentMonitorAttacking) {
+    const commentMonitorOwnsChild = schedulers.commentMonitor.isRunning
+      && !trustedCommentDefenseActive
+      && (
+        schedulers.commentMonitor.managedCommentStarted
+        || [COMMENT_MONITOR_PHASE.ATTACKING, COMMENT_MONITOR_PHASE.RECOVERING].includes(schedulers.commentMonitor.phase)
+      );
+    const commentMonitorAttacking = commentMonitorOwnsChild
+      && schedulers.commentMonitor.phase === COMMENT_MONITOR_PHASE.ATTACKING;
+
+    if (trustedCommentDefenseActive) {
+      await schedulers.trustedCommandDefense.ensureOwnedDefensesStarted({
+        allowPostDefense: false,
+        allowCommentDefense: true,
+      });
+    } else if (commentMonitorAttacking) {
       if (typeof schedulers.comment.setCurrentSource === 'function') {
         schedulers.comment.setCurrentSource('monitor', { logChange: false });
       }
@@ -300,39 +314,28 @@ async function resumeAllSchedulers() {
       await resumeStandaloneScheduler(schedulers.comment, '🔁 댓글 감시 자동화 관리 대상 댓글 방어 복원');
     } else if (commentMonitorOwnsChild) {
       await stopDormantCommentMonitorChildScheduler();
-      if (trustedCommentDefenseActive) {
-        await schedulers.trustedCommandDefense.ensureOwnedDefensesStarted({
-          allowPostDefense: false,
-          allowCommentDefense: false,
-        });
-      }
-    } else if (trustedCommentDefenseActive) {
-      await schedulers.trustedCommandDefense.ensureOwnedDefensesStarted({
-        allowPostDefense: false,
-        allowCommentDefense: true,
-      });
     } else {
       await resumeStandaloneScheduler(schedulers.comment, '🔁 저장된 실행 상태 복원');
     }
 
-    const monitorOwnsChildren = schedulers.monitor.isRunning;
+    const monitorOwnsChildren = schedulers.monitor.isRunning
+      && !trustedPostDefenseActive
+      && (
+        schedulers.monitor.managedPostStarted
+        || schedulers.monitor.managedIpStarted
+        || [MONITOR_PHASE.ATTACKING, MONITOR_PHASE.RECOVERING].includes(schedulers.monitor.phase)
+      );
     const monitorAttacking = monitorOwnsChildren && schedulers.monitor.phase === MONITOR_PHASE.ATTACKING;
 
-    if (monitorAttacking) {
-      // 공격 중 복원은 monitor가 initial sweep 순서를 보장하면서 child를 다시 붙인다.
-    } else if (monitorOwnsChildren) {
-      await stopDormantMonitorChildSchedulers();
-      if (trustedPostDefenseActive) {
-        await schedulers.trustedCommandDefense.ensureOwnedDefensesStarted({
-          allowPostDefense: false,
-          allowCommentDefense: false,
-        });
-      }
-    } else if (trustedPostDefenseActive) {
+    if (trustedPostDefenseActive) {
       await schedulers.trustedCommandDefense.ensureOwnedDefensesStarted({
         allowPostDefense: true,
         allowCommentDefense: false,
       });
+    } else if (monitorAttacking) {
+      // 공격 중 복원은 monitor가 initial sweep 순서를 보장하면서 child를 다시 붙인다.
+    } else if (monitorOwnsChildren) {
+      await stopDormantMonitorChildSchedulers();
     } else {
       await resumeStandaloneScheduler(schedulers.post, '🔁 저장된 실행 상태 복원');
       await resumeStandaloneScheduler(schedulers.ip, '🔁 저장된 실행 상태 복원');
@@ -1960,27 +1963,17 @@ function getSelfHostedVpnStartBlockMessage() {
   return '';
 }
 
+function isMonitorManagingPostAxis() {
+  return schedulers.monitor.isRunning
+    && [MONITOR_PHASE.ATTACKING, MONITOR_PHASE.RECOVERING].includes(schedulers.monitor.phase);
+}
+
+function isCommentMonitorManagingCommentAxis() {
+  return schedulers.commentMonitor.isRunning
+    && [COMMENT_MONITOR_PHASE.ATTACKING, COMMENT_MONITOR_PHASE.RECOVERING].includes(schedulers.commentMonitor.phase);
+}
+
 function getTrustedCommandDefenseStartBlockMessage() {
-  if (schedulers.monitor.isRunning) {
-    return '감시 자동화 실행 중에는 명령 방어를 시작할 수 없습니다.';
-  }
-
-  if (schedulers.commentMonitor.isRunning) {
-    return '댓글 감시 자동화 실행 중에는 명령 방어를 시작할 수 없습니다.';
-  }
-
-  if (schedulers.post.isRunning && !schedulers.trustedCommandDefense.isOwningFeature('post')) {
-    return '게시글 분류가 실행 중일 때는 명령 방어를 시작할 수 없습니다.';
-  }
-
-  if (schedulers.ip.isRunning && !schedulers.trustedCommandDefense.isOwningFeature('ip')) {
-    return 'IP 차단이 실행 중일 때는 명령 방어를 시작할 수 없습니다.';
-  }
-
-  if (schedulers.comment.isRunning && !schedulers.trustedCommandDefense.isOwningFeature('comment')) {
-    return '댓글 방어가 실행 중일 때는 명령 방어를 시작할 수 없습니다.';
-  }
-
   return '';
 }
 
@@ -2220,14 +2213,7 @@ function getMonitorManualLockMessage(feature, action) {
     && (schedulers.trustedCommandDefense.ownedPostScheduler || schedulers.trustedCommandDefense.ownedIpScheduler);
   const trustedCommentActive = schedulers.trustedCommandDefense.isRunning
     && schedulers.trustedCommandDefense.ownedCommentScheduler;
-
-  if (feature === 'monitor' && action === 'start' && trustedPostActive) {
-    return '명령 게시물방어 실행 중에는 감시 자동화를 시작할 수 없습니다.';
-  }
-
-  if (feature === 'commentMonitor' && action === 'start' && trustedCommentActive) {
-    return '명령 댓글방어 실행 중에는 댓글 자동화를 시작할 수 없습니다.';
-  }
+  const trustedOwnsFeature = schedulers.trustedCommandDefense.isOwningFeature(feature);
 
   const monitorOwnsUidWarningAutoBanLock = schedulers.monitor.isRunning
     && [MONITOR_PHASE.ATTACKING, MONITOR_PHASE.RECOVERING].includes(schedulers.monitor.phase);
@@ -2246,6 +2232,12 @@ function getMonitorManualLockMessage(feature, action) {
 
   const baseLockedActions = new Set(['start', 'stop', 'updateConfig', 'resetStats', 'releaseTrackedBans']);
   if (schedulers.monitor.isRunning && ['post', 'semiPost', 'ip'].includes(feature) && baseLockedActions.has(action)) {
+    const allowTrustedOwnedStop = action === 'stop'
+      && ['post', 'ip'].includes(feature)
+      && trustedOwnsFeature;
+    if (allowTrustedOwnedStop) {
+      return '';
+    }
     return '감시 자동화 실행 중에는 게시글 분류 / 반고닉 분류 / IP 차단을 수동으로 조작할 수 없습니다.';
   }
 
@@ -2265,6 +2257,10 @@ function getMonitorManualLockMessage(feature, action) {
 
   const commentMonitorLockedActions = new Set(['start', 'stop', 'updateConfig', 'resetStats']);
   if (schedulers.commentMonitor.isRunning && feature === 'comment' && commentMonitorLockedActions.has(action)) {
+    const allowTrustedOwnedStop = action === 'stop' && trustedOwnsFeature;
+    if (allowTrustedOwnedStop) {
+      return '';
+    }
     return '댓글 감시 자동화 실행 중에는 댓글 방어를 수동으로 조작할 수 없습니다.';
   }
 

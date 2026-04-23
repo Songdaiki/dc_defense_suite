@@ -94,10 +94,6 @@ class Scheduler {
       return '공통 갤 ID를 먼저 저장하세요.';
     }
 
-    if (!String(this.config.headtextId || '').trim()) {
-      return '공통 도배기탭 번호를 먼저 저장하세요.';
-    }
-
     if (!String(this.config.commandPostNo || '').trim()) {
       return '명령 게시물 링크를 저장한 뒤 시작하세요.';
     }
@@ -334,7 +330,15 @@ class Scheduler {
     await this.saveState();
 
     if (!this.shouldAllowPostDefenseStart()) {
-      throw new Error('감시 자동화가 실행 중이라 게시물방어 child를 시작할 수 없습니다.');
+      this.log('ℹ️ 게시물 축이 이미 대응 중이라 게시물방어 명령을 무시했습니다.');
+      await this.saveState();
+      return;
+    }
+
+    if (!String(this.config.headtextId || '').trim()) {
+      this.log('ℹ️ 공통 도배기탭 번호가 없어 게시물방어 명령을 무시했습니다.');
+      await this.saveState();
+      return;
     }
 
     const boardListHtml = await fetchPostListHTML(this.getPostConfig(), 1);
@@ -415,7 +419,9 @@ class Scheduler {
     await this.saveState();
 
     if (!this.shouldAllowCommentDefenseStart()) {
-      throw new Error('댓글 자동화가 실행 중이라 댓글방어 child를 시작할 수 없습니다.');
+      this.log('ℹ️ 댓글 축이 이미 대응 중이라 댓글방어 명령을 무시했습니다.');
+      await this.saveState();
+      return;
     }
 
     const { posts, esno } = await fetchPostList(this.getCommentConfig(), 1);
@@ -458,8 +464,8 @@ class Scheduler {
   async syncOwnedDefenseState() {
     await this.handleExpiredDefenses();
     await this.ensureOwnedDefensesStarted({
-      allowPostDefense: this.shouldAllowPostDefenseStart(),
-      allowCommentDefense: this.shouldAllowCommentDefenseStart(),
+      allowPostDefense: this.isPostDefenseActive() ? true : this.shouldAllowPostDefenseStart(),
+      allowCommentDefense: this.isCommentDefenseActive() ? true : this.shouldAllowCommentDefenseStart(),
     });
   }
 

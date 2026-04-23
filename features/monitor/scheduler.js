@@ -32,7 +32,7 @@ const PHASE = {
 };
 
 class Scheduler {
-  constructor({ postScheduler, ipScheduler, uidWarningAutoBanScheduler } = {}) {
+  constructor({ postScheduler, ipScheduler, uidWarningAutoBanScheduler, isTrustedOwnedFeature } = {}) {
     if (!postScheduler || !ipScheduler) {
       throw new Error('MonitorScheduler는 post/ip scheduler 의존성이 필요합니다.');
     }
@@ -40,6 +40,9 @@ class Scheduler {
     this.postScheduler = postScheduler;
     this.ipScheduler = ipScheduler;
     this.uidWarningAutoBanScheduler = uidWarningAutoBanScheduler || null;
+    this.isTrustedOwnedFeature = typeof isTrustedOwnedFeature === 'function'
+      ? isTrustedOwnedFeature
+      : () => false;
 
     this.isRunning = false;
     this.runPromise = null;
@@ -83,11 +86,15 @@ class Scheduler {
   }
 
   getStartBlockReason() {
-    if (this.postScheduler.isRunning || this.postScheduler.runPromise) {
+    const postBlocked = (this.postScheduler.isRunning || this.postScheduler.runPromise)
+      && !this.isTrustedOwnedFeature('post');
+    if (postBlocked) {
       return '감시 자동화를 시작하기 전에 게시글 분류를 먼저 정지하세요.';
     }
 
-    if (this.ipScheduler.isRunning || this.ipScheduler.runPromise || this.ipScheduler.isReleaseRunning) {
+    const ipBlocked = (this.ipScheduler.isRunning || this.ipScheduler.runPromise || this.ipScheduler.isReleaseRunning)
+      && !this.isTrustedOwnedFeature('ip');
+    if (ipBlocked) {
       return '감시 자동화를 시작하기 전에 IP 차단을 먼저 정지하세요.';
     }
 
@@ -628,6 +635,10 @@ class Scheduler {
       return;
     }
 
+    if (this.isTrustedOwnedFeature('post') || this.isTrustedOwnedFeature('ip')) {
+      return;
+    }
+
     if (!this.initialSweepCompleted) {
       await this.performInitialSweep();
     }
@@ -811,8 +822,8 @@ class Scheduler {
   }
 
   async stopManagedDefenses() {
-    const shouldStopPost = this.managedPostStarted || (this.phase === PHASE.ATTACKING && (this.postScheduler.isRunning || this.postScheduler.runPromise));
-    const shouldStopIp = this.managedIpStarted || (this.phase === PHASE.ATTACKING && (this.ipScheduler.isRunning || this.ipScheduler.runPromise));
+    const shouldStopPost = this.managedPostStarted;
+    const shouldStopIp = this.managedIpStarted;
 
     if (shouldStopPost) {
       try {
