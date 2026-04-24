@@ -21,6 +21,7 @@ import {
   resolveRefluxSearchDuplicateDecision,
 } from '../post/reflux-search-duplicate-broker.js';
 import { resolveRefluxSearchGalleryId } from '../reflux-search-gallery-id.js';
+import { requestDeleteLimitAccountFallback } from '../../background/dc-session-broker.js';
 
 const STORAGE_KEY = 'monitorSchedulerState';
 
@@ -765,35 +766,7 @@ class Scheduler {
       return;
     }
 
-    try {
-      const deleteResult = await performDeleteOnce(this.postScheduler, targetPostNos);
-      if (deleteResult.successNos.length > 0) {
-        this.log(`🗑️ 감시 자동화 initial sweep 삭제 완료 (${deleteResult.successNos.length}개)`);
-      }
-      if (deleteResult.failedNos.length > 0) {
-        this.log(`⚠️ 감시 자동화 initial sweep 삭제 실패 ${deleteResult.failedNos.length}개 - ${deleteResult.failedNos.join(', ')}`);
-        if (deleteResult.message) {
-          this.log(`⚠️ 감시 자동화 initial sweep 삭제 상세: ${deleteResult.message}`);
-        }
-
-        if (deleteResult.deleteLimitExceeded || isDeleteLimitExceededText(deleteResult.message)) {
-          this.pendingManagedIpBanOnlyPosts = dedupePostsByNo([
-            ...this.pendingManagedIpBanOnlyPosts,
-            ...pickPostsByNos(targetPosts, deleteResult.failedNos),
-          ]);
-          this.activateManagedIpBanOnly(deleteResult.message);
-        }
-      }
-    } catch (error) {
-      this.log(`⚠️ 감시 자동화 initial sweep 삭제 오류 - ${error.message}`);
-      if (isDeleteLimitExceededText(error.message)) {
-        this.pendingManagedIpBanOnlyPosts = dedupePostsByNo([
-          ...this.pendingManagedIpBanOnlyPosts,
-          ...targetPosts,
-        ]);
-        this.activateManagedIpBanOnly(error.message);
-      }
-    }
+    await this.deleteInitialSweepPostsWithFallback(targetPosts, targetPostNos);
 
     if (!this.isRunning || this.phase !== PHASE.ATTACKING) {
       return;
@@ -805,6 +778,117 @@ class Scheduler {
     this.log(`✅ 감시 자동화 initial sweep 1회 처리 완료 (${targetPostNos.length}개 대상)`);
 
     await this.saveState();
+  }
+
+  async deleteInitialSweepPostsWithFallback(targetPosts, targetPostNos) {
+    let pendingNos = dedupePostNos(targetPostNos);
+    let fallbackAttemptCount = 0;
+    const maxFallbackAttempts = 3;
+
+    while (pendingNos.length > 0) {
+      if (!this.isRunning || this.phase !== PHASE.ATTACKING) {
+        return;
+      }
+
+      let deleteResult = null;
+      try {
+        deleteResult = await performDeleteOnce(this.postScheduler, pendingNos);
+      } catch (error) {
+        this.log(`⚠️ 감시 자동화 initial sweep 삭제 오류 - ${error.message}`);
+        if (!isDeleteLimitExceededText(error.message)) {
+          return;
+        }
+
+        deleteResult = {
+          successNos: [],
+          failedNos: [...pendingNos],
+          message: error.message,
+          deleteLimitExceeded: true,
+        };
+      }
+
+      this.logInitialSweepDeleteResult(deleteResult);
+      const successNos = dedupePostNos(deleteResult?.successNos);
+      if (successNos.length > 0) {
+        this.removePendingManagedIpBanOnlyPosts(successNos);
+      }
+
+      const deleteLimitExceeded = Boolean(deleteResult?.deleteLimitExceeded) || isDeleteLimitExceededText(deleteResult?.message);
+      if (!deleteLimitExceeded) {
+        return;
+      }
+
+      const resultFailedNos = dedupePostNos(deleteResult?.failedNos);
+      const failedNos = resultFailedNos.length > 0 ? resultFailedNos : pendingNos;
+      const failedPosts = pickPostsByNos(targetPosts, failedNos);
+      if (failedPosts.length > 0) {
+        this.pendingManagedIpBanOnlyPosts = dedupePostsByNo([
+          ...this.pendingManagedIpBanOnlyPosts,
+          ...failedPosts,
+        ]);
+      }
+
+      if (fallbackAttemptCount >= maxFallbackAttempts) {
+        this.activateManagedIpBanOnly('삭제 한도 계정 전환 재시도 한도에 도달해 이번 공격 세션 동안 IP 차단만 유지합니다.');
+        return;
+      }
+
+      let fallbackResult = null;
+      try {
+        fallbackResult = await requestDeleteLimitAccountFallback({
+          feature: 'monitor',
+          reason: 'delete_limit_exceeded',
+          message: deleteResult.message,
+        });
+      } catch (error) {
+        const message = error?.message || deleteResult.message || '삭제 한도 계정 전환 중 오류가 발생했습니다.';
+        this.activateManagedIpBanOnly(message);
+        return;
+      }
+
+      if (!fallbackResult?.success) {
+        this.activateManagedIpBanOnly(fallbackResult?.message || deleteResult.message);
+        return;
+      }
+
+      if (!this.isRunning || this.phase !== PHASE.ATTACKING) {
+        return;
+      }
+
+      fallbackAttemptCount += 1;
+      this.log(`🔁 감시 자동화 initial sweep 삭제 한도 계정 전환 성공 - ${fallbackResult.activeAccountLabel}로 삭제를 재시도합니다.`);
+      pendingNos = failedNos;
+    }
+  }
+
+  removePendingManagedIpBanOnlyPosts(postNos) {
+    const removeNos = new Set(dedupePostNos(postNos));
+    if (removeNos.size === 0 || this.pendingManagedIpBanOnlyPosts.length === 0) {
+      return false;
+    }
+
+    const beforeCount = this.pendingManagedIpBanOnlyPosts.length;
+    this.pendingManagedIpBanOnlyPosts = dedupePostsByNo(
+      this.pendingManagedIpBanOnlyPosts.filter((post) => !removeNos.has(String(post?.no || '').trim())),
+    );
+    return this.pendingManagedIpBanOnlyPosts.length !== beforeCount;
+  }
+
+  logInitialSweepDeleteResult(deleteResult) {
+    const successNos = dedupePostNos(deleteResult?.successNos);
+    const failedNos = dedupePostNos(deleteResult?.failedNos);
+    const message = String(deleteResult?.message || '').trim();
+
+    if (successNos.length > 0) {
+      this.log(`🗑️ 감시 자동화 initial sweep 삭제 완료 (${successNos.length}개)`);
+    }
+
+    if (failedNos.length > 0) {
+      this.log(`⚠️ 감시 자동화 initial sweep 삭제 실패 ${failedNos.length}개 - ${failedNos.join(', ')}`);
+      if (message) {
+        this.log(`⚠️ 감시 자동화 initial sweep 삭제 상세: ${message}`);
+      }
+    }
   }
 
   async enterRecoveringMode() {
@@ -1314,7 +1398,7 @@ function pickPostsByNos(posts, postNos) {
 }
 
 function isDeleteLimitExceededText(value) {
-  return /(일일\s*삭제\s*횟수가\s*초과되어\s*삭제할\s*수\s*없습니다|추가\s*삭제가\s*필요한\s*경우\s*신고\s*게시판에\s*문의)/.test(String(value || ''));
+  return /(일일.*(삭제|차단)횟수.*초과.*(삭제|차단)할\s*수\s*없|추가.*(삭제|차단).*신고\s*게시판.*문의)/i.test(String(value || ''));
 }
 
 export { PHASE, Scheduler };

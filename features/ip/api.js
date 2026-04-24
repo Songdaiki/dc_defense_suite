@@ -466,7 +466,7 @@ function normalizeFailureText(data, responseText) {
 }
 
 function isDeleteLimitExceededText(value) {
-  return /(일일삭제횟수가초과되어삭제할수없습니다|일일삭제횟수가초과되어삭제할수없|추가삭제가필요한경우신고게시판에문의)/.test(String(value || ''));
+  return /(일일.*(삭제|차단)횟수.*초과.*(삭제|차단)할수없|추가.*(삭제|차단).*신고게시판.*문의)/i.test(String(value || ''));
 }
 
 function chunkArray(items, chunkSize) {

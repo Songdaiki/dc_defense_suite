@@ -389,16 +389,18 @@ async function deletePostBatch(config, ciToken, postNos, options = {}) {
     try {
         const data = JSON.parse(responseText);
         const failureType = inferDeletionFailureType(response, data, responseText);
+        const hasHardFailure = failureType && failureType !== 'unknown';
         return {
-            success: isManagementResponseSuccessful(response, data, responseText),
+            success: hasHardFailure ? false : isManagementResponseSuccessful(response, data, responseText),
             message: JSON.stringify(data),
             shouldSplit: shouldSplitDeletionFailure(response, responseText, failureType),
             failureType,
         };
     } catch {
         const failureType = inferDeletionFailureType(response, null, responseText);
+        const hasHardFailure = failureType && failureType !== 'unknown';
         return {
-            success: isManagementResponseSuccessful(response, null, responseText),
+            success: hasHardFailure ? false : isManagementResponseSuccessful(response, null, responseText),
             message: summarizeResponseText(responseText),
             shouldSplit: shouldSplitDeletionFailure(response, responseText, failureType),
             failureType,
@@ -510,7 +512,7 @@ function normalizeFailureText(value) {
 }
 
 function isDeleteLimitExceededText(value) {
-    return /(일일삭제횟수가초과되어삭제할수없습니다|추가삭제가필요한경우신고게시판에문의)/.test(
+    return /(일일.*(삭제|차단)횟수.*초과.*(삭제|차단)할수없|추가.*(삭제|차단).*신고게시판.*문의)/i.test(
         normalizeFailureText(value),
     );
 }
