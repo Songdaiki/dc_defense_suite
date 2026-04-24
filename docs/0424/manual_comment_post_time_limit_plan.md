@@ -35,6 +35,45 @@
 5. 시간제한 자동 종료는 현재 API 구조상 "협력적 정지"다. 이미 시작된 fetch/delete/classify 요청을 중간 abort하지는 못한다. 만료 직후 새 page/post/batch를 시작하지 않도록 loop 경계마다 체크하되, in-flight 요청 1개는 완료될 수 있음을 검증 문서에 남긴다.
 6. `popup/popup.html`은 `<script src="popup.js"></script>`인 일반 script다. popup에서 background/scheduler helper를 import하는 설계는 맞지 않는다. popup clamp helper는 popup 안에 두거나 전역 스크립트 구조를 바꾸지 않는 방식으로 처리한다.
 
+## 3차 연결 검증에서 추가로 잡은 보강점
+
+실제 호출부를 다시 따라가면서 아래 연결 문제를 추가로 확인했다.
+
+1. 게시글 분류는 수동 실행 중 설정 저장이 `pendingRuntimeTransition`을 만들 수 있다. 이 상태에서 감시 자동화가 `setMonitorAttackMode()`로 child를 넘겨받으면, 기존 pending transition이 나중에 `applyPendingRuntimeTransitionIfNeeded()`에서 `currentSource = 'manual'`로 되돌릴 수 있다. 따라서 monitor takeover 시 pending transition도 반드시 cancel해야 한다.
+2. `runPromise` 정리 중 start guard는 background만 보면 `getStartBlockReason()`으로 충분하지만, trusted-command는 child scheduler를 직접 호출한다. `start()`가 조용히 return하면 trusted-command가 child가 켜졌다고 보고 ownership을 잡을 수 있다. direct caller까지 고려해서 `runPromise` block은 silent return으로 처리하면 안 된다.
+3. trusted-command의 `shouldAllowPostDefenseStart()` / `shouldAllowCommentDefenseStart()`는 현재 `isRunning`만 본다. 새 `runPromise` guard를 넣는다면 여기도 `runPromise`를 busy 상태로 봐야 한다.
+4. popup의 댓글 기본 토글은 `response.statuses`가 있으면 `applyStatuses()`를 호출하지만, 게시글 기본 토글은 현재 `updatePostUI(response.status)`만 호출한다. 새 수동 제한 input disable을 `applyAutomationLocks()`에만 두면 게시글 기본 ON 직후 UI lock이 바로 반영되지 않을 수 있다. 게시글 기본 토글도 statuses를 적용하거나 `updatePostUI()`에서 직접 처리해야 한다.
+5. 댓글 `loadState()`는 legacy config migration 시 중간에 `saveState()`를 호출한다. 새 manual lease cleanup을 넣을 때는 `needsSave` flag로 마지막에 한 번 저장하거나, 만료 cleanup 이후 저장되도록 순서를 정리해야 stale lease를 잠깐이라도 다시 저장하지 않는다.
+
+## 3차 실제 코드 대조표
+
+아래 line range는 2026-04-24 기준 `agent/manual-defense-time-limit-docs-0424` 브랜치에서 확인했다.
+
+| 문서 항목 | 실제 코드 위치 | 확인 결과 |
+| --- | --- | --- |
+| 팝업 댓글 기본 수동 start | `popup/popup.js:2423-2428` | `source: 'manual'`, `commentAttackMode: 'default'`로 start message를 보낸다. 여기에 `manualTimeLimit: true`를 붙이면 된다. |
+| 팝업 댓글 quick start | `popup/popup.js:2538-2570` | quick mode도 `source: 'manual'`로 start한다. dirty 차단과 `manualTimeLimit: true`가 같이 필요하다. |
+| 팝업 게시글 기본 수동 start | `popup/popup.js:2601-2609` | `source: 'manual'`, `attackMode: 'default'`로 start한다. 현재 `response.statuses`를 무시하므로 보강 필요. |
+| 팝업 게시글 quick start | `popup/popup.js:2699-2731` | quick mode도 `source: 'manual'`로 start한다. dirty 차단과 `manualTimeLimit: true`가 같이 필요하다. |
+| background start 전달 | `background/background.js:656-682` | start 전에 `getStartBlockReason()`을 확인하고, 댓글/게시글 start options를 만든다. 여기서만 message flag를 scheduler로 전달하면 된다. |
+| background updateConfig 순서 | `background/background.js:890-925`, `background/background.js:1147-1163`, `background/background.js:2593-2655` | config normalize 후 `getConfigUpdateBlockMessage()`가 먼저 실행되고, 그 다음 게시글 running transition을 처리한다. 시간제한 변경 차단 위치는 `getConfigUpdateBlockMessage()`가 맞다. |
+| background manual lock | `background/background.js:2219-2285` | monitor/commentMonitor/trusted-command 실행 중 수동 조작을 막는다. 새 시간제한은 scheduler 내부 source/lease 기준으로 분리해야 한다. |
+| 댓글 scheduler start/stop | `features/comment/scheduler.js:61-130` | start는 source/mode/preflight 후 `isRunning=true`와 save, stop은 VPNGate/reflux/logger/source/mode 정리를 한다. lease 생성/clear 위치가 명확하다. |
+| 댓글 run/worker loop | `features/comment/scheduler.js:213-262`, `features/comment/scheduler.js:823-847` | 긴 delay와 다중 worker가 있어 `manualTimeLimitStopping` guard와 delay chunking이 필요하다. |
+| 댓글 게시물 처리 내부 | `features/comment/scheduler.js:272-442`, `features/comment/scheduler.js:704-763` | fetch/search/delete/verify 경계가 길다. hard abort가 아니라 각 경계에서 cooperative stop을 걸어야 한다. |
+| 댓글 source 전환 | `features/comment/scheduler.js:959-970` | 현재는 source 동일 시 바로 return한다. 새 lease cleanup은 early return보다 먼저 실행되어야 한다. |
+| 댓글 state 복원/status | `features/comment/scheduler.js:996-1122` | `currentSource/currentAttackMode`는 이미 저장/복원/status에 있다. manualTimeLimit state와 load cleanup을 추가하면 된다. |
+| 댓글 감시 child 시작/전환 | `features/comment-monitor/scheduler.js:428-489` | 새 child는 `source: 'monitor'`; 기존 child는 `setCurrentSource('monitor')` 후 필요 시 `saveState()`한다. lease clear return 값이 save trigger에 들어가야 한다. |
+| 게시글 scheduler start/stop | `features/post/scheduler.js:63-154` | start는 `normalizeStartOptions()` 결과를 사용하고 stop은 pending transition cancel/runtime reset을 한다. `manualTimeLimit` normalize와 lease clear를 추가한다. |
+| 게시글 monitor 전환/runtime clear | `features/post/scheduler.js:303-319` | `setMonitorAttackMode()`가 source를 monitor로 바꾼다. 여기에 lease clear와 pending transition cancel을 같이 넣어야 한다. |
+| 게시글 pending transition | `features/post/scheduler.js:350-490` | transition 적용 시 `currentSource = 'manual'`을 세팅한다. monitor takeover 때 cancel하지 않으면 source가 되돌아갈 수 있다. |
+| 게시글 run loop | `features/post/scheduler.js:497-635` | transition 적용, page loop, classify, request/cycle/error delay 경계에 만료 체크가 필요하다. |
+| 게시글 state 복원/status | `features/post/scheduler.js:658-753`, `features/post/scheduler.js:772-795` | 저장/복원/status에 source/mode가 있고, `normalizeStartOptions()`는 현재 raw source를 반환한다. source와 manualTimeLimit normalize가 필요하다. |
+| 게시글 감시 child 시작/전환 | `features/monitor/scheduler.js:634-688`, `features/monitor/scheduler.js:908-954` | 새 child는 `source: 'monitor'`, 기존 child는 `setMonitorAttackMode()`를 호출한다. release 시 기존 stop/clear 흐름이 있다. |
+| trusted-command child start | `features/trusted-comment-command-defense/scheduler.js:50`, `features/trusted-comment-command-defense/scheduler.js:81-85`, `features/trusted-comment-command-defense/scheduler.js:379-405`, `features/trusted-comment-command-defense/scheduler.js:441-449`, `features/trusted-comment-command-defense/scheduler.js:472-546`, `features/trusted-comment-command-defense/scheduler.js:565-620` | holdMs/ownership/UntilTs로 따로 관리한다. child start는 `source: 'manual'`이지만 popup flag가 없으므로 시간제한 대상이 아니다. 단 runPromise guard와 ownership 확인은 필요하다. |
+| popup UI 구조 | `popup/popup.html:681-735`, `popup/popup.html:1381-1424`, `popup/popup.html:2270` | comment/post status grid와 settings grid는 `.status-item`/`.setting-item` 구조이고 popup은 일반 script다. local helper로 구현해야 한다. |
+| popup DOM/status/lock | `popup/popup.js:412-455`, `popup/popup.js:3995-4077`, `popup/popup.js:4263-4339`, `popup/popup.js:6276-6292`, `popup/popup.js:6368-6378`, `popup/popup.js:6440-6447` | DOM mapping, status sync, automation locks, dirty tracking, config input list를 모두 같이 갱신해야 한다. |
+
 ## 현재 실제 로직 요약
 
 ### 1. 팝업 수동 시작 경로
@@ -278,23 +317,35 @@ getStartBlockReason() {
 }
 ```
 
-그리고 `start(options)` 안에서도 같은 helper를 확인한다.
+그리고 `start(options)` 안에서도 같은 상태를 확인한다. 단, direct caller까지 고려하면 `runPromise` 정리 중에는 조용히 return하면 안 된다.
 
 ```js
 async start(options = {}) {
-  const startBlockReason = this.getStartBlockReason();
-  if (startBlockReason) {
-    this.log(`⚠️ ${startBlockReason}`);
-    return;
+  if (this.isRunning) {
+    this.log('⚠️ 이미 실행 중입니다.');
+    return false;
+  }
+
+  if (this.runPromise) {
+    const message = '이전 실행을 정리 중입니다. 잠시 후 다시 시도하세요.';
+    this.log(`⚠️ ${message}`);
+    throw new Error(message);
   }
 
   ...
+  return true;
 }
 ```
 
 예를 들어 13:30에 시간제한으로 자동 정지된 직후 관리자가 바로 ON을 눌렀을 때, 이전 loop가 정리 중이면 background가 `success: false`를 내려주고 popup은 다시 상태를 새로고침한다. 조용히 성공 처리하면 실제 run은 안 붙었는데 토글만 켜진 것처럼 보일 수 있다.
 
 `runPromise` 정리 중에는 start block 로그를 저장하려고 `saveState()`를 또 호출하지 않는 쪽이 안전하다. stop 쪽의 `saveState()`가 아직 진행 중일 수 있기 때문이다.
+
+trusted-command는 background start message를 거치지 않고 `postScheduler.start()` / `commentScheduler.start()`를 직접 부른다. 따라서 아래도 같이 반영한다.
+
+- `background/background.js`의 trusted-command dependency인 `shouldAllowPostDefenseStart()` / `shouldAllowCommentDefenseStart()`에서 `runPromise`도 busy로 본다.
+- trusted-command에서 child start 후 ownership을 잡기 전 `childScheduler.isRunning`을 확인한다.
+- child start가 `false`를 반환하거나 `runPromise` 때문에 throw하면 ownership을 잡지 않고 명령 실패로 처리한다.
 
 ### helper 함수
 
@@ -524,6 +575,25 @@ if (!this.isRunning || this.currentSource !== 'manual') {
 
 `cleanupExpiredManualTimeLimitOnLoad()`는 `stop()`을 그대로 호출하기보다 loadState 전용 정리 helper로 둔다. `stop()`은 로그/저장/루프 상태를 전제로 한 동작이 섞여 있고, loadState 도중 다시 saveState를 부르는 순서가 꼬일 수 있기 때문이다.
 
+댓글 scheduler는 현재 legacy config migration 시 `loadState()` 중간에서 바로 `saveState()`를 호출한다. 새 cleanup을 넣을 때는 아래처럼 `needsSave` flag를 두고 마지막에 한 번 저장하는 방식이 안전하다.
+
+```js
+let needsSave = false;
+...
+if (migratedLegacyConfig) {
+  needsSave = true;
+}
+...
+if (expiredManualTimeLimitCleaned) {
+  needsSave = true;
+}
+if (needsSave) {
+  await this.saveState();
+}
+```
+
+이렇게 해야 만료된 `manualTimeLimitExpiresAt`을 복원한 직후 migration 저장이 먼저 실행되어 stale lease가 다시 storage에 쓰이는 일을 피할 수 있다.
+
 댓글 loadState 만료 정리에서 필요한 최소 작업:
 
 - `isRunning = false`
@@ -729,6 +799,17 @@ setDisabled(
 
 기존 `getFeatureConfigInputs('comment/post')` 전체를 `status.isRunning`으로 잠그면 기존 실행 중 설정 저장 흐름까지 바뀐다. 이번 변경에서는 `manualTimeLimitMinutesInput`만 별도로 잠그는 것이 안전하다.
 
+게시글 기본 토글은 현재 응답에 `statuses`가 있어도 `updatePostUI(response.status)`만 호출한다. 새 lock 표시가 바로 맞아야 하므로 댓글 토글처럼 아래 흐름을 맞춘다.
+
+```js
+if (response.statuses) {
+  applyStatuses(response.statuses);
+  return;
+}
+
+updatePostUI(response.status);
+```
+
 ### popup.js start message
 
 시간제한은 아래 수동 시작 버튼들에만 붙인다.
@@ -826,15 +907,27 @@ this.currentSource = nextSource;
 
 게시글:
 
-`postScheduler.setMonitorAttackMode()`에서 source를 `monitor`로 바꾸기 전에/후에 `clearManualTimeLimit()`을 호출한다.
+`postScheduler.setMonitorAttackMode()`에서 source를 `monitor`로 바꾸기 전에/후에 `clearManualTimeLimit()`을 호출한다. 또한 수동 설정 저장이 만들어 둔 `pendingRuntimeTransition`도 cancel한다.
 
 ```js
 const hadManualTimeLimit = Boolean(this.manualTimeLimitExpiresAt);
+const hadPendingRuntimeTransition = this.cancelPendingRuntimeTransition(
+  '감시 자동화가 게시글 분류를 넘겨받아 수동 모드 전환을 취소했습니다.',
+);
 this.currentSource = 'monitor';
 this.clearManualTimeLimit();
 ...
-return sourceChanged || modeChanged || hadManualTimeLimit;
+return sourceChanged || modeChanged || hadManualTimeLimit || hadPendingRuntimeTransition;
 ```
+
+이 cancel이 없으면 아래 흐름이 가능하다.
+
+- 13:00 관리자가 게시글 분류를 수동 ON
+- 13:01 관리자가 실행 중 공격 모드/역류 갤 설정을 저장해서 `pendingRuntimeTransition` 생성
+- 13:01:05 감시 자동화가 공격을 감지해 `setMonitorAttackMode()`로 source를 `monitor`로 변경
+- 다음 loop에서 남아 있던 `applyPendingRuntimeTransitionIfNeeded()`가 `currentSource = 'manual'`을 다시 적용
+
+이러면 자동 대응 중인데 source가 수동으로 되돌아가므로, monitor takeover 시 pending transition은 반드시 취소한다.
 
 `postScheduler.clearRuntimeAttackMode()`에서도 `clearManualTimeLimit()`을 호출한다.
 
@@ -942,7 +1035,8 @@ if (
    - runtime field 추가
    - helper 추가
    - `start(options)`에서 preflight 성공 후 `setupManualTimeLimit(options)`
-   - `getStartBlockReason()`을 추가하고 `start(options)`에서도 같은 helper를 확인해서 `this.isRunning || this.runPromise`이면 새 run을 만들지 못하게 처리
+   - `getStartBlockReason()`을 추가하고 `start(options)`에서도 `this.isRunning || this.runPromise`이면 새 run을 만들지 못하게 처리
+   - `runPromise` 정리 중 direct start는 silent return하지 않고 caller가 실패를 알 수 있게 처리
    - `stop(reason)`에서 기존 stop side effect를 보존하고 `clearManualTimeLimit()`
    - `stopIfManualTimeLimitExpired()`를 idempotent하게 추가
    - `setCurrentSource()`에서 source가 manual이 아니면 lease clear
@@ -955,10 +1049,12 @@ if (
    - helper 추가
    - `normalizeStartOptions()`에서 source와 `manualTimeLimit` normalize
    - `start(options)`에서 preflight 성공 후 `setupManualTimeLimit(normalizedOptions)`
-   - `getStartBlockReason()`을 추가하고 `start(options)`에서도 같은 helper를 확인해서 `this.isRunning || this.runPromise`이면 새 run을 만들지 못하게 처리
+   - `getStartBlockReason()`을 추가하고 `start(options)`에서도 `this.isRunning || this.runPromise`이면 새 run을 만들지 못하게 처리
+   - `runPromise` 정리 중 direct start는 silent return하지 않고 caller가 실패를 알 수 있게 처리
    - `stop(reason)`에서 기존 stop side effect를 보존하고 `clearManualTimeLimit()`
    - `stopIfManualTimeLimitExpired()`를 idempotent하게 추가
-   - `setMonitorAttackMode()` / `clearRuntimeAttackMode()`에서 lease clear
+   - `setMonitorAttackMode()`에서 lease clear와 pending runtime transition cancel
+   - `clearRuntimeAttackMode()`에서 lease clear
    - `run()` delay와 loop에 만료 체크 추가
    - `saveState()` / `loadState()` / `getStatus()`에 runtime state 추가
 
@@ -966,6 +1062,7 @@ if (
    - 댓글/게시글 start option에 `manualTimeLimit: message.manualTimeLimit === true` 전달
    - 댓글/게시글 updateConfig에서 `manualTimeLimitMinutes`를 1~1440으로 normalize
    - `getConfigUpdateBlockMessage()`에서 댓글/게시글 실행 중 `manualTimeLimitMinutes` 변경은 차단
+   - trusted-command dependency의 child start 가능 조건에서 댓글/게시글 `runPromise`도 busy로 처리
    - resetStats는 실행 중 lease를 지우지 않는다. 통계 초기화는 실행 자체를 바꾸면 안 된다.
 
 4. `popup/popup.html`
@@ -981,6 +1078,7 @@ if (
    - 실행 중에는 `manualTimeLimitMinutesInput`만 비활성화
    - dirty 설정이 있으면 댓글/게시글 수동 start 차단
    - 댓글/게시글 팝업 수동 start message에 `manualTimeLimit: true` 추가
+   - 게시글 기본 토글도 `response.statuses`가 있으면 `applyStatuses()` 사용
 
 ## 구현 후 검증 체크리스트
 
@@ -998,10 +1096,13 @@ rg -n "manualTimeLimit|manualTimeLimitExpiresAt|setMonitorAttackMode|setCurrentS
 - trusted-command의 `postScheduler.start({ source: 'manual' })`, `commentScheduler.start({ source: 'manual' })`에는 flag가 없어야 한다.
 - `comment-monitor`와 `monitor`의 `source: 'monitor'` start에는 flag가 없어야 한다.
 - source가 `monitor`로 전환되는 함수에서 lease clear가 있어야 한다.
+- 게시글 `setMonitorAttackMode()`에서 pending runtime transition cancel이 있어야 한다.
 - `stopIfManualTimeLimitExpired()`가 `manualTimeLimitStopping` guard를 써서 중복 stop을 막아야 한다.
 - loadState 만료 정리가 기존 stop side effect와 같은 리소스 정리를 해야 한다.
 - popup 수동 start 전에 dirty 설정 차단이 있어야 한다.
 - 실행 중 `manualTimeLimitMinutes` 변경 차단이 있어야 한다.
+- trusted-command가 직접 child start를 호출하는 경로에서 `runPromise` 정리 중 ownership을 잡지 않아야 한다.
+- 게시글 기본 토글 ON/OFF 응답에서 `response.statuses`가 있으면 `applyStatuses()`로 lock/UI를 함께 갱신해야 한다.
 
 ### 수동 댓글 방어
 
@@ -1095,6 +1196,21 @@ rg -n "manualTimeLimit|manualTimeLimitExpiresAt|setMonitorAttackMode|setCurrentS
 2. 시간제한 만료로 OFF 된 직후 바로 ON을 다시 누른다.
 3. 이전 run loop의 정리 중 promise 때문에 새 run이 중복 실행되거나 바로 꺼지지 않는지 확인한다.
 4. 게시글 분류도 같은 방식으로 확인한다.
+
+### 게시글 pending transition 중 자동 감시 takeover
+
+1. 게시글 분류를 수동 ON 한다.
+2. 실행 중 게시글 공격 모드 또는 역류 검색 갤 설정을 저장해 `pendingRuntimeTransition`을 만든다.
+3. transition이 적용되기 전에 감시 자동화가 공격을 감지하도록 만든다.
+4. `setMonitorAttackMode()`가 pending transition을 cancel하고 source를 `monitor`로 유지하는지 확인한다.
+5. 이후 loop에서 `applyPendingRuntimeTransitionIfNeeded()`가 source를 다시 `manual`로 되돌리지 않는지 확인한다.
+
+### trusted-command direct start
+
+1. 댓글 방어 또는 게시글 분류가 stop 직후 `runPromise` 정리 중인 상황을 만든다.
+2. 그 순간 trusted-command의 `댓글방어` 또는 `게시물방어` 명령을 처리한다.
+3. child가 실제로 `isRunning === true`가 되지 않았는데 `ownedCommentScheduler` 또는 `ownedPostScheduler`가 true로 잡히지 않는지 확인한다.
+4. `shouldAllowPostDefenseStart()` / `shouldAllowCommentDefenseStart()`가 `runPromise`도 busy로 보는지 확인한다.
 
 ## 위험 지점과 대응
 
@@ -1203,7 +1319,37 @@ await delay(this.config.cycleDelay);
 - 댓글/게시글 scheduler에 `getStartBlockReason()`을 추가해서 `this.isRunning`이면 "이미 실행 중입니다.", `this.runPromise`가 남아 있으면 "이전 실행을 정리 중입니다. 잠시 후 다시 시도하세요."류 메시지를 반환한다.
 - background는 이미 start 전에 `scheduler.getStartBlockReason()`을 확인하므로, 이 방식이면 팝업에 `success: false`가 내려간다.
 - 단순히 `start()` 안에서 조용히 `return`하면 background가 `success: true`로 응답할 수 있다. 이 경우 실제로는 시작되지 않았는데 팝업이 ON처럼 보일 수 있으므로 피한다.
+- trusted-command처럼 scheduler를 직접 호출하는 경로에서는 조용한 return이 ownership 오판으로 이어질 수 있으므로, `runPromise` busy는 throw 또는 명시적인 false 반환으로 caller가 반드시 알 수 있게 한다.
 - 최소한 빠른 OFF->ON 재시작 검증을 추가한다.
+
+### 위험 9. pending runtime transition이 monitor source를 되돌림
+
+게시글 분류는 실행 중 설정 변경이 `pendingRuntimeTransition`을 만들고, 실제 적용 시 `applyPendingRuntimeTransitionIfNeeded()`가 `currentSource = 'manual'`을 세팅한다.
+
+나쁜 흐름:
+
+```text
+수동 게시글 분류 실행
+-> 실행 중 공격 모드 저장으로 pendingRuntimeTransition 생성
+-> 감시 자동화가 공격 감지, setMonitorAttackMode()로 source monitor 전환
+-> 남아 있던 pendingRuntimeTransition 적용
+-> source가 manual로 되돌아감
+```
+
+대응:
+
+- `setMonitorAttackMode()`에서 `cancelPendingRuntimeTransition()`을 먼저 호출한다.
+- cancel 여부도 return 값에 반영해 caller가 `saveState()` 하게 한다.
+- 검증에서 takeover 이후 다음 loop까지 source가 `monitor`로 유지되는지 확인한다.
+
+### 위험 10. 게시글 기본 토글만 statuses를 무시함
+
+댓글 기본 토글과 게시글 quick toggle은 `response.statuses`가 있으면 `applyStatuses()`를 호출하지만, 현재 게시글 기본 토글은 `updatePostUI(response.status)`만 호출한다.
+
+대응:
+
+- 게시글 기본 토글도 `response.statuses`가 있으면 `applyStatuses()`를 호출한다.
+- 그래야 새 `수동 제한` 표시와 `manualTimeLimitMinutesInput` disabled 상태가 start/stop 직후 바로 맞는다.
 
 ## 최종 판단
 
