@@ -20,6 +20,15 @@ const DEFAULT_CONFIG = {
   delChk: true,
   avoidTypeChk: true,
   immediateTitleBanRules: [],
+  attackCommentClusterEnabled: true,
+  attackCommentClusterMinCount: 10,
+  attackCommentMinNormalizedLength: 6,
+  attackCommentFetchConcurrency: 10,
+  attackCommentFetchRequestDelayMs: 100,
+  attackCommentFetchTimeoutMs: 15 * 1000,
+  attackCommentDeleteDelayMs: 100,
+  attackCommentDeleteTimeoutMs: 15 * 1000,
+  attackCommentSnapshotTtlMs: 30 * 1000,
 };
 
 function resolveConfig(config = {}) {

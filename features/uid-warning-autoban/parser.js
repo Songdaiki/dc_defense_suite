@@ -66,6 +66,7 @@ function parsePage1BoardRows(html, options = {}) {
 
     const nick = decodeHtml(extractAttribute(writerTag, 'data-nick') || 'ㅇㅇ');
     const title = extractBoardTitle(rowHtml);
+    const commentCount = extractCommentCount(rowHtml);
     const currentHead = extractCurrentHead(rowHtml);
     const writerToken = uid || ip;
     const contentType = decodeHtml(extractAttribute(rowTagHtml, 'data-type'));
@@ -79,6 +80,7 @@ function parsePage1BoardRows(html, options = {}) {
       nick,
       title,
       subject: title,
+      commentCount,
       currentHead,
       createdAtText,
       createdAtMs,
@@ -441,10 +443,17 @@ function extractBoardTitle(rowHtml) {
 
   const titleHtml = titleMatch[1]
     .replace(/<em[^>]*class="icon_[^"]*"[\s\S]*?<\/em>/gi, ' ')
-    .replace(/<span[^>]*class="reply_num"[\s\S]*?<\/span>/gi, ' ')
+    .replace(/<span[^>]*class="[^"]*reply_num[^"]*"[\s\S]*?<\/span>/gi, ' ')
     .replace(/<[^>]+>/g, ' ');
 
   return decodeHtml(titleHtml).replace(/\s+/g, ' ').trim();
+}
+
+function extractCommentCount(rowHtml) {
+  const match = String(rowHtml || '').match(
+    /<span[^>]*class="[^"]*reply_num[^"]*"[^>]*>\[(\d+)\]<\/span>/i,
+  );
+  return match ? Math.max(0, Number(match[1]) || 0) : 0;
 }
 
 function extractCurrentHead(rowHtml) {
