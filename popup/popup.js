@@ -498,7 +498,11 @@ const FEATURE_DOM = {
     immediateTitleRuleCount: document.getElementById('uidWarningAutoBanImmediateTitleRuleCount'),
     lastImmediateTitleBanMatchedTitle: document.getElementById('uidWarningAutoBanLastImmediateTitleBanMatchedTitle'),
     lastImmediateTitleBanCount: document.getElementById('uidWarningAutoBanLastImmediateTitleBanCount'),
+    lastAttackTitleClusterCount: document.getElementById('uidWarningAutoBanLastAttackTitleClusterCount'),
+    lastAttackTitleClusterPostCount: document.getElementById('uidWarningAutoBanLastAttackTitleClusterPostCount'),
+    lastAttackTitleClusterRepresentative: document.getElementById('uidWarningAutoBanLastAttackTitleClusterRepresentative'),
     totalImmediateTitleBanPostCount: document.getElementById('uidWarningAutoBanTotalImmediateTitleBanPostCount'),
+    totalAttackTitleClusterPostCount: document.getElementById('uidWarningAutoBanTotalAttackTitleClusterPostCount'),
     totalSingleSightBannedPostCount: document.getElementById('uidWarningAutoBanTotalSingleSightBannedPostCount'),
     totalBannedPostCount: document.getElementById('uidWarningAutoBanTotalBannedPostCount'),
     totalFailedPostCount: document.getElementById('uidWarningAutoBanTotalFailedPostCount'),
@@ -4195,9 +4199,13 @@ function updateUidWarningAutoBanUI(status) {
   dom.immediateTitleRuleCount.textContent = `${(nextStatus.config?.immediateTitleBanRules || []).length}개`;
   dom.lastImmediateTitleBanMatchedTitle.textContent = nextStatus.lastImmediateTitleBanMatchedTitle || '-';
   dom.lastImmediateTitleBanCount.textContent = `${nextStatus.lastImmediateTitleBanCount ?? 0}개`;
+  dom.lastAttackTitleClusterCount.textContent = `${nextStatus.lastAttackTitleClusterCount ?? 0}개`;
+  dom.lastAttackTitleClusterPostCount.textContent = `${nextStatus.lastAttackTitleClusterPostCount ?? 0}개`;
+  dom.lastAttackTitleClusterRepresentative.textContent = nextStatus.lastAttackTitleClusterRepresentative || '-';
   dom.totalTriggeredUidCount.textContent = `${nextStatus.totalTriggeredUidCount ?? 0}명`;
   dom.totalSingleSightTriggeredUidCount.textContent = `${nextStatus.totalSingleSightTriggeredUidCount ?? 0}명`;
   dom.totalImmediateTitleBanPostCount.textContent = `${nextStatus.totalImmediateTitleBanPostCount ?? 0}개`;
+  dom.totalAttackTitleClusterPostCount.textContent = `${nextStatus.totalAttackTitleClusterPostCount ?? 0}개`;
   dom.totalSingleSightBannedPostCount.textContent = `${nextStatus.totalSingleSightBannedPostCount ?? 0}개`;
   dom.totalBannedPostCount.textContent = `${nextStatus.totalBannedPostCount ?? 0}개`;
   dom.totalFailedPostCount.textContent = `${nextStatus.totalFailedPostCount ?? 0}개`;
@@ -6109,10 +6117,14 @@ function buildDefaultUidWarningAutoBanStatus() {
     lastSingleSightTriggeredPostCount: 0,
     lastImmediateTitleBanCount: 0,
     lastImmediateTitleBanMatchedTitle: '',
+    lastAttackTitleClusterCount: 0,
+    lastAttackTitleClusterPostCount: 0,
+    lastAttackTitleClusterRepresentative: '',
     lastPageUidCount: 0,
     totalTriggeredUidCount: 0,
     totalSingleSightTriggeredUidCount: 0,
     totalImmediateTitleBanPostCount: 0,
+    totalAttackTitleClusterPostCount: 0,
     totalSingleSightBannedPostCount: 0,
     totalBannedPostCount: 0,
     totalFailedPostCount: 0,
@@ -6168,7 +6180,7 @@ function buildUidWarningAutoBanMetaText(status = {}) {
     : 0;
 
   if (!status.isRunning) {
-    return `10초마다 1페이지를 확인해 제목 직차단 ${immediateTitleRuleCount}개 규칙, 글댓총합 20 미만인 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 봅니다.`;
+    return `10초마다 1페이지를 확인해 제목 직차단 ${immediateTitleRuleCount}개 규칙, 실제공격 제목 유동 3개 이상 군집, 글댓총합 20 미만 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 봅니다.`;
   }
 
   if (status.lastError) {
@@ -6192,6 +6204,10 @@ function buildUidWarningAutoBanMetaText(status = {}) {
     return `최근 제목 직차단 ${status.lastImmediateTitleBanMatchedTitle || '규칙'} / page1 글 ${status.lastImmediateTitleBanCount ?? 0}개`;
   }
 
+  if ((status.lastAttackTitleClusterPostCount ?? 0) > 0) {
+    return `최근 실제공격 제목 군집 ${status.lastAttackTitleClusterRepresentative || '패턴'} / page1 유동글 ${status.lastAttackTitleClusterPostCount ?? 0}개`;
+  }
+
   if (status.lastSingleSightTriggeredUid) {
     return `최근 단일깡계 ${status.lastSingleSightTriggeredUid} / page1 글 ${status.lastSingleSightTriggeredPostCount ?? 0}개`;
   }
@@ -6201,10 +6217,10 @@ function buildUidWarningAutoBanMetaText(status = {}) {
   }
 
   if (immediateTitleRuleCount > 0) {
-    return `현재는 제목 직차단 ${immediateTitleRuleCount}개 규칙, 글댓총합 20 미만인 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 감시 중입니다.`;
+    return `현재는 제목 직차단 ${immediateTitleRuleCount}개 규칙, 실제공격 제목 유동 3개 이상 군집, 글댓총합 20 미만인 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 감시 중입니다.`;
   }
 
-  return '현재는 제목 직차단 / 글댓총합 20 미만 page1 burst 깡계 / 방명록 잠금 저활동 깡계를 함께 대기 중입니다.';
+  return '현재는 제목 직차단 / 실제공격 제목 유동 3개 이상 군집 / 글댓총합 20 미만 page1 burst 깡계 / 방명록 잠금 저활동 깡계를 함께 대기 중입니다.';
 }
 
 function updateToggle(dom, isRunning) {

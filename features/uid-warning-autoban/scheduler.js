@@ -1,4 +1,11 @@
 import {
+  ATTACK_TITLE_BAN_HOUR,
+  ATTACK_TITLE_BAN_REASON_TEXT,
+  EMPTY_ATTACK_TITLE_PATTERN_CORPUS,
+  detectAttackTitleClusters,
+  loadBundledAttackTitlePatternCorpus,
+} from './attack-title-cluster.js';
+import {
   DEFAULT_CONFIG,
   DEFAULT_AVOID_REASON_TEXT,
   LEGACY_AVOID_REASON_TEXT,
@@ -44,6 +51,8 @@ class Scheduler {
     this.fetchUidStats = dependencies.fetchUidStats || getOrFetchUidStats;
     this.fetchUidGallogPrivacy = dependencies.fetchUidGallogPrivacy || getOrFetchUidGallogPrivacy;
     this.fetchUidGallogGuestbookState = dependencies.fetchUidGallogGuestbookState || getOrFetchUidGallogGuestbookState;
+    this.detectAttackTitleClusters = dependencies.detectAttackTitleClusters || detectAttackTitleClusters;
+    this.loadAttackTitlePatternCorpus = dependencies.loadAttackTitlePatternCorpus || loadBundledAttackTitlePatternCorpus;
     this.executeBan = dependencies.executeBan || executeBanWithDeleteFallback;
     this.delayFn = dependencies.delayFn || delay;
 
@@ -60,11 +69,15 @@ class Scheduler {
     this.lastSingleSightTriggeredPostCount = 0;
     this.lastImmediateTitleBanCount = 0;
     this.lastImmediateTitleBanMatchedTitle = '';
+    this.lastAttackTitleClusterCount = 0;
+    this.lastAttackTitleClusterPostCount = 0;
+    this.lastAttackTitleClusterRepresentative = '';
     this.lastPageRowCount = 0;
     this.lastPageUidCount = 0;
     this.totalTriggeredUidCount = 0;
     this.totalSingleSightTriggeredUidCount = 0;
     this.totalImmediateTitleBanPostCount = 0;
+    this.totalAttackTitleClusterPostCount = 0;
     this.totalSingleSightBannedPostCount = 0;
     this.totalBannedPostCount = 0;
     this.totalFailedPostCount = 0;
@@ -79,6 +92,10 @@ class Scheduler {
     this.lastDeleteLimitMessage = '';
     this.recentUidActions = {};
     this.recentImmediatePostActions = {};
+    this.recentAttackTitlePostActions = {};
+    this.attackTitlePatternLoadError = '';
+    this.attackTitlePatternCorpusPromise = null;
+    this.lastAttackTitlePatternLoadErrorLog = '';
 
     this.config = normalizeConfig({
       galleryId: DEFAULT_CONFIG.galleryId,
@@ -150,7 +167,7 @@ class Scheduler {
         this.phase = PHASE.WAITING;
         this.currentPage = 1;
         this.log(
-          `✅ 사이클 #${this.cycleCount} 완료 - page1 글 ${this.lastPageRowCount}개 / uid ${this.lastPageUidCount}명 / 누적 uid 제재 ${this.totalTriggeredUidCount}명 / 제목 직차단 ${this.totalImmediateTitleBanPostCount}개 / 단일깡계 ${this.totalSingleSightBannedPostCount}개`,
+          `✅ 사이클 #${this.cycleCount} 완료 - page1 글 ${this.lastPageRowCount}개 / uid ${this.lastPageUidCount}명 / 누적 uid 제재 ${this.totalTriggeredUidCount}명 / 제목 직차단 ${this.totalImmediateTitleBanPostCount}개 / 실제공격 ${this.totalAttackTitleClusterPostCount}개 / 단일깡계 ${this.totalSingleSightBannedPostCount}개`,
         );
         await this.saveState();
       } catch (error) {
@@ -177,8 +194,12 @@ class Scheduler {
     this.lastError = '';
     this.lastImmediateTitleBanCount = 0;
     this.lastImmediateTitleBanMatchedTitle = '';
+    this.lastAttackTitleClusterCount = 0;
+    this.lastAttackTitleClusterPostCount = 0;
+    this.lastAttackTitleClusterRepresentative = '';
     pruneRecentUidActions(this.recentUidActions);
     pruneRecentImmediatePostActions(this.recentImmediatePostActions);
+    pruneRecentAttackTitlePostActions(this.recentAttackTitlePostActions);
     const nowMs = Date.now();
     const html = await this.fetchListHtml(this.config, 1);
     const allRows = this.parseImmediateRows(html);
@@ -188,7 +209,15 @@ class Scheduler {
     this.log(`📄 page1 snapshot ${allRows.length}개 / uid ${this.lastPageUidCount}명`);
     await this.saveState();
     const processedImmediatePostNos = await this.handleImmediateTitleBanRows(allRows, nowMs);
-    const rows = pageUidRows.filter((row) => !processedImmediatePostNos.has(Number(row?.no) || 0));
+    const processedAttackTitlePostNos = await this.handleAttackTitleClusterRows(
+      allRows.filter((row) => !processedImmediatePostNos.has(Number(row?.no) || 0)),
+      nowMs,
+    );
+    const processedPostNos = new Set([
+      ...processedImmediatePostNos,
+      ...processedAttackTitlePostNos,
+    ]);
+    const rows = pageUidRows.filter((row) => !processedPostNos.has(Number(row?.no) || 0));
     const groupedRows = groupRowsByUid(rows);
 
     let statsCandidateCount = 0;
@@ -456,6 +485,147 @@ class Scheduler {
 
     pruneRecentUidActions(this.recentUidActions);
     pruneRecentImmediatePostActions(this.recentImmediatePostActions);
+    pruneRecentAttackTitlePostActions(this.recentAttackTitlePostActions);
+  }
+
+  async handleAttackTitleClusterRows(rows = [], nowMs = Date.now()) {
+    const processedAttackTitlePostNos = new Set();
+    const patternCorpus = await this.getAttackTitlePatternCorpus();
+    let clusters = [];
+    try {
+      clusters = this.detectAttackTitleClusters(rows, patternCorpus);
+    } catch (error) {
+      this.log(`⚠️ 실제공격 제목 클러스터 판정 실패 - ${error.message}`);
+      return processedAttackTitlePostNos;
+    }
+
+    const matchedRepresentatives = [];
+    for (const cluster of clusters) {
+      if (!this.isRunning) {
+        break;
+      }
+
+      const targetRows = [];
+      for (const row of Array.isArray(cluster?.rows) ? cluster.rows : []) {
+        const postNo = Number(row?.no) || 0;
+        if (postNo <= 0) {
+          continue;
+        }
+
+        processedAttackTitlePostNos.add(postNo);
+
+        const actionKey = buildAttackTitlePostActionKey(postNo);
+        if (
+          shouldSkipRecentAttackTitlePostAction(
+            this.recentAttackTitlePostActions[actionKey],
+            nowMs,
+            getRetryCooldownMs(this.config),
+          )
+        ) {
+          this.log(`ℹ️ 실제공격 제목 클러스터 스킵 - #${postNo}는 최근 처리 이력이 있어 건너뜀`);
+          continue;
+        }
+
+        targetRows.push(row);
+      }
+
+      if (targetRows.length <= 0) {
+        continue;
+      }
+
+      const targetPosts = createImmediateTitleBanTargetPosts(targetRows);
+      if (targetPosts.length <= 0) {
+        this.log('ℹ️ 실제공격 제목 클러스터 스킵 - page1 대상 글번호를 만들지 못함');
+        continue;
+      }
+
+      const representative = String(cluster?.representative || cluster?.matchedPattern?.normalizedTitle || '패턴').trim();
+      matchedRepresentatives.push(representative);
+      this.lastAttackTitleClusterRepresentative = summarizeMatchedTitles(matchedRepresentatives);
+      this.lastAttackTitleClusterCount += 1;
+      this.lastAttackTitleClusterPostCount += targetPosts.length;
+      this.log(
+        `🚨 실제공격 제목 클러스터 "${representative}" ${Number(cluster?.rows?.length) || targetPosts.length}개 군집 / 제재 대상 ${targetPosts.length}개 / 유사도 ${formatSimilarityPercent(cluster?.averageSimilarity)}% -> 제재 시작`,
+      );
+
+      const result = await this.executeBan({
+        feature: 'uidWarningAutoBan',
+        config: {
+          ...this.config,
+          avoidHour: ATTACK_TITLE_BAN_HOUR,
+          avoidReason: '0',
+          avoidReasonText: ATTACK_TITLE_BAN_REASON_TEXT,
+          delChk: true,
+          avoidTypeChk: true,
+        },
+        posts: targetPosts,
+        deleteEnabled: this.runtimeDeleteEnabled,
+        onDeleteLimitFallbackSuccess: (fallbackResult) => {
+          this.log(`🔁 삭제 한도 계정 전환 성공 - ${fallbackResult.activeAccountLabel}로 같은 run을 이어갑니다.`);
+        },
+        onDeleteLimitBanOnlyActivated: (message) => {
+          this.activateDeleteLimitBanOnly(message);
+        },
+      });
+
+      this.totalAttackTitleClusterPostCount += result.successNos.length;
+      this.totalBannedPostCount += result.successNos.length;
+      this.totalFailedPostCount += result.failedNos.length;
+      this.deleteLimitFallbackCount += result.deleteLimitFallbackCount;
+      if (result.banOnlyFallbackUsed) {
+        this.banOnlyFallbackCount += 1;
+      }
+      this.runtimeDeleteEnabled = result.finalDeleteEnabled;
+
+      if (result.successNos.length > 0) {
+        this.log(`⛔ 실제공격 제목 클러스터 글 ${result.successNos.length}개 차단${result.finalDeleteEnabled ? '/삭제' : ''} 완료`);
+      }
+
+      if (result.banOnlyRetrySuccessCount > 0) {
+        this.log(`🧯 실제공격 제목 클러스터 글 ${result.banOnlyRetrySuccessCount}개는 차단만 수행`);
+      }
+
+      if (result.failedNos.length > 0) {
+        this.log(`⚠️ 실제공격 제목 클러스터 제재 실패 ${result.failedNos.length}개 - ${result.failedNos.join(', ')}`);
+      }
+
+      const actionAt = new Date().toISOString();
+      const successNos = new Set(result.successNos.map((postNo) => String(postNo)));
+      for (const targetPost of targetPosts) {
+        this.recentAttackTitlePostActions[buildAttackTitlePostActionKey(targetPost.no)] =
+          createRecentAttackTitlePostActionEntry({
+            success: successNos.has(String(targetPost.no)),
+            nowIso: actionAt,
+          });
+      }
+
+      await this.saveState();
+    }
+
+    this.lastAttackTitleClusterRepresentative = summarizeMatchedTitles(matchedRepresentatives);
+    return processedAttackTitlePostNos;
+  }
+
+  async getAttackTitlePatternCorpus() {
+    if (!this.attackTitlePatternCorpusPromise) {
+      this.attackTitlePatternCorpusPromise = Promise.resolve().then(() => this.loadAttackTitlePatternCorpus());
+    }
+
+    try {
+      const corpus = await this.attackTitlePatternCorpusPromise;
+      this.attackTitlePatternLoadError = '';
+      this.lastAttackTitlePatternLoadErrorLog = '';
+      return corpus || EMPTY_ATTACK_TITLE_PATTERN_CORPUS;
+    } catch (error) {
+      const message = String(error?.message || '알 수 없는 오류').trim() || '알 수 없는 오류';
+      this.attackTitlePatternLoadError = message;
+      this.attackTitlePatternCorpusPromise = null;
+      if (this.lastAttackTitlePatternLoadErrorLog !== message) {
+        this.log(`⚠️ 실제공격 제목 패턴 로딩 실패 - ${message}, 이번 사이클은 page1 자체 군집만 봅니다.`);
+        this.lastAttackTitlePatternLoadErrorLog = message;
+      }
+      return EMPTY_ATTACK_TITLE_PATTERN_CORPUS;
+    }
   }
 
   async handleImmediateTitleBanRows(rows = [], nowMs = Date.now()) {
@@ -644,11 +814,15 @@ class Scheduler {
           lastSingleSightTriggeredPostCount: this.lastSingleSightTriggeredPostCount,
           lastImmediateTitleBanCount: this.lastImmediateTitleBanCount,
           lastImmediateTitleBanMatchedTitle: this.lastImmediateTitleBanMatchedTitle,
+          lastAttackTitleClusterCount: this.lastAttackTitleClusterCount,
+          lastAttackTitleClusterPostCount: this.lastAttackTitleClusterPostCount,
+          lastAttackTitleClusterRepresentative: this.lastAttackTitleClusterRepresentative,
           lastPageRowCount: this.lastPageRowCount,
           lastPageUidCount: this.lastPageUidCount,
           totalTriggeredUidCount: this.totalTriggeredUidCount,
           totalSingleSightTriggeredUidCount: this.totalSingleSightTriggeredUidCount,
           totalImmediateTitleBanPostCount: this.totalImmediateTitleBanPostCount,
+          totalAttackTitleClusterPostCount: this.totalAttackTitleClusterPostCount,
           totalSingleSightBannedPostCount: this.totalSingleSightBannedPostCount,
           totalBannedPostCount: this.totalBannedPostCount,
           totalFailedPostCount: this.totalFailedPostCount,
@@ -662,6 +836,8 @@ class Scheduler {
           lastDeleteLimitMessage: this.lastDeleteLimitMessage,
           recentUidActions: this.recentUidActions,
           recentImmediatePostActions: this.recentImmediatePostActions,
+          recentAttackTitlePostActions: this.recentAttackTitlePostActions,
+          attackTitlePatternLoadError: this.attackTitlePatternLoadError,
           logs: this.logs.slice(0, 50),
           config: buildPersistedConfig(this.config),
         },
@@ -690,11 +866,15 @@ class Scheduler {
       this.lastSingleSightTriggeredPostCount = Math.max(0, Number(schedulerState.lastSingleSightTriggeredPostCount) || 0);
       this.lastImmediateTitleBanCount = Math.max(0, Number(schedulerState.lastImmediateTitleBanCount) || 0);
       this.lastImmediateTitleBanMatchedTitle = String(schedulerState.lastImmediateTitleBanMatchedTitle || '');
+      this.lastAttackTitleClusterCount = Math.max(0, Number(schedulerState.lastAttackTitleClusterCount) || 0);
+      this.lastAttackTitleClusterPostCount = Math.max(0, Number(schedulerState.lastAttackTitleClusterPostCount) || 0);
+      this.lastAttackTitleClusterRepresentative = String(schedulerState.lastAttackTitleClusterRepresentative || '');
       this.lastPageRowCount = Math.max(0, Number(schedulerState.lastPageRowCount) || 0);
       this.lastPageUidCount = Math.max(0, Number(schedulerState.lastPageUidCount) || 0);
       this.totalTriggeredUidCount = Math.max(0, Number(schedulerState.totalTriggeredUidCount) || 0);
       this.totalSingleSightTriggeredUidCount = Math.max(0, Number(schedulerState.totalSingleSightTriggeredUidCount) || 0);
       this.totalImmediateTitleBanPostCount = Math.max(0, Number(schedulerState.totalImmediateTitleBanPostCount) || 0);
+      this.totalAttackTitleClusterPostCount = Math.max(0, Number(schedulerState.totalAttackTitleClusterPostCount) || 0);
       this.totalSingleSightBannedPostCount = Math.max(0, Number(schedulerState.totalSingleSightBannedPostCount) || 0);
       this.totalBannedPostCount = Math.max(0, Number(schedulerState.totalBannedPostCount) || 0);
       this.totalFailedPostCount = Math.max(0, Number(schedulerState.totalFailedPostCount) || 0);
@@ -717,6 +897,8 @@ class Scheduler {
       this.lastDeleteLimitMessage = String(schedulerState.lastDeleteLimitMessage || '');
       this.recentUidActions = normalizeRecentUidActions(schedulerState.recentUidActions);
       this.recentImmediatePostActions = normalizeRecentImmediatePostActions(schedulerState.recentImmediatePostActions);
+      this.recentAttackTitlePostActions = normalizeRecentAttackTitlePostActions(schedulerState.recentAttackTitlePostActions);
+      this.attackTitlePatternLoadError = String(schedulerState.attackTitlePatternLoadError || '');
       this.logs = Array.isArray(schedulerState.logs) ? schedulerState.logs : [];
       this.config = normalizeConfig({
         ...this.config,
@@ -724,6 +906,7 @@ class Scheduler {
       });
       pruneRecentUidActions(this.recentUidActions);
       pruneRecentImmediatePostActions(this.recentImmediatePostActions);
+      pruneRecentAttackTitlePostActions(this.recentAttackTitlePostActions);
     } catch (error) {
       console.error('[UidWarningAutoBanScheduler] 상태 복원 실패:', error.message);
     }
@@ -753,6 +936,7 @@ class Scheduler {
 
   getStatus() {
     pruneRecentUidActions(this.recentUidActions);
+    pruneRecentAttackTitlePostActions(this.recentAttackTitlePostActions);
     return {
       isRunning: this.isRunning,
       phase: this.phase,
@@ -766,11 +950,15 @@ class Scheduler {
       lastSingleSightTriggeredPostCount: this.lastSingleSightTriggeredPostCount,
       lastImmediateTitleBanCount: this.lastImmediateTitleBanCount,
       lastImmediateTitleBanMatchedTitle: this.lastImmediateTitleBanMatchedTitle,
+      lastAttackTitleClusterCount: this.lastAttackTitleClusterCount,
+      lastAttackTitleClusterPostCount: this.lastAttackTitleClusterPostCount,
+      lastAttackTitleClusterRepresentative: this.lastAttackTitleClusterRepresentative,
       lastPageRowCount: this.lastPageRowCount,
       lastPageUidCount: this.lastPageUidCount,
       totalTriggeredUidCount: this.totalTriggeredUidCount,
       totalSingleSightTriggeredUidCount: this.totalSingleSightTriggeredUidCount,
       totalImmediateTitleBanPostCount: this.totalImmediateTitleBanPostCount,
+      totalAttackTitleClusterPostCount: this.totalAttackTitleClusterPostCount,
       totalSingleSightBannedPostCount: this.totalSingleSightBannedPostCount,
       totalBannedPostCount: this.totalBannedPostCount,
       totalFailedPostCount: this.totalFailedPostCount,
@@ -782,6 +970,7 @@ class Scheduler {
       runtimeDeleteModeReason: this.runtimeDeleteModeReason,
       lastDeleteLimitExceededAt: this.lastDeleteLimitExceededAt,
       lastDeleteLimitMessage: this.lastDeleteLimitMessage,
+      attackTitlePatternLoadError: this.attackTitlePatternLoadError,
       logs: this.logs.slice(0, 20),
       config: this.config,
     };
@@ -964,6 +1153,22 @@ function normalizeRecentImmediatePostActions(raw = {}) {
   return result;
 }
 
+function buildAttackTitlePostActionKey(postNo) {
+  return buildImmediatePostActionKey(postNo);
+}
+
+function createRecentAttackTitlePostActionEntry({ success, nowIso }) {
+  return createRecentImmediatePostActionEntry({ success, nowIso });
+}
+
+function shouldSkipRecentAttackTitlePostAction(entry, nowMs, retryCooldownMs) {
+  return shouldSkipRecentImmediatePostAction(entry, nowMs, retryCooldownMs);
+}
+
+function normalizeRecentAttackTitlePostActions(raw = {}) {
+  return normalizeRecentImmediatePostActions(raw);
+}
+
 function pruneRecentUidActions(entries = {}) {
   const nowMs = Date.now();
   for (const [key, value] of Object.entries(entries || {})) {
@@ -982,6 +1187,10 @@ function pruneRecentImmediatePostActions(entries = {}) {
       delete entries[key];
     }
   }
+}
+
+function pruneRecentAttackTitlePostActions(entries = {}) {
+  pruneRecentImmediatePostActions(entries);
 }
 
 function clampPercent(value, fallback) {
@@ -1020,6 +1229,10 @@ function normalizePhase(value) {
 function formatPostRatio(value) {
   const numericValue = Number(value) || 0;
   return numericValue.toFixed(2).replace(/\.00$/, '');
+}
+
+function formatSimilarityPercent(value) {
+  return formatPostRatio((Number(value) || 0) * 100);
 }
 
 function summarizeMatchedTitles(titles = []) {

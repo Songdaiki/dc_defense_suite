@@ -1654,7 +1654,7 @@
           <div class="manual-utility-header">
             <div>
               <h3>분탕자동차단</h3>
-              <p>10초마다 1페이지를 확인해 금칙 제목은 즉시 차단하고, 나머지는 글댓총합 20 미만 기준을 포함한 uid 분탕조건으로 6시간 차단/삭제합니다</p>
+              <p>10초마다 1페이지를 확인해 금칙 제목, 실제공격 제목 유동 3개 이상 군집, uid 분탕조건을 6시간 차단/삭제합니다</p>
             </div>
             <div class="toggle-section">
               <label class="toggle-switch">
@@ -1725,6 +1725,18 @@
               <span id="uidWarningAutoBanLastImmediateTitleBanCount" class="status-value">0개</span>
             </div>
             <div class="status-item">
+              <span class="status-label">최근 실제공격 군집</span>
+              <span id="uidWarningAutoBanLastAttackTitleClusterCount" class="status-value">0개</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">최근 실제공격 제재</span>
+              <span id="uidWarningAutoBanLastAttackTitleClusterPostCount" class="status-value">0개</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">최근 실제공격 기준</span>
+              <span id="uidWarningAutoBanLastAttackTitleClusterRepresentative" class="status-value">-</span>
+            </div>
+            <div class="status-item">
               <span class="status-label">누적 제재 UID</span>
               <span id="uidWarningAutoBanTotalTriggeredUidCount" class="status-value">0명</span>
             </div>
@@ -1735,6 +1747,10 @@
             <div class="status-item">
               <span class="status-label">누적 제목 직차단</span>
               <span id="uidWarningAutoBanTotalImmediateTitleBanPostCount" class="status-value">0개</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">누적 실제공격 글</span>
+              <span id="uidWarningAutoBanTotalAttackTitleClusterPostCount" class="status-value">0개</span>
             </div>
             <div class="status-item">
               <span class="status-label">누적 단일깡계 글</span>
@@ -1758,7 +1774,7 @@
             </div>
           </div>
 
-          <p id="uidWarningAutoBanMetaText" class="manual-utility-meta">10초마다 1페이지를 확인해 금칙 제목 포함 매치는 즉시 차단하고, 나머지는 글댓총합 20 미만인 5분 2글 burst 깡계와 방명록까지 잠긴 저활동 깡계를 함께 6시간 차단/삭제합니다.</p>
+          <p id="uidWarningAutoBanMetaText" class="manual-utility-meta">10초마다 1페이지를 확인해 금칙 제목, 실제공격 제목 유동 3개 이상 군집, 글댓총합 20 미만 burst 깡계, 방명록 잠금 저활동 깡계를 함께 6시간 차단/삭제합니다.</p>
 
           <details class="settings-section uid-warning-title-ban-section">
             <summary>제목 직차단 금칙어</summary>

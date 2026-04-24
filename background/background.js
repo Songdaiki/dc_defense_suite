@@ -1696,11 +1696,15 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.lastSingleSightTriggeredPostCount = 0;
     scheduler.lastImmediateTitleBanCount = 0;
     scheduler.lastImmediateTitleBanMatchedTitle = '';
+    scheduler.lastAttackTitleClusterCount = 0;
+    scheduler.lastAttackTitleClusterPostCount = 0;
+    scheduler.lastAttackTitleClusterRepresentative = '';
     scheduler.lastPageRowCount = 0;
     scheduler.lastPageUidCount = 0;
     scheduler.totalTriggeredUidCount = 0;
     scheduler.totalSingleSightTriggeredUidCount = 0;
     scheduler.totalImmediateTitleBanPostCount = 0;
+    scheduler.totalAttackTitleClusterPostCount = 0;
     scheduler.totalSingleSightBannedPostCount = 0;
     scheduler.totalBannedPostCount = 0;
     scheduler.totalFailedPostCount = 0;
@@ -1714,6 +1718,10 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.runtimeDeleteEnabled = Boolean(scheduler.config?.delChk);
     scheduler.recentUidActions = {};
     scheduler.recentImmediatePostActions = {};
+    scheduler.recentAttackTitlePostActions = {};
+    scheduler.attackTitlePatternLoadError = '';
+    scheduler.attackTitlePatternCorpusPromise = null;
+    scheduler.lastAttackTitlePatternLoadErrorLog = '';
     return;
   }
 
@@ -2732,11 +2740,15 @@ function resetUidWarningAutoBanSchedulerState(message) {
   scheduler.lastSingleSightTriggeredPostCount = 0;
   scheduler.lastImmediateTitleBanCount = 0;
   scheduler.lastImmediateTitleBanMatchedTitle = '';
+  scheduler.lastAttackTitleClusterCount = 0;
+  scheduler.lastAttackTitleClusterPostCount = 0;
+  scheduler.lastAttackTitleClusterRepresentative = '';
   scheduler.lastPageRowCount = 0;
   scheduler.lastPageUidCount = 0;
   scheduler.totalTriggeredUidCount = 0;
   scheduler.totalSingleSightTriggeredUidCount = 0;
   scheduler.totalImmediateTitleBanPostCount = 0;
+  scheduler.totalAttackTitleClusterPostCount = 0;
   scheduler.totalSingleSightBannedPostCount = 0;
   scheduler.totalBannedPostCount = 0;
   scheduler.totalFailedPostCount = 0;
@@ -2750,6 +2762,10 @@ function resetUidWarningAutoBanSchedulerState(message) {
   scheduler.lastDeleteLimitMessage = '';
   scheduler.recentUidActions = {};
   scheduler.recentImmediatePostActions = {};
+  scheduler.recentAttackTitlePostActions = {};
+  scheduler.attackTitlePatternLoadError = '';
+  scheduler.attackTitlePatternCorpusPromise = null;
+  scheduler.lastAttackTitlePatternLoadErrorLog = '';
   scheduler.logs = [];
   scheduler.log(message);
 }
