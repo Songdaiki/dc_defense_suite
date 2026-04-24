@@ -416,11 +416,13 @@ const FEATURE_DOM = {
     currentPosition: document.getElementById('commentCurrentPosition'),
     totalDeleted: document.getElementById('commentTotalDeleted'),
     cycleCount: document.getElementById('commentCycleCount'),
+    manualTimeLimitText: document.getElementById('commentManualTimeLimitText'),
     logList: document.getElementById('commentLogList'),
     minPageInput: document.getElementById('commentMinPage'),
     maxPageInput: document.getElementById('commentMaxPage'),
     requestDelayInput: document.getElementById('commentRequestDelay'),
     cycleDelayInput: document.getElementById('commentCycleDelay'),
+    manualTimeLimitMinutesInput: document.getElementById('commentManualTimeLimitMinutes'),
     refluxSearchGalleryIdInput: document.getElementById('commentRefluxSearchGalleryId'),
     useVpnGatePrefixFilterInput: document.getElementById('commentUseVpnGatePrefixFilter'),
     vpnGatePrefixSaveBtn: document.getElementById('commentVpnGatePrefixSaveBtn'),
@@ -439,11 +441,13 @@ const FEATURE_DOM = {
     currentPosition: document.getElementById('postCurrentPosition'),
     totalClassified: document.getElementById('postTotalClassified'),
     cycleCount: document.getElementById('postCycleCount'),
+    manualTimeLimitText: document.getElementById('postManualTimeLimitText'),
     logList: document.getElementById('postLogList'),
     minPageInput: document.getElementById('postMinPage'),
     maxPageInput: document.getElementById('postMaxPage'),
     requestDelayInput: document.getElementById('postRequestDelay'),
     cycleDelayInput: document.getElementById('postCycleDelay'),
+    manualTimeLimitMinutesInput: document.getElementById('postManualTimeLimitMinutes'),
     refluxSearchGalleryIdInput: document.getElementById('postRefluxSearchGalleryId'),
     useVpnGatePrefixFilterInput: document.getElementById('postUseVpnGatePrefixFilter'),
     vpnGatePrefixSaveBtn: document.getElementById('postVpnGatePrefixSaveBtn'),
@@ -2422,8 +2426,13 @@ function bindCommentEvents() {
 
   dom.toggleBtn.addEventListener('change', async () => {
     const action = dom.toggleBtn.checked ? 'start' : 'stop';
+    if (action === 'start' && shouldBlockManualStartForDirtyConfig('comment', '댓글 방어')) {
+      dom.toggleBtn.checked = false;
+      await refreshAllStatuses();
+      return;
+    }
     const message = action === 'start'
-      ? { action, source: 'manual', commentAttackMode: 'default' }
+      ? { action, source: 'manual', commentAttackMode: 'default', manualTimeLimit: true }
       : { action };
     const response = await sendFeatureMessage('comment', message);
     if (!response?.success) {
@@ -2488,6 +2497,7 @@ function bindCommentEvents() {
       maxPage: parseOptionalInt(dom.maxPageInput.value, 5),
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 100),
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
+      manualTimeLimitMinutes: clampManualTimeLimitMinutes(dom.manualTimeLimitMinutesInput.value),
       refluxSearchGalleryId,
       postConcurrency: parseOptionalInt(dom.postConcurrencyInput.value, 50),
       banOnDelete: dom.banOnDeleteInput.checked,
@@ -2563,10 +2573,17 @@ function bindCommentEvents() {
           return;
         }
 
+        if (shouldBlockManualStartForDirtyConfig('comment', '댓글 방어')) {
+          toggleInput.checked = false;
+          await refreshAllStatuses();
+          return;
+        }
+
         response = await sendFeatureMessage('comment', {
           action: 'start',
           source: 'manual',
           commentAttackMode: attackMode,
+          manualTimeLimit: true,
         });
       } else {
         if (!currentStatus.isRunning || currentStatus.currentSource !== 'manual' || currentStatus.currentAttackMode !== attackMode) {
@@ -2600,11 +2617,17 @@ function bindPostEvents() {
 
   dom.toggleBtn.addEventListener('change', async () => {
     const action = dom.toggleBtn.checked ? 'start' : 'stop';
+    if (action === 'start' && shouldBlockManualStartForDirtyConfig('post', '게시글 분류')) {
+      dom.toggleBtn.checked = false;
+      await refreshAllStatuses();
+      return;
+    }
     const response = await sendFeatureMessage('post', action === 'start'
       ? {
         action,
         source: 'manual',
         attackMode: 'default',
+        manualTimeLimit: true,
       }
       : { action });
     if (!response?.success) {
@@ -2612,6 +2635,11 @@ function bindPostEvents() {
         alert(response.message);
       }
       await refreshAllStatuses();
+      return;
+    }
+
+    if (response.statuses) {
+      applyStatuses(response.statuses);
       return;
     }
 
@@ -2664,6 +2692,7 @@ function bindPostEvents() {
       maxPage: parseOptionalInt(dom.maxPageInput.value, 1),
       requestDelay: parseOptionalInt(dom.requestDelayInput.value, 500),
       cycleDelay: parseOptionalInt(dom.cycleDelayInput.value, 1000),
+      manualTimeLimitMinutes: clampManualTimeLimitMinutes(dom.manualTimeLimitMinutesInput.value),
       refluxSearchGalleryId,
     };
 
@@ -2724,10 +2753,17 @@ function bindPostEvents() {
           return;
         }
 
+        if (shouldBlockManualStartForDirtyConfig('post', '게시글 분류')) {
+          toggleInput.checked = false;
+          await refreshAllStatuses();
+          return;
+        }
+
         response = await sendFeatureMessage('post', {
           action: 'start',
           source: 'manual',
           attackMode,
+          manualTimeLimit: true,
         });
       } else {
         if (!currentStatus.isRunning || currentStatus.currentSource !== 'manual' || currentStatus.currentAttackMode !== attackMode) {
@@ -4006,12 +4042,14 @@ function updateCommentUI(status) {
     : '-';
   dom.totalDeleted.textContent = `${status.totalDeleted}개`;
   dom.cycleCount.textContent = `${status.cycleCount}회`;
+  dom.manualTimeLimitText.textContent = formatManualTimeLimitStatus(status.manualTimeLimit);
 
   syncFeatureConfigInputs('comment', [
     [dom.minPageInput, status.config?.minPage ?? 1],
     [dom.maxPageInput, status.config?.maxPage ?? 1],
     [dom.requestDelayInput, status.config?.requestDelay ?? 100],
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
+    [dom.manualTimeLimitMinutesInput, clampManualTimeLimitMinutes(status.config?.manualTimeLimitMinutes ?? 30)],
     [dom.refluxSearchGalleryIdInput, status.config?.refluxSearchGalleryId ?? ''],
     [dom.postConcurrencyInput, status.config?.postConcurrency ?? 50],
     [dom.banOnDeleteInput, status.config?.banOnDelete ?? true],
@@ -4047,12 +4085,14 @@ function updatePostUI(status) {
     : '-';
   dom.totalClassified.textContent = `${status.totalClassified}개`;
   dom.cycleCount.textContent = `${status.cycleCount}회`;
+  dom.manualTimeLimitText.textContent = formatManualTimeLimitStatus(status.manualTimeLimit);
 
   syncFeatureConfigInputs('post', [
     [dom.minPageInput, status.config?.minPage ?? 1],
     [dom.maxPageInput, status.config?.maxPage ?? 1],
     [dom.requestDelayInput, status.config?.requestDelay ?? 500],
     [dom.cycleDelayInput, status.config?.cycleDelay ?? 1000],
+    [dom.manualTimeLimitMinutesInput, clampManualTimeLimitMinutes(status.config?.manualTimeLimitMinutes ?? 30)],
     [dom.refluxSearchGalleryIdInput, status.config?.refluxSearchGalleryId ?? ''],
   ]);
   if (!INLINE_SETTING_DIRTY.postVpnGate) {
@@ -4324,6 +4364,8 @@ function applyAutomationLocks(statuses) {
 
   getFeatureConfigInputs('comment').forEach((input) => setDisabled(input, commentLocked));
   getFeatureConfigInputs('post').forEach((input) => setDisabled(input, postIpLocked));
+  setDisabled(commentDom.manualTimeLimitMinutesInput, commentLocked || Boolean(commentStatus?.isRunning));
+  setDisabled(postDom.manualTimeLimitMinutesInput, postIpLocked || Boolean(postStatus?.isRunning));
   getFeatureConfigInputs('semiPost').forEach((input) => setDisabled(input, postIpLocked));
   getFeatureConfigInputs('ip').forEach((input) => setDisabled(input, postIpLocked));
   getFeatureConfigInputs('uidWarningAutoBan').forEach((input) => setDisabled(input, monitorUidWarningAutoBanLocked));
@@ -6371,6 +6413,7 @@ function getFeatureConfigInputs(feature) {
       dom.maxPageInput,
       dom.requestDelayInput,
       dom.cycleDelayInput,
+      dom.manualTimeLimitMinutesInput,
       dom.refluxSearchGalleryIdInput,
       dom.postConcurrencyInput,
       dom.banOnDeleteInput,
@@ -6443,6 +6486,7 @@ function getFeatureConfigInputs(feature) {
       dom.maxPageInput,
       dom.requestDelayInput,
       dom.cycleDelayInput,
+      dom.manualTimeLimitMinutesInput,
       dom.refluxSearchGalleryIdInput,
     ];
   }
@@ -6902,6 +6946,54 @@ function syncConfigInput(input, nextValue) {
 function parseOptionalInt(value, fallback) {
   const parsed = parseInt(value, 10);
   return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+function clampManualTimeLimitMinutes(value, fallback = 30) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  const rounded = Math.floor(parsed);
+  if (rounded < 1 || rounded > 1440) {
+    return fallback;
+  }
+
+  return rounded;
+}
+
+function formatManualTimeLimitStatus(manualTimeLimit = {}) {
+  if (!manualTimeLimit?.active) {
+    return '-';
+  }
+
+  let remainingMs = Number(manualTimeLimit.remainingMs);
+  if (!Number.isFinite(remainingMs) && manualTimeLimit.expiresAt) {
+    const expiresAtMs = Date.parse(manualTimeLimit.expiresAt);
+    remainingMs = Number.isFinite(expiresAtMs) ? expiresAtMs - Date.now() : 0;
+  }
+
+  if (remainingMs <= 0) {
+    return '곧 종료';
+  }
+
+  const remainingMinutes = Math.ceil(remainingMs / 60000);
+  if (remainingMinutes >= 60) {
+    const hours = Math.floor(remainingMinutes / 60);
+    const minutes = remainingMinutes % 60;
+    return minutes > 0 ? `${hours}시간 ${minutes}분 남음` : `${hours}시간 남음`;
+  }
+
+  return `${remainingMinutes}분 남음`;
+}
+
+function shouldBlockManualStartForDirtyConfig(feature, featureLabel) {
+  if (!DIRTY_FEATURES[feature]) {
+    return false;
+  }
+
+  alert(`${featureLabel} 설정을 저장한 뒤 시작하세요. 예: 수동 실행 시간 제한을 30분으로 바꿨다면 먼저 설정 저장을 눌러야 그 값으로 시작됩니다.`);
+  return true;
 }
 
 const REFLEX_DATASET_COLLECTOR_DB_NAME = 'refluxDatasetCollectorDb';

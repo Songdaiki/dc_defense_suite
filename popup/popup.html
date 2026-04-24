@@ -695,6 +695,10 @@
             <span class="status-label">완료 사이클</span>
             <span id="commentCycleCount" class="status-value">0회</span>
           </div>
+          <div class="status-item">
+            <span class="status-label">수동 제한</span>
+            <span id="commentManualTimeLimitText" class="status-value">-</span>
+          </div>
         </div>
 
         <details class="settings-section">
@@ -715,6 +719,10 @@
             <div class="setting-item">
               <label for="commentCycleDelay">사이클 딜레이 (ms)</label>
               <input type="number" id="commentCycleDelay" min="0" max="60000" step="500" value="1000">
+            </div>
+            <div class="setting-item">
+              <label for="commentManualTimeLimitMinutes">수동 실행 시간 제한 (분)</label>
+              <input type="number" id="commentManualTimeLimitMinutes" min="1" max="1440" step="1" value="30">
             </div>
             <div class="setting-item">
               <label for="commentRefluxSearchGalleryId">역류 검색 갤 ID</label>
@@ -1395,6 +1403,10 @@
             <span class="status-label">완료 사이클</span>
             <span id="postCycleCount" class="status-value">0회</span>
           </div>
+          <div class="status-item">
+            <span class="status-label">수동 제한</span>
+            <span id="postManualTimeLimitText" class="status-value">-</span>
+          </div>
         </div>
 
         <details class="settings-section">
@@ -1415,6 +1427,10 @@
             <div class="setting-item">
               <label for="postCycleDelay">사이클 딜레이 (ms)</label>
               <input type="number" id="postCycleDelay" min="0" max="60000" step="500" value="1000">
+            </div>
+            <div class="setting-item">
+              <label for="postManualTimeLimitMinutes">수동 실행 시간 제한 (분)</label>
+              <input type="number" id="postManualTimeLimitMinutes" min="1" max="1440" step="1" value="30">
             </div>
             <div class="setting-item">
               <label for="postRefluxSearchGalleryId">역류 검색 갤 ID</label>

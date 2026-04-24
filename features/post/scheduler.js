@@ -85,7 +85,12 @@ class Scheduler {
             cutoffPostNo: 0,       // 시작 시점 snapshot 기준 게시물 번호
             manualAttackMode: ATTACK_MODE.DEFAULT,
             useVpnGatePrefixFilter: false,
+            manualTimeLimitMinutes: 30,
         };
+        this.manualTimeLimitRunId = '';
+        this.manualTimeLimitStartedAt = '';
+        this.manualTimeLimitExpiresAt = '';
+        this.manualTimeLimitStopping = false;
         setRefluxSearchDuplicateBrokerLogger((message) => {
             this.log(message);
         });
@@ -95,10 +100,26 @@ class Scheduler {
     // 제어
     // ============================================================
 
-    async start(options = {}) {
+    getStartBlockReason() {
         if (this.isRunning) {
-            this.log('⚠️ 이미 실행 중입니다.');
-            return;
+            return '이미 실행 중입니다.';
+        }
+
+        if (this.runPromise) {
+            return '이전 실행을 정리 중입니다. 잠시 후 다시 시도하세요.';
+        }
+
+        return '';
+    }
+
+    async start(options = {}) {
+        const startBlockReason = this.getStartBlockReason();
+        if (startBlockReason) {
+            this.log(`⚠️ ${startBlockReason}`);
+            if (this.runPromise) {
+                throw new Error(startBlockReason);
+            }
+            return false;
         }
 
         const normalizedOptions = normalizeStartOptions(options);
@@ -128,6 +149,7 @@ class Scheduler {
         this.config.cutoffPostNo = cutoffPostNo;
         this.currentSource = normalizedOptions.source;
         this.currentAttackMode = normalizedOptions.attackMode;
+        this.setupManualTimeLimit(normalizedOptions);
         this.isRunning = true;
         if (shouldApplyCutoff) {
             this.log(`🧷 ${getCutoffSourceLabel(normalizedOptions.source)} cutoff 저장 (#${cutoffPostNo})`);
@@ -141,17 +163,148 @@ class Scheduler {
         await this.saveState();
 
         this.ensureRunLoop();
+        return true;
     }
 
-    async stop() {
+    async stop(reason = '🔴 자동 분류 중지.') {
         this.isRunning = false;
         this.currentPage = 0;
         this.cancelPendingRuntimeTransition('게시글 분류가 정지되어 모드 전환을 취소했습니다.');
         await this.releaseAllKnownVpnGatePrefixConsumers();
         this.clearRuntimeAttackMode();
         this.resetSearchDuplicateRuntime();
-        this.log('🔴 자동 분류 중지.');
+        this.clearManualTimeLimit();
+        this.log(reason);
         await this.saveState();
+    }
+
+    setupManualTimeLimit(options = {}) {
+        const source = normalizeRunSource(options.source, 'manual');
+        if (source !== 'manual' || options.manualTimeLimit !== true) {
+            this.clearManualTimeLimit();
+            return;
+        }
+
+        const now = Date.now();
+        const limitMinutes = normalizeManualTimeLimitMinutes(this.config.manualTimeLimitMinutes);
+        this.manualTimeLimitRunId = `${now}-${Math.random().toString(36).slice(2)}`;
+        this.manualTimeLimitStartedAt = new Date(now).toISOString();
+        this.manualTimeLimitExpiresAt = new Date(now + limitMinutes * 60 * 1000).toISOString();
+        this.manualTimeLimitStopping = false;
+    }
+
+    clearManualTimeLimit() {
+        this.manualTimeLimitRunId = '';
+        this.manualTimeLimitStartedAt = '';
+        this.manualTimeLimitExpiresAt = '';
+        this.manualTimeLimitStopping = false;
+    }
+
+    hasManualTimeLimitState() {
+        return Boolean(this.manualTimeLimitRunId || this.manualTimeLimitStartedAt || this.manualTimeLimitExpiresAt);
+    }
+
+    isManualTimeLimitActive() {
+        return Boolean(
+            this.isRunning
+            && this.currentSource === 'manual'
+            && this.manualTimeLimitExpiresAt
+        );
+    }
+
+    getManualTimeLimitExpiresAtMs() {
+        const parsed = Date.parse(this.manualTimeLimitExpiresAt || '');
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    isManualTimeLimitExpired(now = Date.now()) {
+        const expiresAtMs = this.getManualTimeLimitExpiresAtMs();
+        return this.isManualTimeLimitActive() && expiresAtMs > 0 && expiresAtMs <= now;
+    }
+
+    getManualTimeLimitRemainingMs(now = Date.now()) {
+        if (!this.isManualTimeLimitActive()) {
+            return Infinity;
+        }
+
+        const expiresAtMs = this.getManualTimeLimitExpiresAtMs();
+        return expiresAtMs > 0 ? Math.max(0, expiresAtMs - now) : 0;
+    }
+
+    async stopIfManualTimeLimitExpired(now = Date.now()) {
+        if (!this.isManualTimeLimitExpired(now)) {
+            return false;
+        }
+
+        if (this.manualTimeLimitStopping) {
+            return true;
+        }
+
+        this.manualTimeLimitStopping = true;
+        const limitMinutes = normalizeManualTimeLimitMinutes(this.config.manualTimeLimitMinutes);
+        await this.stop(`⏱️ 수동 실행 시간 제한 ${limitMinutes}분이 지나 게시글 분류를 자동 종료했습니다.`);
+        return true;
+    }
+
+    async delayRespectingManualTimeLimit(waitMs) {
+        let remainingWaitMs = Math.max(0, Number(waitMs) || 0);
+
+        while (this.isRunning && remainingWaitMs > 0) {
+            if (await this.stopIfManualTimeLimitExpired()) {
+                return true;
+            }
+
+            const remainingLimitMs = this.getManualTimeLimitRemainingMs();
+            const chunkMs = Math.min(1000, remainingWaitMs, remainingLimitMs);
+            if (chunkMs <= 0) {
+                return await this.stopIfManualTimeLimitExpired();
+            }
+
+            await delay(chunkMs);
+            remainingWaitMs -= chunkMs;
+        }
+
+        return await this.stopIfManualTimeLimitExpired();
+    }
+
+    async cleanupExpiredManualTimeLimitOnLoad() {
+        this.isRunning = false;
+        this.currentPage = 0;
+        this.cancelPendingRuntimeTransition('수동 실행 시간 제한이 만료되어 게시글 분류 모드 전환을 취소했습니다.');
+        await this.releaseAllKnownVpnGatePrefixConsumers();
+        this.clearRuntimeAttackMode();
+        this.resetSearchDuplicateRuntime();
+        this.clearManualTimeLimit();
+        return true;
+    }
+
+    async cleanupManualTimeLimitStateOnLoad() {
+        const hadManualTimeLimitState = this.hasManualTimeLimitState();
+
+        if (!this.isRunning || this.currentSource !== 'manual') {
+            if (hadManualTimeLimitState) {
+                this.clearManualTimeLimit();
+                return true;
+            }
+            return false;
+        }
+
+        const expiresAtMs = this.getManualTimeLimitExpiresAtMs();
+        if (expiresAtMs <= 0) {
+            if (hadManualTimeLimitState) {
+                this.clearManualTimeLimit();
+                return true;
+            }
+            return false;
+        }
+
+        if (expiresAtMs <= Date.now()) {
+            await this.cleanupExpiredManualTimeLimitOnLoad();
+            this.log('⏱️ 수동 실행 시간 제한이 이미 지나 게시글 분류를 자동 종료 상태로 복원했습니다.');
+            return true;
+        }
+
+        return false;
     }
 
     resetSearchDuplicateRuntime() {
@@ -304,18 +457,24 @@ class Scheduler {
         const normalizedAttackMode = normalizeAttackMode(attackMode);
         const sourceChanged = this.currentSource !== 'monitor';
         const modeChanged = this.currentAttackMode !== normalizedAttackMode;
+        const hadManualTimeLimit = this.hasManualTimeLimitState();
+        const hadPendingRuntimeTransition = this.cancelPendingRuntimeTransition(
+            '감시 자동화가 게시글 분류를 넘겨받아 수동 모드 전환을 취소했습니다.',
+        );
 
         this.currentSource = 'monitor';
         this.currentAttackMode = normalizedAttackMode;
+        this.clearManualTimeLimit();
         if (sourceChanged || !this.shouldUseVpnGatePrefixFilterForCurrentRun(normalizedAttackMode)) {
             await this.releaseTrackedVpnGatePrefixConsumers();
         }
-        return sourceChanged || modeChanged;
+        return sourceChanged || modeChanged || hadManualTimeLimit || hadPendingRuntimeTransition;
     }
 
     clearRuntimeAttackMode() {
         this.currentSource = 'manual';
         this.currentAttackMode = ATTACK_MODE.DEFAULT;
+        this.clearManualTimeLimit();
     }
 
     cancelPendingRuntimeTransition(message = '') {
@@ -496,8 +655,18 @@ class Scheduler {
 
     async run() {
         while (this.isRunning) {
+            if (await this.stopIfManualTimeLimitExpired()) {
+                break;
+            }
+
             try {
+                if (await this.stopIfManualTimeLimitExpired()) {
+                    break;
+                }
                 if (await this.applyPendingRuntimeTransitionIfNeeded()) {
+                    if (await this.stopIfManualTimeLimitExpired()) {
+                        break;
+                    }
                     continue;
                 }
 
@@ -512,7 +681,11 @@ class Scheduler {
                 // minPage~maxPage 순회
                 for (let page = startPage; page <= maxPage; page++) {
                     if (!this.isRunning) break;
+                    if (await this.stopIfManualTimeLimitExpired()) break;
                     if (await this.applyPendingRuntimeTransitionIfNeeded()) {
+                        if (await this.stopIfManualTimeLimitExpired()) {
+                            break;
+                        }
                         shouldRestartFromFirstPage = true;
                         break;
                     }
@@ -522,12 +695,15 @@ class Scheduler {
                     // 1. 게시물 목록 HTML 가져오기
                     this.log(`📄 ${page}페이지 로딩...`);
                     const html = await fetchPostListHTML(this.config, page);
+                    if (await this.stopIfManualTimeLimitExpired()) break;
                     const targetHeadName = extractHeadtextName(html, this.config.headtextId);
                     if (!targetHeadName) {
                         this.log(`⚠️ ${page}페이지: 도배기탭 번호 ${this.config.headtextId} 라벨 추출 실패, 페이지 스킵`);
                         await this.saveState();
                         if (this.config.requestDelay > 0) {
-                            await delay(this.config.requestDelay);
+                            if (await this.delayRespectingManualTimeLimit(this.config.requestDelay)) {
+                                break;
+                            }
                         }
                         continue;
                     }
@@ -540,6 +716,7 @@ class Scheduler {
                         ? fluidPosts.filter((post) => isPostAfterCutoff(post, this.config.cutoffPostNo))
                         : fluidPosts;
                     const vpnGateFilterResult = await this.filterBasePostsWithVpnGatePrefixes(basePosts, effectiveAttackMode);
+                    if (await this.stopIfManualTimeLimitExpired()) break;
                     const vpnGateFilteredBasePosts = vpnGateFilterResult.candidatePosts;
                     const shouldUseSearchDuplicate = shouldUseSearchDuplicateForCurrentRun(this.currentSource, effectiveAttackMode);
                     const refluxFilterResult = shouldUseSearchDuplicate
@@ -548,6 +725,7 @@ class Scheduler {
                             searchGalleryId: resolveRefluxSearchGalleryId(this.config),
                         })
                         : null;
+                    if (await this.stopIfManualTimeLimitExpired()) break;
                     const candidatePosts = refluxFilterResult
                         ? refluxFilterResult.candidatePosts
                         : vpnGateFilteredBasePosts.filter((post) => isEligibleForAttackMode(post, effectiveAttackMode, {
@@ -582,28 +760,37 @@ class Scheduler {
 
                     if (candidatePosts.length === 0) {
                         if (this.config.requestDelay > 0) {
-                            await delay(this.config.requestDelay);
+                            if (await this.delayRespectingManualTimeLimit(this.config.requestDelay)) {
+                                break;
+                            }
                         }
                         continue;
                     }
 
                     // 3. "도배기"로 분류
+                    if (await this.stopIfManualTimeLimitExpired()) break;
                     const postNos = extractPostNos(candidatePosts);
                     await this.classifyPostsOnce(postNos, {
                         logLabel: shouldApplyCutoff
                             ? `${page}페이지 cutoff 이후 게시물`
                             : `${page}페이지 기존 포함 ${getAttackModeSubjectLabel(effectiveAttackMode)} 게시물`,
                     });
+                    if (await this.stopIfManualTimeLimitExpired()) break;
 
                     await this.saveState();
 
                     if (await this.applyPendingRuntimeTransitionIfNeeded()) {
+                        if (await this.stopIfManualTimeLimitExpired()) {
+                            break;
+                        }
                         shouldRestartFromFirstPage = true;
                         break;
                     }
 
                     if (this.config.requestDelay > 0) {
-                        await delay(this.config.requestDelay);
+                        if (await this.delayRespectingManualTimeLimit(this.config.requestDelay)) {
+                            break;
+                        }
                     }
                 }
 
@@ -613,11 +800,16 @@ class Scheduler {
 
                 // 사이클 완료
                 if (this.isRunning) {
+                    if (await this.stopIfManualTimeLimitExpired()) {
+                        break;
+                    }
                     this.cycleCount++;
                     this.currentPage = 0;
                     this.log(`🔄 사이클 #${this.cycleCount} 완료. ${this.config.cycleDelay}ms 후 재시작...`);
                     await this.saveState();
-                    await delay(this.config.cycleDelay);
+                    if (await this.delayRespectingManualTimeLimit(this.config.cycleDelay)) {
+                        break;
+                    }
                 }
 
             } catch (error) {
@@ -627,7 +819,9 @@ class Scheduler {
 
                 if (this.isRunning) {
                     this.log('⏳ 10초 후 재시도...');
-                    await delay(10000);
+                    if (await this.delayRespectingManualTimeLimit(10000)) {
+                        break;
+                    }
                 }
             }
         }
@@ -667,6 +861,9 @@ class Scheduler {
                     config: this.config,
                     currentSource: this.currentSource,
                     currentAttackMode: this.currentAttackMode,
+                    manualTimeLimitRunId: this.manualTimeLimitRunId,
+                    manualTimeLimitStartedAt: this.manualTimeLimitStartedAt,
+                    manualTimeLimitExpiresAt: this.manualTimeLimitExpiresAt,
                 },
             });
         } catch (error) {
@@ -676,6 +873,7 @@ class Scheduler {
 
     async loadState() {
         try {
+            let needsSave = false;
             const { [STORAGE_KEY]: schedulerState } = await chrome.storage.local.get(STORAGE_KEY);
             if (schedulerState) {
                 this.isRunning = Boolean(schedulerState.isRunning);
@@ -688,6 +886,7 @@ class Scheduler {
                     ...schedulerState.config,
                     manualAttackMode: normalizeAttackMode(schedulerState?.config?.manualAttackMode),
                     useVpnGatePrefixFilter: Boolean(schedulerState?.config?.useVpnGatePrefixFilter),
+                    manualTimeLimitMinutes: normalizeManualTimeLimitMinutes(schedulerState?.config?.manualTimeLimitMinutes),
                 };
                 this.pendingRuntimeTransition = null;
                 this.currentSource = normalizeRunSource(
@@ -695,12 +894,22 @@ class Scheduler {
                     schedulerState.isRunning ? 'manual' : 'manual',
                 );
                 this.currentAttackMode = normalizeAttackMode(schedulerState.currentAttackMode);
-                if (!schedulerState.isRunning) {
+                this.manualTimeLimitRunId = String(schedulerState.manualTimeLimitRunId || '');
+                this.manualTimeLimitStartedAt = String(schedulerState.manualTimeLimitStartedAt || '');
+                this.manualTimeLimitExpiresAt = String(schedulerState.manualTimeLimitExpiresAt || '');
+                this.manualTimeLimitStopping = false;
+                if (await this.cleanupManualTimeLimitStateOnLoad()) {
+                    needsSave = true;
+                }
+                if (!this.isRunning) {
                     this.clearRuntimeAttackMode();
                 }
             }
             if (!this.isRunning) {
                 await this.releaseAllKnownVpnGatePrefixConsumers();
+            }
+            if (needsSave) {
+                await this.saveState();
             }
             if (this.isRunning && shouldPreloadSemiconductorRefluxPostMatcher(this.currentAttackMode)) {
                 await ensureSemiconductorRefluxEffectiveMatcherLoaded();
@@ -740,6 +949,8 @@ class Scheduler {
     // ============================================================
 
     getStatus() {
+        const now = Date.now();
+        const manualTimeLimitActive = this.isManualTimeLimitActive();
         return {
             isRunning: this.isRunning,
             currentPage: this.currentPage,
@@ -748,6 +959,16 @@ class Scheduler {
             currentSource: this.currentSource,
             currentAttackMode: this.currentAttackMode,
             effectiveAttackMode: this.getEffectiveAttackMode(),
+            manualTimeLimitActive,
+            manualTimeLimitStartedAt: this.manualTimeLimitStartedAt,
+            manualTimeLimitExpiresAt: this.manualTimeLimitExpiresAt,
+            manualTimeLimitRemainingMs: manualTimeLimitActive ? this.getManualTimeLimitRemainingMs(now) : 0,
+            manualTimeLimit: {
+                active: manualTimeLimitActive,
+                startedAt: this.manualTimeLimitStartedAt,
+                expiresAt: this.manualTimeLimitExpiresAt,
+                remainingMs: manualTimeLimitActive ? this.getManualTimeLimitRemainingMs(now) : 0,
+            },
             logs: this.logs.slice(0, 20), // 팝업에는 최근 20개만
             config: this.config,
         };
@@ -770,7 +991,7 @@ class Scheduler {
 export { Scheduler };
 
 function normalizeStartOptions(options = {}) {
-    const source = String(options?.source || 'manual').trim() || 'manual';
+    const source = normalizeRunSource(String(options?.source || 'manual').trim() || 'manual', 'manual');
     const rawCutoffPostNo = options?.cutoffPostNo;
     const hasExplicitCutoff = rawCutoffPostNo !== undefined && rawCutoffPostNo !== null && String(rawCutoffPostNo).trim() !== '';
     const cutoffPostNo = hasExplicitCutoff ? Number(rawCutoffPostNo) : 0;
@@ -781,6 +1002,7 @@ function normalizeStartOptions(options = {}) {
         attackMode,
         cutoffPostNo,
         hasExplicitCutoff: hasExplicitCutoff && Number.isFinite(cutoffPostNo),
+        manualTimeLimit: options.manualTimeLimit === true,
     };
 }
 
@@ -847,6 +1069,20 @@ function shouldResetRefluxSearchRuntime(currentAttackMode, nextAttackMode) {
 
 function shouldPreloadSemiconductorRefluxPostMatcher(attackMode) {
     return normalizeAttackMode(attackMode) === ATTACK_MODE.SEMICONDUCTOR_REFLUX;
+}
+
+function normalizeManualTimeLimitMinutes(value, fallback = 30) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+        return fallback;
+    }
+
+    const roundedValue = Math.floor(numericValue);
+    if (roundedValue < 1 || roundedValue > 1440) {
+        return fallback;
+    }
+
+    return roundedValue;
 }
 
 function buildManualRuntimeTransitionLogMessage({

@@ -377,16 +377,23 @@ class Scheduler {
     }
 
     try {
-      await this.postScheduler.start({
+      const postStarted = await this.postScheduler.start({
         source: 'manual',
         attackMode: 'default',
         cutoffPostNo,
       });
-      await this.ipScheduler.start({
+      if (postStarted === false || !this.postScheduler.isRunning) {
+        throw new Error('게시글 분류 child 시작에 실패했습니다.');
+      }
+
+      const ipStarted = await this.ipScheduler.start({
         source: 'manual',
         cutoffPostNo,
         delChk: true,
       });
+      if (ipStarted === false || !this.ipScheduler.isRunning) {
+        throw new Error('IP 차단 child 시작에 실패했습니다.');
+      }
     } catch (error) {
       if (this.postScheduler.isRunning) {
         await this.postScheduler.stop();
@@ -438,10 +445,13 @@ class Scheduler {
       this.log('🧹 댓글방어 initial sweep 대상 없음');
     }
 
-    await this.commentScheduler.start({
+    const commentStarted = await this.commentScheduler.start({
       source: 'manual',
       commentAttackMode: 'default',
     });
+    if (commentStarted === false || !this.commentScheduler.isRunning) {
+      throw new Error('댓글 방어 child 시작에 실패했습니다.');
+    }
 
     this.ownedCommentScheduler = true;
     this.extendCommentDefense(now);
@@ -481,13 +491,21 @@ class Scheduler {
 
     if (allowPostDefense && this.isPostDefenseActive()) {
       if (this.ownedPostScheduler && !this.postScheduler.isRunning) {
-        await this.postScheduler.start({
-          source: 'manual',
-          attackMode: 'default',
-          cutoffPostNo: this.postDefenseCutoffPostNo,
-        });
-        this.log('🔁 게시물방어 child 복원 - 게시글 분류 재시작');
-        restarted = true;
+        if (this.postScheduler.runPromise) {
+          this.log('⏳ 게시물방어 child 복원 대기 - 게시글 분류가 이전 실행을 정리 중입니다.');
+        } else {
+          const postStarted = await this.postScheduler.start({
+            source: 'manual',
+            attackMode: 'default',
+            cutoffPostNo: this.postDefenseCutoffPostNo,
+          });
+          if (postStarted === false || !this.postScheduler.isRunning) {
+            this.log('⚠️ 게시물방어 child 복원 실패 - 게시글 분류가 시작되지 않았습니다.');
+          } else {
+            this.log('🔁 게시물방어 child 복원 - 게시글 분류 재시작');
+            restarted = true;
+          }
+        }
       } else if (
         this.ownedPostScheduler
         && this.postScheduler.isRunning
@@ -501,13 +519,21 @@ class Scheduler {
       }
 
       if (this.ownedIpScheduler && !this.ipScheduler.isRunning) {
-        await this.ipScheduler.start({
-          source: 'manual',
-          cutoffPostNo: this.postDefenseCutoffPostNo,
-          delChk: true,
-        });
-        this.log('🔁 게시물방어 child 복원 - IP 차단 재시작');
-        restarted = true;
+        if (this.ipScheduler.runPromise) {
+          this.log('⏳ 게시물방어 child 복원 대기 - IP 차단이 이전 실행을 정리 중입니다.');
+        } else {
+          const ipStarted = await this.ipScheduler.start({
+            source: 'manual',
+            cutoffPostNo: this.postDefenseCutoffPostNo,
+            delChk: true,
+          });
+          if (ipStarted === false || !this.ipScheduler.isRunning) {
+            this.log('⚠️ 게시물방어 child 복원 실패 - IP 차단이 시작되지 않았습니다.');
+          } else {
+            this.log('🔁 게시물방어 child 복원 - IP 차단 재시작');
+            restarted = true;
+          }
+        }
       } else if (
         this.ownedIpScheduler
         && this.ipScheduler.isRunning
@@ -523,12 +549,20 @@ class Scheduler {
 
     if (allowCommentDefense && this.isCommentDefenseActive() && this.ownedCommentScheduler) {
       if (!this.commentScheduler.isRunning) {
-        await this.commentScheduler.start({
-          source: 'manual',
-          commentAttackMode: 'default',
-        });
-        this.log('🔁 댓글방어 child 복원 - 댓글 방어 재시작');
-        restarted = true;
+        if (this.commentScheduler.runPromise) {
+          this.log('⏳ 댓글방어 child 복원 대기 - 댓글 방어가 이전 실행을 정리 중입니다.');
+        } else {
+          const commentStarted = await this.commentScheduler.start({
+            source: 'manual',
+            commentAttackMode: 'default',
+          });
+          if (commentStarted === false || !this.commentScheduler.isRunning) {
+            this.log('⚠️ 댓글방어 child 복원 실패 - 댓글 방어가 시작되지 않았습니다.');
+          } else {
+            this.log('🔁 댓글방어 child 복원 - 댓글 방어 재시작');
+            restarted = true;
+          }
+        }
       } else if (
         !this.commentScheduler.runPromise
         && typeof this.commentScheduler.ensureRunLoop === 'function'

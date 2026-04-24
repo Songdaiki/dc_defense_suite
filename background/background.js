@@ -113,12 +113,12 @@ trustedCommandDefenseScheduler = new TrustedCommentCommandDefenseScheduler({
   ipScheduler,
   shouldAllowPostDefenseStart: () => (
     !isMonitorManagingPostAxis()
-    && (!schedulers.post.isRunning || schedulers.trustedCommandDefense.isOwningFeature('post'))
-    && (!schedulers.ip.isRunning || schedulers.trustedCommandDefense.isOwningFeature('ip'))
+    && (!(schedulers.post.isRunning || schedulers.post.runPromise) || schedulers.trustedCommandDefense.isOwningFeature('post'))
+    && (!(schedulers.ip.isRunning || schedulers.ip.runPromise) || schedulers.trustedCommandDefense.isOwningFeature('ip'))
   ),
   shouldAllowCommentDefenseStart: () => (
     !isCommentMonitorManagingCommentAxis()
-    && (!schedulers.comment.isRunning || schedulers.trustedCommandDefense.isOwningFeature('comment'))
+    && (!(schedulers.comment.isRunning || schedulers.comment.runPromise) || schedulers.trustedCommandDefense.isOwningFeature('comment'))
   ),
 });
 const uidWarningAutoBanScheduler = new UidWarningAutoBanScheduler();
@@ -664,29 +664,41 @@ async function handleMessage(message) {
           };
         }
       }
+      let startResult;
       if (message.feature === 'comment') {
         const normalizedCommentAttackMode = message.commentAttackMode !== undefined
           ? normalizeCommentAttackMode(message.commentAttackMode)
           : (message.excludePureHangulOnStart === true
             ? COMMENT_ATTACK_MODE.EXCLUDE_PURE_HANGUL
             : COMMENT_ATTACK_MODE.DEFAULT);
-        await scheduler.start({
+        startResult = await scheduler.start({
           source: message.source,
           commentAttackMode: normalizedCommentAttackMode,
           excludePureHangulOnStart: message.excludePureHangulOnStart,
+          manualTimeLimit: message.manualTimeLimit === true,
         });
       } else if (message.feature === 'post') {
-        await scheduler.start({
+        startResult = await scheduler.start({
           source: message.source,
           attackMode: message.attackMode,
+          manualTimeLimit: message.manualTimeLimit === true,
         });
       } else if (message.feature === 'ip') {
-        await scheduler.start({
+        startResult = await scheduler.start({
           source: message.source,
           includeExistingTargetsOnStart: message.includeExistingTargetsOnStart,
         });
       } else {
-        await scheduler.start();
+        startResult = await scheduler.start();
+      }
+      if (startResult === false) {
+        return {
+          success: false,
+          message: '시작 요청이 적용되지 않았습니다. 현재 상태를 다시 확인하세요.',
+          status: scheduler.getStatus(),
+          statuses: getAllStatuses(),
+          sessionFallbackStatus: getDcSessionBrokerStatus(),
+        };
       }
       return {
         success: true,
@@ -921,6 +933,16 @@ async function handleMessage(message) {
           message.config = {
             ...message.config,
             useVpnGatePrefixFilter: Boolean(message.config.useVpnGatePrefixFilter),
+          };
+        }
+
+        if (
+          ['post', 'comment'].includes(message.feature)
+          && message.config.manualTimeLimitMinutes !== undefined
+        ) {
+          message.config = {
+            ...message.config,
+            manualTimeLimitMinutes: normalizeManualTimeLimitMinutes(message.config.manualTimeLimitMinutes),
           };
         }
 
@@ -1995,6 +2017,16 @@ function getConfigUpdateBlockMessage(feature, scheduler, config) {
     return '';
   }
 
+  if (
+    ['comment', 'post'].includes(feature)
+    && config.manualTimeLimitMinutes !== undefined
+    && normalizeManualTimeLimitMinutes(config.manualTimeLimitMinutes) !== normalizeManualTimeLimitMinutes(scheduler.config?.manualTimeLimitMinutes)
+  ) {
+    return feature === 'comment'
+      ? '댓글 방어 수동 실행 시간 제한은 댓글 방어를 정지한 뒤 변경하세요.'
+      : '게시글 분류 수동 실행 시간 제한은 게시글 분류를 정지한 뒤 변경하세요.';
+  }
+
   if (feature === 'monitor'
     && config.monitorPages !== undefined
     && Number(config.monitorPages) !== Number(scheduler.config.monitorPages)) {
@@ -2656,6 +2688,20 @@ async function maybeHandleRunningPostModeTransition(scheduler, config) {
 
 function normalizePostManualAttackMode(value) {
   return normalizePostAttackMode(value);
+}
+
+function normalizeManualTimeLimitMinutes(value, fallback = 30) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+
+  const roundedValue = Math.floor(numericValue);
+  if (roundedValue < 1 || roundedValue > 1440) {
+    return fallback;
+  }
+
+  return roundedValue;
 }
 
 function resetSemiPostSchedulerState(message) {

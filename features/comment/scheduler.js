@@ -88,26 +88,53 @@ class Scheduler {
             refluxSearchGalleryId: '',
             excludePureHangulManualOnly: false,
             useVpnGatePrefixFilter: false,
+            manualTimeLimitMinutes: 30,
         };
         this.currentSource = '';
         this.currentAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
+        this.manualTimeLimitRunId = '';
+        this.manualTimeLimitStartedAt = '';
+        this.manualTimeLimitExpiresAt = '';
+        this.manualTimeLimitStopping = false;
     }
 
     // ============================================================
     // 제어
     // ============================================================
 
-    async start(options = {}) {
+    getStartBlockReason() {
         if (this.isRunning) {
-            this.log('⚠️ 이미 실행 중입니다.');
-            return;
+            return '이미 실행 중입니다.';
         }
 
-        this.currentSource = normalizeRunSource(options.source, 'manual');
-        this.currentAttackMode = normalizeRequestedCommentAttackMode(options);
-        await this.ensureDatasetReadyForAttackMode(this.currentAttackMode);
-        await this.prepareCommentRefluxSearchRuntime(COMMENT_ATTACK_MODE.DEFAULT, this.currentAttackMode, {
+        if (this.runPromise) {
+            return '이전 실행을 정리 중입니다. 잠시 후 다시 시도하세요.';
+        }
+
+        return '';
+    }
+
+    async start(options = {}) {
+        const startBlockReason = this.getStartBlockReason();
+        if (startBlockReason) {
+            this.log(`⚠️ ${startBlockReason}`);
+            if (this.runPromise) {
+                throw new Error(startBlockReason);
+            }
+            return false;
+        }
+
+        const normalizedSource = normalizeRunSource(options.source, 'manual');
+        const nextAttackMode = normalizeRequestedCommentAttackMode(options);
+        await this.ensureDatasetReadyForAttackMode(nextAttackMode);
+        await this.prepareCommentRefluxSearchRuntime(COMMENT_ATTACK_MODE.DEFAULT, nextAttackMode, {
             forceReset: true,
+        });
+        this.currentSource = normalizedSource;
+        this.currentAttackMode = nextAttackMode;
+        this.setupManualTimeLimit({
+            source: normalizedSource,
+            manualTimeLimit: options.manualTimeLimit === true,
         });
         this.isRunning = true;
         if (this.currentSource === 'manual') {
@@ -117,17 +144,148 @@ class Scheduler {
         await this.saveState();
 
         this.ensureRunLoop();
+        return true;
     }
 
-    async stop() {
+    async stop(reason = '🔴 자동 삭제 중지.') {
         this.isRunning = false;
         await this.releaseAllKnownVpnGatePrefixConsumers();
         this.resetCommentRefluxSearchRuntime();
         setCommentRefluxSearchDuplicateBrokerLogger(null);
         this.currentSource = '';
         this.currentAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
-        this.log('🔴 자동 삭제 중지.');
+        this.clearManualTimeLimit();
+        this.log(reason);
         await this.saveState();
+    }
+
+    setupManualTimeLimit(options = {}) {
+        const source = normalizeRunSource(options.source, 'manual');
+        if (source !== 'manual' || options.manualTimeLimit !== true) {
+            this.clearManualTimeLimit();
+            return;
+        }
+
+        const now = Date.now();
+        const limitMinutes = normalizeManualTimeLimitMinutes(this.config.manualTimeLimitMinutes);
+        this.manualTimeLimitRunId = `${now}-${Math.random().toString(36).slice(2)}`;
+        this.manualTimeLimitStartedAt = new Date(now).toISOString();
+        this.manualTimeLimitExpiresAt = new Date(now + limitMinutes * 60 * 1000).toISOString();
+        this.manualTimeLimitStopping = false;
+    }
+
+    clearManualTimeLimit() {
+        this.manualTimeLimitRunId = '';
+        this.manualTimeLimitStartedAt = '';
+        this.manualTimeLimitExpiresAt = '';
+        this.manualTimeLimitStopping = false;
+    }
+
+    hasManualTimeLimitState() {
+        return Boolean(this.manualTimeLimitRunId || this.manualTimeLimitStartedAt || this.manualTimeLimitExpiresAt);
+    }
+
+    isManualTimeLimitActive() {
+        return Boolean(
+            this.isRunning
+            && this.currentSource === 'manual'
+            && this.manualTimeLimitExpiresAt
+        );
+    }
+
+    getManualTimeLimitExpiresAtMs() {
+        const parsed = Date.parse(this.manualTimeLimitExpiresAt || '');
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    isManualTimeLimitExpired(now = Date.now()) {
+        const expiresAtMs = this.getManualTimeLimitExpiresAtMs();
+        return this.isManualTimeLimitActive() && expiresAtMs > 0 && expiresAtMs <= now;
+    }
+
+    getManualTimeLimitRemainingMs(now = Date.now()) {
+        if (!this.isManualTimeLimitActive()) {
+            return Infinity;
+        }
+
+        const expiresAtMs = this.getManualTimeLimitExpiresAtMs();
+        return expiresAtMs > 0 ? Math.max(0, expiresAtMs - now) : 0;
+    }
+
+    async stopIfManualTimeLimitExpired(now = Date.now()) {
+        if (!this.isManualTimeLimitExpired(now)) {
+            return false;
+        }
+
+        if (this.manualTimeLimitStopping) {
+            return true;
+        }
+
+        this.manualTimeLimitStopping = true;
+        const limitMinutes = normalizeManualTimeLimitMinutes(this.config.manualTimeLimitMinutes);
+        await this.stop(`⏱️ 수동 실행 시간 제한 ${limitMinutes}분이 지나 댓글 방어를 자동 종료했습니다.`);
+        return true;
+    }
+
+    async delayRespectingManualTimeLimit(waitMs) {
+        let remainingWaitMs = Math.max(0, Number(waitMs) || 0);
+
+        while (this.isRunning && remainingWaitMs > 0) {
+            if (await this.stopIfManualTimeLimitExpired()) {
+                return true;
+            }
+
+            const remainingLimitMs = this.getManualTimeLimitRemainingMs();
+            const chunkMs = Math.min(1000, remainingWaitMs, remainingLimitMs);
+            if (chunkMs <= 0) {
+                return await this.stopIfManualTimeLimitExpired();
+            }
+
+            await delay(chunkMs);
+            remainingWaitMs -= chunkMs;
+        }
+
+        return await this.stopIfManualTimeLimitExpired();
+    }
+
+    async cleanupExpiredManualTimeLimitOnLoad() {
+        this.isRunning = false;
+        await this.releaseAllKnownVpnGatePrefixConsumers();
+        this.resetCommentRefluxSearchRuntime();
+        setCommentRefluxSearchDuplicateBrokerLogger(null);
+        this.currentSource = '';
+        this.currentAttackMode = COMMENT_ATTACK_MODE.DEFAULT;
+        this.clearManualTimeLimit();
+        return true;
+    }
+
+    async cleanupManualTimeLimitStateOnLoad() {
+        const hadManualTimeLimitState = this.hasManualTimeLimitState();
+
+        if (!this.isRunning || this.currentSource !== 'manual') {
+            if (hadManualTimeLimitState) {
+                this.clearManualTimeLimit();
+                return true;
+            }
+            return false;
+        }
+
+        const expiresAtMs = this.getManualTimeLimitExpiresAtMs();
+        if (expiresAtMs <= 0) {
+            if (hadManualTimeLimitState) {
+                this.clearManualTimeLimit();
+                return true;
+            }
+            return false;
+        }
+
+        if (expiresAtMs <= Date.now()) {
+            await this.cleanupExpiredManualTimeLimitOnLoad();
+            this.log('⏱️ 수동 실행 시간 제한이 이미 지나 댓글 방어를 자동 종료 상태로 복원했습니다.');
+            return true;
+        }
+
+        return false;
     }
 
     getVpnGatePrefixConsumerId(source = this.currentSource) {
@@ -212,18 +370,24 @@ class Scheduler {
 
     async run() {
         while (this.isRunning) {
+            if (await this.stopIfManualTimeLimitExpired()) {
+                break;
+            }
+
             try {
                 const startPage = this.currentPage > 0 ? this.currentPage : this.config.minPage;
 
                 // minPage~maxPage 순회
                 for (let page = startPage; page <= this.config.maxPage; page++) {
                     if (!this.isRunning) break;
+                    if (await this.stopIfManualTimeLimitExpired()) break;
                     this.currentPage = page;
                     this.currentPostNo = 0;
                     await this.saveState();
 
                     this.log(`📄 ${page}페이지 게시물 목록 로딩...`);
                     const { posts, esno } = await fetchPostList(this.config, page);
+                    if (await this.stopIfManualTimeLimitExpired()) break;
                     const candidatePosts = posts.filter((post) => post.commentCount > 0);
                     this.log(
                         `📄 ${page}페이지: ${posts.length}개 게시물, 댓글 있는 ${candidatePosts.length}개 병렬 처리 (${this.config.postConcurrency}동시)`,
@@ -234,16 +398,22 @@ class Scheduler {
                     }
 
                     await this.processPostsInParallel(candidatePosts, esno);
+                    if (await this.stopIfManualTimeLimitExpired()) break;
                 }
 
                 // 사이클 완료
                 if (this.isRunning) {
+                    if (await this.stopIfManualTimeLimitExpired()) {
+                        break;
+                    }
                     this.cycleCount++;
                     this.currentPage = 0;
                     this.currentPostNo = 0;
                     this.log(`🔄 사이클 #${this.cycleCount} 완료. ${this.config.cycleDelay}ms 후 재시작...`);
                     await this.saveState();
-                    await delay(this.config.cycleDelay);
+                    if (await this.delayRespectingManualTimeLimit(this.config.cycleDelay)) {
+                        break;
+                    }
                 }
 
             } catch (error) {
@@ -253,7 +423,9 @@ class Scheduler {
 
                 if (this.isRunning) {
                     this.log('⏳ 10초 후 재시도...');
-                    await delay(10000);
+                    if (await this.delayRespectingManualTimeLimit(10000)) {
+                        break;
+                    }
                 }
             }
         }
@@ -280,10 +452,17 @@ class Scheduler {
                 return false;
             }
 
+            if (requireRunning && (!this.isRunning || await this.stopIfManualTimeLimitExpired())) {
+                return false;
+            }
+
             // 1. e_s_n_o 토큰 확보
             let esno = sharedEsno;
             if (!esno) {
                 const html = await fetchPostPage(this.config, postNo);
+                if (requireRunning && (!this.isRunning || await this.stopIfManualTimeLimitExpired())) {
+                    return false;
+                }
                 esno = extractEsno(html);
             }
 
@@ -293,6 +472,9 @@ class Scheduler {
             }
 
             if (requireRunning && !this.isRunning) {
+                return false;
+            }
+            if (requireRunning && (!this.isRunning || await this.stopIfManualTimeLimitExpired())) {
                 return false;
             }
 
@@ -306,12 +488,18 @@ class Scheduler {
                     esno,
                     this.config.commentPageConcurrency,
                 ));
+                if (requireRunning && (!this.isRunning || await this.stopIfManualTimeLimitExpired())) {
+                    return false;
+                }
             } catch (error) {
                 if (!sharedEsno) {
                     throw error;
                 }
 
                 const html = await fetchPostPage(this.config, postNo);
+                if (requireRunning && (!this.isRunning || await this.stopIfManualTimeLimitExpired())) {
+                    return false;
+                }
                 const refreshedEsno = extractEsno(html);
                 if (!refreshedEsno) {
                     throw error;
@@ -323,6 +511,9 @@ class Scheduler {
                     refreshedEsno,
                     this.config.commentPageConcurrency,
                 ));
+                if (requireRunning && (!this.isRunning || await this.stopIfManualTimeLimitExpired())) {
+                    return false;
+                }
             }
 
             if (comments.length === 0) {
@@ -336,12 +527,21 @@ class Scheduler {
                 return true;
             }
 
+            if (requireRunning && (!this.isRunning || await this.stopIfManualTimeLimitExpired())) {
+                return false;
+            }
             const vpnGateFilterResult = await this.filterFluidCommentsWithVpnGatePrefixes(fluidComments);
+            if (requireRunning && (!this.isRunning || await this.stopIfManualTimeLimitExpired())) {
+                return false;
+            }
             const candidateFluidComments = vpnGateFilterResult.filteredComments;
 
             if (this.shouldFilterCommentRefluxForCurrentRun()) {
                 // 역류기 댓글은 dataset/cache obvious hit를 먼저 지우고, miss만 검색으로 넘긴다.
                 const refluxPlan = await this.planCommentRefluxDeletion(postNo, fluidComments);
+                if (requireRunning && (!this.isRunning || await this.stopIfManualTimeLimitExpired())) {
+                    return false;
+                }
                 if (refluxPlan.immediateTargets.length <= 0 && refluxPlan.pendingSearchJobs.length <= 0) {
                     this.logCommentRefluxFilterSummary(postNo, refluxPlan.stats);
                     return true;
@@ -360,6 +560,7 @@ class Scheduler {
                         {
                             totalFluidCount: fluidComments.length,
                             phaseLabel: '즉시',
+                            requireRunning,
                         },
                     );
                     if (requireRunning && !immediateBatchResult.shouldContinue) {
@@ -378,6 +579,9 @@ class Scheduler {
                     refluxPlan.pendingSearchJobs,
                     refluxPlan.stats,
                 );
+                if (requireRunning && (!this.isRunning || await this.stopIfManualTimeLimitExpired())) {
+                    return false;
+                }
                 this.logCommentRefluxFilterSummary(postNo, deferredResolution.stats);
 
                 if (deferredResolution.deferredTargets.length <= 0) {
@@ -396,6 +600,7 @@ class Scheduler {
                     {
                         totalFluidCount: fluidComments.length,
                         phaseLabel: '검색확정',
+                        requireRunning,
                     },
                 );
                 return deferredBatchResult.shouldDelay;
@@ -428,6 +633,9 @@ class Scheduler {
             if (requireRunning && !this.isRunning) {
                 return false;
             }
+            if (requireRunning && (!this.isRunning || await this.stopIfManualTimeLimitExpired())) {
+                return false;
+            }
 
             const batchResult = await this.executeCommentDeletionBatch(
                 postNo,
@@ -437,6 +645,7 @@ class Scheduler {
                 {
                     totalFluidCount: candidateFluidComments.length,
                     phaseLabel: '',
+                    requireRunning,
                 },
             );
             return batchResult.shouldDelay;
@@ -704,12 +913,20 @@ class Scheduler {
     async executeCommentDeletionBatch(postNo, targetComments, esno, sharedEsno, {
         totalFluidCount = 0,
         phaseLabel = '',
+        requireRunning = true,
     } = {}) {
         const commentNos = [...new Set(extractCommentNos(targetComments))];
         if (commentNos.length <= 0) {
             return {
-                shouldContinue: this.isRunning,
+                shouldContinue: requireRunning ? this.isRunning : true,
                 shouldDelay: true,
+            };
+        }
+
+        if (requireRunning && (!this.isRunning || await this.stopIfManualTimeLimitExpired())) {
+            return {
+                shouldContinue: false,
+                shouldDelay: false,
             };
         }
 
@@ -737,6 +954,13 @@ class Scheduler {
             };
         }
 
+        if (requireRunning && (!this.isRunning || await this.stopIfManualTimeLimitExpired())) {
+            return {
+                shouldContinue: false,
+                shouldDelay: false,
+            };
+        }
+
         const verification = await this.verifyDeletedComments(postNo, esno, commentNos, sharedEsno);
         const verifiedDeletedCount = verification.deletedCount;
         this.lastVerifiedDeletedCount = verifiedDeletedCount;
@@ -757,7 +981,7 @@ class Scheduler {
 
         await this.saveState();
         return {
-            shouldContinue: this.isRunning,
+            shouldContinue: requireRunning ? this.isRunning : true,
             shouldDelay: true,
         };
     }
@@ -826,6 +1050,10 @@ class Scheduler {
 
         const workers = Array.from({ length: workerCount }, async () => {
             while (this.isRunning) {
+                if (await this.stopIfManualTimeLimitExpired()) {
+                    return;
+                }
+
                 const currentIndex = nextIndex;
                 nextIndex += 1;
 
@@ -837,8 +1065,13 @@ class Scheduler {
                 this.currentPostNo = post.no;
 
                 const shouldDelay = await this.processPost(post, sharedEsno);
+                if (await this.stopIfManualTimeLimitExpired()) {
+                    return;
+                }
                 if (shouldDelay && this.config.requestDelay > 0) {
-                    await delay(this.config.requestDelay);
+                    if (await this.delayRespectingManualTimeLimit(this.config.requestDelay)) {
+                        return;
+                    }
                 }
             }
         });
@@ -958,8 +1191,13 @@ class Scheduler {
 
     setCurrentSource(source, { logChange = true } = {}) {
         const nextSource = normalizeRunSource(source, this.isRunning ? 'manual' : '');
+        const hadManualTimeLimit = this.hasManualTimeLimitState();
+        if (nextSource !== 'manual' && hadManualTimeLimit) {
+            this.clearManualTimeLimit();
+        }
+
         if (this.currentSource === nextSource) {
-            return false;
+            return hadManualTimeLimit;
         }
 
         this.currentSource = nextSource;
@@ -1008,6 +1246,9 @@ class Scheduler {
                     config: this.config,
                     currentSource: this.currentSource,
                     currentAttackMode: this.currentAttackMode,
+                    manualTimeLimitRunId: this.manualTimeLimitRunId,
+                    manualTimeLimitStartedAt: this.manualTimeLimitStartedAt,
+                    manualTimeLimitExpiresAt: this.manualTimeLimitExpiresAt,
                 },
             });
         } catch (error) {
@@ -1017,6 +1258,7 @@ class Scheduler {
 
     async loadState() {
         try {
+            let needsSave = false;
             const { [STORAGE_KEY]: schedulerState } = await chrome.storage.local.get(STORAGE_KEY);
             if (schedulerState) {
                 this.isRunning = Boolean(schedulerState.isRunning);
@@ -1034,17 +1276,28 @@ class Scheduler {
                 this.config.avoidReasonText = normalizeAvoidReasonText(this.config.avoidReasonText);
                 this.config.refluxSearchGalleryId = String(this.config.refluxSearchGalleryId || '').trim().toLowerCase();
                 this.config.useVpnGatePrefixFilter = Boolean(this.config.useVpnGatePrefixFilter);
+                this.config.manualTimeLimitMinutes = normalizeManualTimeLimitMinutes(this.config.manualTimeLimitMinutes);
                 this.currentSource = normalizeRunSource(
                     schedulerState.currentSource,
                     schedulerState.isRunning ? 'manual' : '',
                 );
                 this.currentAttackMode = normalizeStoredCommentAttackMode(schedulerState);
+                this.manualTimeLimitRunId = String(schedulerState.manualTimeLimitRunId || '');
+                this.manualTimeLimitStartedAt = String(schedulerState.manualTimeLimitStartedAt || '');
+                this.manualTimeLimitExpiresAt = String(schedulerState.manualTimeLimitExpiresAt || '');
+                this.manualTimeLimitStopping = false;
                 if (migratedLegacyConfig) {
-                    await this.saveState();
+                    needsSave = true;
+                }
+                if (await this.cleanupManualTimeLimitStateOnLoad()) {
+                    needsSave = true;
                 }
             }
             if (!this.isRunning) {
                 await this.releaseAllKnownVpnGatePrefixConsumers();
+            }
+            if (needsSave) {
+                await this.saveState();
             }
         } catch (error) {
             console.error('[Scheduler] 상태 복원 실패:', error.message);
@@ -1098,6 +1351,8 @@ class Scheduler {
 
     getStatus() {
         const commentRefluxMatcherStatus = getCommentRefluxMatcherStatus();
+        const now = Date.now();
+        const manualTimeLimitActive = this.isManualTimeLimitActive();
         return {
             isRunning: this.isRunning,
             currentPage: this.currentPage,
@@ -1110,6 +1365,16 @@ class Scheduler {
             config: this.config,
             currentSource: this.currentSource,
             currentAttackMode: this.currentAttackMode,
+            manualTimeLimitActive,
+            manualTimeLimitStartedAt: this.manualTimeLimitStartedAt,
+            manualTimeLimitExpiresAt: this.manualTimeLimitExpiresAt,
+            manualTimeLimitRemainingMs: manualTimeLimitActive ? this.getManualTimeLimitRemainingMs(now) : 0,
+            manualTimeLimit: {
+                active: manualTimeLimitActive,
+                startedAt: this.manualTimeLimitStartedAt,
+                expiresAt: this.manualTimeLimitExpiresAt,
+                remainingMs: manualTimeLimitActive ? this.getManualTimeLimitRemainingMs(now) : 0,
+            },
             excludePureHangulMode: this.currentAttackMode === COMMENT_ATTACK_MODE.EXCLUDE_PURE_HANGUL,
             commentRefluxMode: this.currentAttackMode === COMMENT_ATTACK_MODE.COMMENT_REFLUX,
             excludePureHangulEffective: this.shouldExcludePureHangulForCurrentRun(),
@@ -1214,6 +1479,20 @@ function normalizeAvoidReasonText(value) {
         return '도배기IP차단(무고한 경우 문의)';
     }
     return normalized;
+}
+
+function normalizeManualTimeLimitMinutes(value, fallback = 30) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) {
+        return fallback;
+    }
+
+    const roundedValue = Math.floor(numericValue);
+    if (roundedValue < 1 || roundedValue > 1440) {
+        return fallback;
+    }
+
+    return roundedValue;
 }
 
 // ============================================================

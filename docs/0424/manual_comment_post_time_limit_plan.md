@@ -1300,6 +1300,7 @@ await delay(this.config.cycleDelay);
 
 - `manualTimeLimitStopping` guard로 만료 stop을 한 번만 실행한다.
 - 로그도 한 번만 남는지 검증한다.
+- worker A가 만료를 감지해 `stop()`을 시작하면 `isRunning`이 먼저 `false`가 되고 lease는 stop 정리 중에 지워진다. 이때 worker B가 HTTP 응답에서 돌아오면 `stopIfManualTimeLimitExpired()`만으로는 이미 지워지는 중인 lease를 못 볼 수 있으므로, 삭제/검증/검색 같은 다음 경계로 들어가기 전 `!this.isRunning || await this.stopIfManualTimeLimitExpired()` 형태로 함께 막는다.
 
 ### 위험 7. hard abort 오해
 
