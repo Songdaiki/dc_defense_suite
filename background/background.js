@@ -121,7 +121,9 @@ trustedCommandDefenseScheduler = new TrustedCommentCommandDefenseScheduler({
     && (!schedulers.comment.isRunning || schedulers.trustedCommandDefense.isOwningFeature('comment'))
   ),
 });
-const uidWarningAutoBanScheduler = new UidWarningAutoBanScheduler();
+const uidWarningAutoBanScheduler = new UidWarningAutoBanScheduler({
+  isCommentDefenseRunning: () => commentScheduler.isRunning,
+});
 const monitorScheduler = new MonitorScheduler({
   postScheduler,
   ipScheduler,
@@ -1699,12 +1701,17 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.lastAttackTitleClusterCount = 0;
     scheduler.lastAttackTitleClusterPostCount = 0;
     scheduler.lastAttackTitleClusterRepresentative = '';
+    scheduler.lastAttackCommentClusterCount = 0;
+    scheduler.lastAttackCommentClusterDeleteCount = 0;
+    scheduler.lastAttackCommentClusterPostCount = 0;
+    scheduler.lastAttackCommentClusterRepresentative = '';
     scheduler.lastPageRowCount = 0;
     scheduler.lastPageUidCount = 0;
     scheduler.totalTriggeredUidCount = 0;
     scheduler.totalSingleSightTriggeredUidCount = 0;
     scheduler.totalImmediateTitleBanPostCount = 0;
     scheduler.totalAttackTitleClusterPostCount = 0;
+    scheduler.totalAttackCommentClusterDeleteCount = 0;
     scheduler.totalSingleSightBannedPostCount = 0;
     scheduler.totalBannedPostCount = 0;
     scheduler.totalFailedPostCount = 0;
@@ -1719,6 +1726,8 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.recentUidActions = {};
     scheduler.recentImmediatePostActions = {};
     scheduler.recentAttackTitlePostActions = {};
+    scheduler.recentAttackCommentActions = {};
+    scheduler.commentSnapshotByPostNo = {};
     scheduler.attackTitlePatternLoadError = '';
     scheduler.attackTitlePatternCorpusPromise = null;
     scheduler.lastAttackTitlePatternLoadErrorLog = '';
@@ -2743,12 +2752,17 @@ function resetUidWarningAutoBanSchedulerState(message) {
   scheduler.lastAttackTitleClusterCount = 0;
   scheduler.lastAttackTitleClusterPostCount = 0;
   scheduler.lastAttackTitleClusterRepresentative = '';
+  scheduler.lastAttackCommentClusterCount = 0;
+  scheduler.lastAttackCommentClusterDeleteCount = 0;
+  scheduler.lastAttackCommentClusterPostCount = 0;
+  scheduler.lastAttackCommentClusterRepresentative = '';
   scheduler.lastPageRowCount = 0;
   scheduler.lastPageUidCount = 0;
   scheduler.totalTriggeredUidCount = 0;
   scheduler.totalSingleSightTriggeredUidCount = 0;
   scheduler.totalImmediateTitleBanPostCount = 0;
   scheduler.totalAttackTitleClusterPostCount = 0;
+  scheduler.totalAttackCommentClusterDeleteCount = 0;
   scheduler.totalSingleSightBannedPostCount = 0;
   scheduler.totalBannedPostCount = 0;
   scheduler.totalFailedPostCount = 0;
@@ -2763,6 +2777,8 @@ function resetUidWarningAutoBanSchedulerState(message) {
   scheduler.recentUidActions = {};
   scheduler.recentImmediatePostActions = {};
   scheduler.recentAttackTitlePostActions = {};
+  scheduler.recentAttackCommentActions = {};
+  scheduler.commentSnapshotByPostNo = {};
   scheduler.attackTitlePatternLoadError = '';
   scheduler.attackTitlePatternCorpusPromise = null;
   scheduler.lastAttackTitlePatternLoadErrorLog = '';

@@ -6,6 +6,12 @@ import {
   loadBundledAttackTitlePatternCorpus,
 } from './attack-title-cluster.js';
 import {
+  buildAttackCommentActionKey,
+  buildAttackCommentDeletePlanByPostNo,
+  createAttackCommentSnapshotComments,
+  detectAttackCommentClusters,
+} from './attack-comment-cluster.js';
+import {
   DEFAULT_CONFIG,
   DEFAULT_AVOID_REASON_TEXT,
   LEGACY_AVOID_REASON_TEXT,
@@ -24,6 +30,12 @@ import {
   parseImmediateTitleBanRows,
   parseUidWarningAutoBanRows,
 } from './parser.js';
+import {
+  deleteAndBanComments,
+  extractEsno,
+  fetchRecentComments,
+} from '../comment/api.js';
+import { filterFluidComments } from '../comment/parser.js';
 import { executeBanWithDeleteFallback } from '../ip/ban-executor.js';
 import { getOrFetchUidStats } from '../../background/uid-stats-cache.js';
 import { getOrFetchUidGallogPrivacy } from '../../background/uid-gallog-privacy-cache.js';
@@ -41,6 +53,7 @@ const DELETE_MODE_REASON = {
   MONITOR_ATTACK: 'monitor_attack',
 };
 const UID_ACTION_RETENTION_MS = 24 * 60 * 60 * 1000;
+const ATTACK_COMMENT_ACTION_RETENTION_MS = 10 * 60 * 1000;
 const SINGLE_SIGHT_TOTAL_ACTIVITY_THRESHOLD = 20;
 
 class Scheduler {
@@ -53,7 +66,13 @@ class Scheduler {
     this.fetchUidGallogGuestbookState = dependencies.fetchUidGallogGuestbookState || getOrFetchUidGallogGuestbookState;
     this.detectAttackTitleClusters = dependencies.detectAttackTitleClusters || detectAttackTitleClusters;
     this.loadAttackTitlePatternCorpus = dependencies.loadAttackTitlePatternCorpus || loadBundledAttackTitlePatternCorpus;
+    this.detectAttackCommentClusters = dependencies.detectAttackCommentClusters || detectAttackCommentClusters;
+    this.extractEsno = dependencies.extractEsno || extractEsno;
+    this.fetchRecentComments = dependencies.fetchRecentComments || fetchRecentComments;
+    this.deleteAndBanComments = dependencies.deleteAndBanComments || deleteAndBanComments;
+    this.filterFluidComments = dependencies.filterFluidComments || filterFluidComments;
     this.executeBan = dependencies.executeBan || executeBanWithDeleteFallback;
+    this.isCommentDefenseRunning = dependencies.isCommentDefenseRunning || (() => false);
     this.delayFn = dependencies.delayFn || delay;
 
     this.isRunning = false;
@@ -72,12 +91,17 @@ class Scheduler {
     this.lastAttackTitleClusterCount = 0;
     this.lastAttackTitleClusterPostCount = 0;
     this.lastAttackTitleClusterRepresentative = '';
+    this.lastAttackCommentClusterCount = 0;
+    this.lastAttackCommentClusterDeleteCount = 0;
+    this.lastAttackCommentClusterPostCount = 0;
+    this.lastAttackCommentClusterRepresentative = '';
     this.lastPageRowCount = 0;
     this.lastPageUidCount = 0;
     this.totalTriggeredUidCount = 0;
     this.totalSingleSightTriggeredUidCount = 0;
     this.totalImmediateTitleBanPostCount = 0;
     this.totalAttackTitleClusterPostCount = 0;
+    this.totalAttackCommentClusterDeleteCount = 0;
     this.totalSingleSightBannedPostCount = 0;
     this.totalBannedPostCount = 0;
     this.totalFailedPostCount = 0;
@@ -93,6 +117,8 @@ class Scheduler {
     this.recentUidActions = {};
     this.recentImmediatePostActions = {};
     this.recentAttackTitlePostActions = {};
+    this.recentAttackCommentActions = {};
+    this.commentSnapshotByPostNo = {};
     this.attackTitlePatternLoadError = '';
     this.attackTitlePatternCorpusPromise = null;
     this.lastAttackTitlePatternLoadErrorLog = '';
@@ -114,6 +140,7 @@ class Scheduler {
     this.phase = PHASE.RUNNING;
     this.currentPage = 1;
     this.nextRunAt = '';
+    this.commentSnapshotByPostNo = {};
     this.restoreRuntimeDeleteModeFromConfig();
     this.lastError = '';
     this.log('🟢 분탕자동차단 시작!');
@@ -123,6 +150,7 @@ class Scheduler {
 
   async stop() {
     if (!this.isRunning) {
+      this.commentSnapshotByPostNo = {};
       this.log('⚠️ 이미 분탕자동차단이 정지 상태입니다.');
       await this.saveState();
       return;
@@ -132,6 +160,7 @@ class Scheduler {
     this.phase = PHASE.IDLE;
     this.currentPage = 1;
     this.nextRunAt = '';
+    this.commentSnapshotByPostNo = {};
     this.restoreRuntimeDeleteModeFromConfig();
     this.lastError = '';
     this.log('🔴 분탕자동차단 중지.');
@@ -167,7 +196,7 @@ class Scheduler {
         this.phase = PHASE.WAITING;
         this.currentPage = 1;
         this.log(
-          `✅ 사이클 #${this.cycleCount} 완료 - page1 글 ${this.lastPageRowCount}개 / uid ${this.lastPageUidCount}명 / 누적 uid 제재 ${this.totalTriggeredUidCount}명 / 제목 직차단 ${this.totalImmediateTitleBanPostCount}개 / 실제공격 ${this.totalAttackTitleClusterPostCount}개 / 단일깡계 ${this.totalSingleSightBannedPostCount}개`,
+          `✅ 사이클 #${this.cycleCount} 완료 - page1 글 ${this.lastPageRowCount}개 / uid ${this.lastPageUidCount}명 / 누적 uid 제재 ${this.totalTriggeredUidCount}명 / 제목 직차단 ${this.totalImmediateTitleBanPostCount}개 / 실제공격 ${this.totalAttackTitleClusterPostCount}개 / 댓글군집 ${this.totalAttackCommentClusterDeleteCount}개 / 단일깡계 ${this.totalSingleSightBannedPostCount}개`,
         );
         await this.saveState();
       } catch (error) {
@@ -197,9 +226,14 @@ class Scheduler {
     this.lastAttackTitleClusterCount = 0;
     this.lastAttackTitleClusterPostCount = 0;
     this.lastAttackTitleClusterRepresentative = '';
+    this.lastAttackCommentClusterCount = 0;
+    this.lastAttackCommentClusterDeleteCount = 0;
+    this.lastAttackCommentClusterPostCount = 0;
+    this.lastAttackCommentClusterRepresentative = '';
     pruneRecentUidActions(this.recentUidActions);
     pruneRecentImmediatePostActions(this.recentImmediatePostActions);
     pruneRecentAttackTitlePostActions(this.recentAttackTitlePostActions);
+    pruneRecentAttackCommentActions(this.recentAttackCommentActions);
     const nowMs = Date.now();
     const html = await this.fetchListHtml(this.config, 1);
     const allRows = this.parseImmediateRows(html);
@@ -217,6 +251,15 @@ class Scheduler {
       ...processedImmediatePostNos,
       ...processedAttackTitlePostNos,
     ]);
+    try {
+      await this.handleAttackCommentClusterRows(
+        allRows.filter((row) => !processedPostNos.has(Number(row?.no) || 0)),
+        html,
+        nowMs,
+      );
+    } catch (error) {
+      this.log(`⚠️ 실제공격 댓글 군집 확인 실패 - ${error.message}`);
+    }
     const rows = pageUidRows.filter((row) => !processedPostNos.has(Number(row?.no) || 0));
     const groupedRows = groupRowsByUid(rows);
 
@@ -486,6 +529,309 @@ class Scheduler {
     pruneRecentUidActions(this.recentUidActions);
     pruneRecentImmediatePostActions(this.recentImmediatePostActions);
     pruneRecentAttackTitlePostActions(this.recentAttackTitlePostActions);
+    pruneRecentAttackCommentActions(this.recentAttackCommentActions);
+  }
+
+  async handleAttackCommentClusterRows(rows = [], html = '', nowMs = Date.now()) {
+    const normalizedRows = Array.isArray(rows) ? rows : [];
+    this.pruneCommentSnapshotsToPageRows(normalizedRows);
+
+    if (!getAttackCommentClusterEnabled(this.config)) {
+      return;
+    }
+
+    if (!this.isRunning || this.isCommentDefenseRunning()) {
+      return;
+    }
+
+    const fetchCandidates = this.selectAttackCommentFetchCandidates(normalizedRows, nowMs);
+    if (fetchCandidates.length > 0) {
+      const esno = this.extractEsno(html);
+      if (!esno) {
+        this.log('⚠️ 실제공격 댓글 군집 스킵 - e_s_n_o 토큰 추출 실패');
+      } else {
+        await this.refreshAttackCommentSnapshots(fetchCandidates, esno, nowMs);
+      }
+    }
+
+    if (!this.isRunning || this.isCommentDefenseRunning()) {
+      return;
+    }
+
+    const snapshotEntries = Object.values(this.commentSnapshotByPostNo);
+    const clusters = this.detectAttackCommentClusters(snapshotEntries, {
+      minCount: getAttackCommentClusterMinCount(this.config),
+      minNormalizedLength: getAttackCommentMinNormalizedLength(this.config),
+      recentActions: this.recentAttackCommentActions,
+    });
+    if (clusters.length <= 0) {
+      return;
+    }
+
+    const matchedRepresentatives = [];
+    for (const cluster of clusters) {
+      if (!this.isRunning || this.isCommentDefenseRunning()) {
+        break;
+      }
+
+      const deletedCount = await this.deleteAttackCommentCluster(cluster);
+      if (deletedCount <= 0) {
+        continue;
+      }
+
+      const representative = String(cluster?.representative || cluster?.normalizedMemo || '댓글군집').trim();
+      matchedRepresentatives.push(representative);
+      this.lastAttackCommentClusterRepresentative = summarizeMatchedTitles(matchedRepresentatives);
+    }
+  }
+
+  pruneCommentSnapshotsToPageRows(rows = []) {
+    const pagePostNos = new Set(
+      (Array.isArray(rows) ? rows : [])
+        .map((row) => String(Math.max(0, Number(row?.no) || 0)))
+        .filter((postNo) => postNo !== '0'),
+    );
+
+    for (const postNo of Object.keys(this.commentSnapshotByPostNo || {})) {
+      if (!pagePostNos.has(String(postNo))) {
+        delete this.commentSnapshotByPostNo[postNo];
+      }
+    }
+  }
+
+  selectAttackCommentFetchCandidates(rows = [], nowMs = Date.now()) {
+    const candidates = [];
+    const seenPostNos = new Set();
+    const ttlMs = getAttackCommentSnapshotTtlMs(this.config);
+
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const postNo = Math.max(0, Number(row?.no) || 0);
+      if (postNo <= 0 || seenPostNos.has(postNo)) {
+        continue;
+      }
+
+      seenPostNos.add(postNo);
+      const commentCount = Math.max(0, Number(row?.commentCount) || 0);
+      const snapshot = this.commentSnapshotByPostNo[String(postNo)];
+      const hasDirectRecentSuccessInSnapshot = snapshotHasRecentAttackCommentSuccess(
+        snapshot,
+        this.recentAttackCommentActions,
+      );
+      const hasRecentSuccessInSnapshot =
+        hasDirectRecentSuccessInSnapshot
+        || snapshotSharesRecentAttackCommentSuccess(snapshot, this.recentAttackCommentActions);
+      const lastCheckedAtMs = parseTimestamp(snapshot?.lastCheckedAt);
+      const isSnapshotExpired = lastCheckedAtMs <= 0 || nowMs - lastCheckedAtMs >= ttlMs;
+
+      if (commentCount <= 0) {
+        if (hasDirectRecentSuccessInSnapshot) {
+          continue;
+        }
+
+        delete this.commentSnapshotByPostNo[String(postNo)];
+        continue;
+      }
+
+      if (!snapshot) {
+        candidates.push(row);
+        continue;
+      }
+
+      if (Math.max(0, Number(snapshot.commentCount) || 0) !== commentCount) {
+        if (hasRecentSuccessInSnapshot) {
+          continue;
+        }
+
+        candidates.push(row);
+        continue;
+      }
+
+      if (hasRecentSuccessInSnapshot) {
+        continue;
+      }
+
+      if (isSnapshotExpired) {
+        candidates.push(row);
+      }
+    }
+
+    return candidates;
+  }
+
+  async refreshAttackCommentSnapshots(rows = [], esno = '', nowMs = Date.now()) {
+    const candidates = Array.isArray(rows) ? rows : [];
+    if (candidates.length <= 0) {
+      return;
+    }
+
+    const fetchedAt = new Date(nowMs).toISOString();
+    await mapWithConcurrencyWorkerPool(
+      candidates,
+      getAttackCommentFetchConcurrency(this.config),
+      getAttackCommentFetchRequestDelayMs(this.config),
+      async (row) => {
+        if (!this.isRunning || this.isCommentDefenseRunning()) {
+          return;
+        }
+
+        const postNo = Math.max(0, Number(row?.no) || 0);
+        if (postNo <= 0) {
+          return;
+        }
+
+        try {
+          const result = await runWithTimeoutSignal(
+            getAttackCommentFetchTimeoutMs(this.config),
+            (signal) => this.fetchRecentComments(this.config, postNo, esno, 1, { signal }),
+            '실제공격 댓글 군집 조회 시간 초과',
+          );
+          const fluidComments = this.filterFluidComments(Array.isArray(result?.comments) ? result.comments : []);
+          this.commentSnapshotByPostNo[String(postNo)] = {
+            postNo,
+            commentCount: Math.max(0, Number(row?.commentCount) || 0),
+            fetchedTotalCount: Math.max(0, Number(result?.totalCnt) || 0),
+            lastCheckedAt: fetchedAt,
+            comments: createAttackCommentSnapshotComments(fluidComments, {
+              postNo,
+              minNormalizedLength: getAttackCommentMinNormalizedLength(this.config),
+            }),
+          };
+        } catch (error) {
+          const commentCount = Math.max(0, Number(row?.commentCount) || 0);
+          this.log(`⚠️ 실제공격 댓글 군집 조회 실패 - #${postNo} / 목록 댓글 ${commentCount}개: ${error.message}`);
+        }
+      },
+      () => this.isRunning && !this.isCommentDefenseRunning(),
+      this.delayFn,
+    );
+  }
+
+  async deleteAttackCommentCluster(cluster = {}) {
+    const deletePlanByPostNo = buildAttackCommentDeletePlanByPostNo(cluster);
+    if (deletePlanByPostNo.size <= 0) {
+      return 0;
+    }
+
+    const representative = String(cluster?.representative || cluster?.normalizedMemo || '댓글군집').trim();
+    const totalClusterCommentCount = Math.max(
+      Array.isArray(cluster?.allComments) ? cluster.allComments.length : 0,
+      Array.isArray(cluster?.comments) ? cluster.comments.length : 0,
+    );
+    const targetCommentCount = Array.isArray(cluster?.comments) ? cluster.comments.length : 0;
+    this.lastAttackCommentClusterCount += 1;
+    this.lastAttackCommentClusterPostCount += deletePlanByPostNo.size;
+    this.log(
+      `🚨 실제공격 댓글 군집 "${representative}" 유동댓글 ${totalClusterCommentCount}개 / 차단/삭제 대상 ${targetCommentCount}개 / ${deletePlanByPostNo.size}글 -> 댓글 IP차단+삭제 시작`,
+    );
+
+    let deletedCount = 0;
+    let successPostCount = 0;
+    let failedDeleteCount = 0;
+    const succeededComments = [];
+    const actionAt = new Date().toISOString();
+    for (const [postNo, commentNos] of deletePlanByPostNo.entries()) {
+      if (!this.isRunning || this.isCommentDefenseRunning()) {
+        break;
+      }
+
+      const numericPostNo = Math.max(0, Number(postNo) || 0);
+      if (numericPostNo <= 0 || commentNos.length <= 0) {
+        continue;
+      }
+
+      let result;
+      try {
+        result = await runWithTimeoutSignal(
+          getAttackCommentDeleteTimeoutMs(this.config),
+          (signal) => this.deleteAndBanComments(
+            buildAttackCommentBanConfig(this.config),
+            numericPostNo,
+            commentNos,
+            { signal },
+          ),
+          '실제공격 댓글 군집 차단/삭제 시간 초과',
+        );
+      } catch (error) {
+        failedDeleteCount += commentNos.length;
+        this.log(`⚠️ 실제공격 댓글 군집 차단/삭제 실패 - #${numericPostNo} / 대상 댓글 ${commentNos.length}개: ${error.message}`);
+        await this.saveState();
+        continue;
+      }
+
+      if (!result.success) {
+        failedDeleteCount += commentNos.length;
+        this.log(`⚠️ 실제공격 댓글 군집 차단/삭제 실패 - #${numericPostNo} / 대상 댓글 ${commentNos.length}개: ${result.message}`);
+      } else {
+        successPostCount += 1;
+        deletedCount += commentNos.length;
+        for (const commentNo of commentNos) {
+          succeededComments.push({ postNo: numericPostNo, no: commentNo });
+          this.recentAttackCommentActions[buildAttackCommentActionKey(numericPostNo, commentNo)] =
+            createRecentAttackCommentActionEntry({
+              postNo: numericPostNo,
+              commentNo,
+              normalizedMemo: representative,
+              success: true,
+              nowIso: actionAt,
+            });
+        }
+      }
+
+      await this.saveState();
+      if (this.isRunning && !this.isCommentDefenseRunning() && getAttackCommentDeleteDelayMs(this.config) > 0) {
+        await this.delayFn(getAttackCommentDeleteDelayMs(this.config));
+      }
+    }
+
+    if (deletedCount > 0) {
+      this.removeAttackCommentSnapshotComments(succeededComments);
+      this.lastAttackCommentClusterDeleteCount += deletedCount;
+      this.totalAttackCommentClusterDeleteCount += deletedCount;
+      this.log(`🗑️⛔ 실제공격 댓글 군집 "${representative}" ${successPostCount}글 / 댓글 ${deletedCount}개 IP차단+삭제 요청 완료`);
+      await this.saveState();
+    }
+
+    return deletedCount;
+  }
+
+  removeAttackCommentSnapshotComments(comments = []) {
+    const groupedCommentNos = new Map();
+    for (const comment of Array.isArray(comments) ? comments : []) {
+      const postNo = Math.max(0, Number(comment?.postNo) || 0);
+      const commentNo = String(comment?.no || '').trim();
+      if (postNo <= 0 || !commentNo) {
+        continue;
+      }
+
+      const postKey = String(postNo);
+      const existing = groupedCommentNos.get(postKey);
+      if (existing) {
+        existing.push(commentNo);
+        continue;
+      }
+
+      groupedCommentNos.set(postKey, [commentNo]);
+    }
+
+    for (const [postNo, commentNos] of groupedCommentNos.entries()) {
+      this.removeAttackCommentNosFromSnapshot(postNo, commentNos);
+    }
+  }
+
+  removeAttackCommentNosFromSnapshot(postNo, commentNos = []) {
+    const postKey = String(Math.max(0, Number(postNo) || 0));
+    const snapshot = this.commentSnapshotByPostNo[postKey];
+    if (!snapshot) {
+      return;
+    }
+
+    const removedNos = new Set(
+      (Array.isArray(commentNos) ? commentNos : [])
+        .map((commentNo) => String(commentNo || '').trim())
+        .filter(Boolean),
+    );
+    snapshot.comments = (Array.isArray(snapshot.comments) ? snapshot.comments : [])
+      .filter((comment) => !removedNos.has(String(comment?.no || '').trim()));
   }
 
   async handleAttackTitleClusterRows(rows = [], nowMs = Date.now()) {
@@ -817,12 +1163,17 @@ class Scheduler {
           lastAttackTitleClusterCount: this.lastAttackTitleClusterCount,
           lastAttackTitleClusterPostCount: this.lastAttackTitleClusterPostCount,
           lastAttackTitleClusterRepresentative: this.lastAttackTitleClusterRepresentative,
+          lastAttackCommentClusterCount: this.lastAttackCommentClusterCount,
+          lastAttackCommentClusterDeleteCount: this.lastAttackCommentClusterDeleteCount,
+          lastAttackCommentClusterPostCount: this.lastAttackCommentClusterPostCount,
+          lastAttackCommentClusterRepresentative: this.lastAttackCommentClusterRepresentative,
           lastPageRowCount: this.lastPageRowCount,
           lastPageUidCount: this.lastPageUidCount,
           totalTriggeredUidCount: this.totalTriggeredUidCount,
           totalSingleSightTriggeredUidCount: this.totalSingleSightTriggeredUidCount,
           totalImmediateTitleBanPostCount: this.totalImmediateTitleBanPostCount,
           totalAttackTitleClusterPostCount: this.totalAttackTitleClusterPostCount,
+          totalAttackCommentClusterDeleteCount: this.totalAttackCommentClusterDeleteCount,
           totalSingleSightBannedPostCount: this.totalSingleSightBannedPostCount,
           totalBannedPostCount: this.totalBannedPostCount,
           totalFailedPostCount: this.totalFailedPostCount,
@@ -837,6 +1188,8 @@ class Scheduler {
           recentUidActions: this.recentUidActions,
           recentImmediatePostActions: this.recentImmediatePostActions,
           recentAttackTitlePostActions: this.recentAttackTitlePostActions,
+          recentAttackCommentActions: this.recentAttackCommentActions,
+          commentSnapshotByPostNo: this.commentSnapshotByPostNo,
           attackTitlePatternLoadError: this.attackTitlePatternLoadError,
           logs: this.logs.slice(0, 50),
           config: buildPersistedConfig(this.config),
@@ -869,12 +1222,17 @@ class Scheduler {
       this.lastAttackTitleClusterCount = Math.max(0, Number(schedulerState.lastAttackTitleClusterCount) || 0);
       this.lastAttackTitleClusterPostCount = Math.max(0, Number(schedulerState.lastAttackTitleClusterPostCount) || 0);
       this.lastAttackTitleClusterRepresentative = String(schedulerState.lastAttackTitleClusterRepresentative || '');
+      this.lastAttackCommentClusterCount = Math.max(0, Number(schedulerState.lastAttackCommentClusterCount) || 0);
+      this.lastAttackCommentClusterDeleteCount = Math.max(0, Number(schedulerState.lastAttackCommentClusterDeleteCount) || 0);
+      this.lastAttackCommentClusterPostCount = Math.max(0, Number(schedulerState.lastAttackCommentClusterPostCount) || 0);
+      this.lastAttackCommentClusterRepresentative = String(schedulerState.lastAttackCommentClusterRepresentative || '');
       this.lastPageRowCount = Math.max(0, Number(schedulerState.lastPageRowCount) || 0);
       this.lastPageUidCount = Math.max(0, Number(schedulerState.lastPageUidCount) || 0);
       this.totalTriggeredUidCount = Math.max(0, Number(schedulerState.totalTriggeredUidCount) || 0);
       this.totalSingleSightTriggeredUidCount = Math.max(0, Number(schedulerState.totalSingleSightTriggeredUidCount) || 0);
       this.totalImmediateTitleBanPostCount = Math.max(0, Number(schedulerState.totalImmediateTitleBanPostCount) || 0);
       this.totalAttackTitleClusterPostCount = Math.max(0, Number(schedulerState.totalAttackTitleClusterPostCount) || 0);
+      this.totalAttackCommentClusterDeleteCount = Math.max(0, Number(schedulerState.totalAttackCommentClusterDeleteCount) || 0);
       this.totalSingleSightBannedPostCount = Math.max(0, Number(schedulerState.totalSingleSightBannedPostCount) || 0);
       this.totalBannedPostCount = Math.max(0, Number(schedulerState.totalBannedPostCount) || 0);
       this.totalFailedPostCount = Math.max(0, Number(schedulerState.totalFailedPostCount) || 0);
@@ -898,6 +1256,8 @@ class Scheduler {
       this.recentUidActions = normalizeRecentUidActions(schedulerState.recentUidActions);
       this.recentImmediatePostActions = normalizeRecentImmediatePostActions(schedulerState.recentImmediatePostActions);
       this.recentAttackTitlePostActions = normalizeRecentAttackTitlePostActions(schedulerState.recentAttackTitlePostActions);
+      this.recentAttackCommentActions = normalizeRecentAttackCommentActions(schedulerState.recentAttackCommentActions);
+      this.commentSnapshotByPostNo = normalizeCommentSnapshots(schedulerState.commentSnapshotByPostNo);
       this.attackTitlePatternLoadError = String(schedulerState.attackTitlePatternLoadError || '');
       this.logs = Array.isArray(schedulerState.logs) ? schedulerState.logs : [];
       this.config = normalizeConfig({
@@ -907,6 +1267,7 @@ class Scheduler {
       pruneRecentUidActions(this.recentUidActions);
       pruneRecentImmediatePostActions(this.recentImmediatePostActions);
       pruneRecentAttackTitlePostActions(this.recentAttackTitlePostActions);
+      pruneRecentAttackCommentActions(this.recentAttackCommentActions);
     } catch (error) {
       console.error('[UidWarningAutoBanScheduler] 상태 복원 실패:', error.message);
     }
@@ -937,6 +1298,7 @@ class Scheduler {
   getStatus() {
     pruneRecentUidActions(this.recentUidActions);
     pruneRecentAttackTitlePostActions(this.recentAttackTitlePostActions);
+    pruneRecentAttackCommentActions(this.recentAttackCommentActions);
     return {
       isRunning: this.isRunning,
       phase: this.phase,
@@ -953,12 +1315,17 @@ class Scheduler {
       lastAttackTitleClusterCount: this.lastAttackTitleClusterCount,
       lastAttackTitleClusterPostCount: this.lastAttackTitleClusterPostCount,
       lastAttackTitleClusterRepresentative: this.lastAttackTitleClusterRepresentative,
+      lastAttackCommentClusterCount: this.lastAttackCommentClusterCount,
+      lastAttackCommentClusterDeleteCount: this.lastAttackCommentClusterDeleteCount,
+      lastAttackCommentClusterPostCount: this.lastAttackCommentClusterPostCount,
+      lastAttackCommentClusterRepresentative: this.lastAttackCommentClusterRepresentative,
       lastPageRowCount: this.lastPageRowCount,
       lastPageUidCount: this.lastPageUidCount,
       totalTriggeredUidCount: this.totalTriggeredUidCount,
       totalSingleSightTriggeredUidCount: this.totalSingleSightTriggeredUidCount,
       totalImmediateTitleBanPostCount: this.totalImmediateTitleBanPostCount,
       totalAttackTitleClusterPostCount: this.totalAttackTitleClusterPostCount,
+      totalAttackCommentClusterDeleteCount: this.totalAttackCommentClusterDeleteCount,
       totalSingleSightBannedPostCount: this.totalSingleSightBannedPostCount,
       totalBannedPostCount: this.totalBannedPostCount,
       totalFailedPostCount: this.totalFailedPostCount,
@@ -993,6 +1360,32 @@ function normalizeConfig(config = {}) {
     delChk: config.delChk === undefined ? Boolean(DEFAULT_CONFIG.delChk) : Boolean(config.delChk),
     avoidTypeChk: config.avoidTypeChk === undefined ? Boolean(DEFAULT_CONFIG.avoidTypeChk) : Boolean(config.avoidTypeChk),
     immediateTitleBanRules: normalizeImmediateTitleBanRules(config.immediateTitleBanRules),
+    attackCommentClusterEnabled: config.attackCommentClusterEnabled === undefined
+      ? Boolean(DEFAULT_CONFIG.attackCommentClusterEnabled)
+      : Boolean(config.attackCommentClusterEnabled),
+    attackCommentClusterMinCount: Math.max(2, Number(config.attackCommentClusterMinCount) || DEFAULT_CONFIG.attackCommentClusterMinCount),
+    attackCommentMinNormalizedLength: Math.max(1, Number(config.attackCommentMinNormalizedLength) || DEFAULT_CONFIG.attackCommentMinNormalizedLength),
+    attackCommentFetchConcurrency: Math.max(1, Number(config.attackCommentFetchConcurrency) || DEFAULT_CONFIG.attackCommentFetchConcurrency),
+    attackCommentFetchRequestDelayMs: Math.max(
+      0,
+      Number(config.attackCommentFetchRequestDelayMs ?? config.attackCommentFetchStartDelayMs)
+        || DEFAULT_CONFIG.attackCommentFetchRequestDelayMs,
+    ),
+    attackCommentFetchTimeoutMs: Math.max(1000, Number(config.attackCommentFetchTimeoutMs) || DEFAULT_CONFIG.attackCommentFetchTimeoutMs),
+    attackCommentDeleteDelayMs: Math.max(0, Number(config.attackCommentDeleteDelayMs) || DEFAULT_CONFIG.attackCommentDeleteDelayMs),
+    attackCommentDeleteTimeoutMs: Math.max(1000, Number(config.attackCommentDeleteTimeoutMs) || DEFAULT_CONFIG.attackCommentDeleteTimeoutMs),
+    attackCommentSnapshotTtlMs: Math.max(1000, Number(config.attackCommentSnapshotTtlMs) || DEFAULT_CONFIG.attackCommentSnapshotTtlMs),
+  };
+}
+
+function buildAttackCommentBanConfig(config = {}) {
+  return {
+    ...config,
+    avoidHour: ATTACK_TITLE_BAN_HOUR,
+    avoidReason: '0',
+    avoidReasonText: ATTACK_TITLE_BAN_REASON_TEXT,
+    delChk: true,
+    avoidTypeChk: true,
   };
 }
 
@@ -1169,6 +1562,126 @@ function normalizeRecentAttackTitlePostActions(raw = {}) {
   return normalizeRecentImmediatePostActions(raw);
 }
 
+function createRecentAttackCommentActionEntry({
+  postNo,
+  commentNo,
+  normalizedMemo,
+  success,
+  nowIso,
+}) {
+  return {
+    postNo: Math.max(0, Number(postNo) || 0),
+    commentNo: String(commentNo || '').trim(),
+    normalizedMemo: String(normalizedMemo || '').trim(),
+    lastActionAt: String(nowIso || ''),
+    success: success === true,
+  };
+}
+
+function normalizeRecentAttackCommentActions(raw = {}) {
+  const result = {};
+  for (const [key, value] of Object.entries(raw || {})) {
+    const keyParts = String(key || '').split('::');
+    const normalizedPostNo = Math.max(0, Number(value?.postNo || keyParts[0]) || 0);
+    const normalizedCommentNo = String(value?.commentNo || keyParts[1] || '').trim();
+    const normalizedKey = normalizedPostNo > 0 && normalizedCommentNo
+      ? buildAttackCommentActionKey(normalizedPostNo, normalizedCommentNo)
+      : String(key || '').trim();
+    if (!normalizedKey || normalizedKey === '0::') {
+      continue;
+    }
+
+    result[normalizedKey] = createRecentAttackCommentActionEntry({
+      postNo: normalizedPostNo,
+      commentNo: normalizedCommentNo || String(normalizedKey.split('::')[1] || '').trim(),
+      normalizedMemo: value?.normalizedMemo,
+      success: value?.success,
+      nowIso: value?.lastActionAt,
+    });
+  }
+  return result;
+}
+
+function normalizeCommentSnapshots(raw = {}) {
+  const result = {};
+  for (const [key, value] of Object.entries(raw || {})) {
+    const postNo = Math.max(0, Number(value?.postNo || key) || 0);
+    if (postNo <= 0) {
+      continue;
+    }
+
+    const comments = [];
+    const seenCommentNos = new Set();
+    for (const comment of Array.isArray(value?.comments) ? value.comments : []) {
+      const commentNo = String(comment?.no || '').trim();
+      const normalizedMemo = String(comment?.normalizedMemo || '').trim();
+      if (!commentNo || !normalizedMemo || seenCommentNos.has(commentNo)) {
+        continue;
+      }
+
+      seenCommentNos.add(commentNo);
+      comments.push({
+        postNo,
+        no: commentNo,
+        ip: String(comment?.ip || '').trim(),
+        name: String(comment?.name || '').trim(),
+        memoPreview: String(comment?.memoPreview || '').slice(0, 120),
+        normalizedMemo,
+      });
+    }
+
+    result[String(postNo)] = {
+      postNo,
+      commentCount: Math.max(0, Number(value?.commentCount) || 0),
+      fetchedTotalCount: Math.max(0, Number(value?.fetchedTotalCount) || 0),
+      lastCheckedAt: String(value?.lastCheckedAt || ''),
+      comments,
+    };
+  }
+  return result;
+}
+
+function snapshotHasRecentAttackCommentSuccess(snapshot = {}, recentActions = {}) {
+  const postNo = Math.max(0, Number(snapshot?.postNo) || 0);
+  if (postNo <= 0) {
+    return false;
+  }
+
+  for (const comment of Array.isArray(snapshot?.comments) ? snapshot.comments : []) {
+    const commentNo = String(comment?.no || '').trim();
+    if (!commentNo) {
+      continue;
+    }
+
+    const actionKey = buildAttackCommentActionKey(postNo, commentNo);
+    if (recentActions?.[actionKey]?.success === true) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function snapshotSharesRecentAttackCommentSuccess(snapshot = {}, recentActions = {}) {
+  const normalizedMemos = new Set(
+    (Array.isArray(snapshot?.comments) ? snapshot.comments : [])
+      .map((comment) => String(comment?.normalizedMemo || '').trim())
+      .filter(Boolean),
+  );
+  if (normalizedMemos.size <= 0) {
+    return false;
+  }
+
+  for (const action of Object.values(recentActions || {})) {
+    const normalizedMemo = String(action?.normalizedMemo || '').trim();
+    if (action?.success === true && normalizedMemo && normalizedMemos.has(normalizedMemo)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function pruneRecentUidActions(entries = {}) {
   const nowMs = Date.now();
   for (const [key, value] of Object.entries(entries || {})) {
@@ -1193,6 +1706,16 @@ function pruneRecentAttackTitlePostActions(entries = {}) {
   pruneRecentImmediatePostActions(entries);
 }
 
+function pruneRecentAttackCommentActions(entries = {}) {
+  const nowMs = Date.now();
+  for (const [key, value] of Object.entries(entries || {})) {
+    const actionAtMs = parseTimestamp(value?.lastActionAt);
+    if (actionAtMs <= 0 || nowMs - actionAtMs > ATTACK_COMMENT_ACTION_RETENTION_MS) {
+      delete entries[key];
+    }
+  }
+}
+
 function clampPercent(value, fallback) {
   return Math.min(100, Math.max(0, Number(value) || Number(fallback) || 0));
 }
@@ -1215,6 +1738,46 @@ function getPostRatioThresholdPercent(config = {}) {
 
 function getRetryCooldownMs(config = {}) {
   return Math.max(1000, Number(config.retryCooldownMs) || DEFAULT_CONFIG.retryCooldownMs);
+}
+
+function getAttackCommentClusterEnabled(config = {}) {
+  return config.attackCommentClusterEnabled !== false;
+}
+
+function getAttackCommentClusterMinCount(config = {}) {
+  return Math.max(2, Number(config.attackCommentClusterMinCount) || DEFAULT_CONFIG.attackCommentClusterMinCount);
+}
+
+function getAttackCommentMinNormalizedLength(config = {}) {
+  return Math.max(1, Number(config.attackCommentMinNormalizedLength) || DEFAULT_CONFIG.attackCommentMinNormalizedLength);
+}
+
+function getAttackCommentFetchConcurrency(config = {}) {
+  return Math.max(1, Number(config.attackCommentFetchConcurrency) || DEFAULT_CONFIG.attackCommentFetchConcurrency);
+}
+
+function getAttackCommentFetchRequestDelayMs(config = {}) {
+  return Math.max(
+    0,
+    Number(config.attackCommentFetchRequestDelayMs ?? config.attackCommentFetchStartDelayMs)
+      || DEFAULT_CONFIG.attackCommentFetchRequestDelayMs,
+  );
+}
+
+function getAttackCommentFetchTimeoutMs(config = {}) {
+  return Math.max(1000, Number(config.attackCommentFetchTimeoutMs) || DEFAULT_CONFIG.attackCommentFetchTimeoutMs);
+}
+
+function getAttackCommentDeleteDelayMs(config = {}) {
+  return Math.max(0, Number(config.attackCommentDeleteDelayMs) || DEFAULT_CONFIG.attackCommentDeleteDelayMs);
+}
+
+function getAttackCommentDeleteTimeoutMs(config = {}) {
+  return Math.max(1000, Number(config.attackCommentDeleteTimeoutMs) || DEFAULT_CONFIG.attackCommentDeleteTimeoutMs);
+}
+
+function getAttackCommentSnapshotTtlMs(config = {}) {
+  return Math.max(1000, Number(config.attackCommentSnapshotTtlMs) || DEFAULT_CONFIG.attackCommentSnapshotTtlMs);
 }
 
 function parseTimestamp(value) {
@@ -1350,6 +1913,75 @@ function getImmediateTitleRuleLogLabel(rule = {}) {
 
 function isTwoConsonantNick(value) {
   return /^[ㄱ-ㅎ]{2}$/.test(String(value || '').trim());
+}
+
+async function mapWithConcurrencyWorkerPool(
+  items,
+  concurrency,
+  requestDelayMs,
+  mapper,
+  shouldContinue = () => true,
+  delayFn = delay,
+) {
+  const normalizedItems = Array.isArray(items) ? items : [];
+  if (normalizedItems.length <= 0) {
+    return [];
+  }
+
+  const workerCount = Math.max(1, Math.min(Number(concurrency) || 1, normalizedItems.length));
+  const delayMs = Math.max(0, Number(requestDelayMs) || 0);
+  const results = new Array(normalizedItems.length);
+  let nextIndex = 0;
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (shouldContinue()) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      if (currentIndex >= normalizedItems.length) {
+        return;
+      }
+
+      if (!shouldContinue()) {
+        return;
+      }
+
+      try {
+        results[currentIndex] = await mapper(normalizedItems[currentIndex], currentIndex);
+      } catch (error) {
+        results[currentIndex] = {
+          success: false,
+          message: String(error?.message || '알 수 없는 오류'),
+        };
+      }
+
+      if (delayMs > 0 && shouldContinue() && nextIndex < normalizedItems.length) {
+        await delayFn(delayMs);
+      }
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
+async function runWithTimeoutSignal(timeoutMs, work, timeoutLabel = '작업 시간 초과') {
+  const normalizedTimeoutMs = Math.max(1000, Number(timeoutMs) || 0);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, normalizedTimeoutMs);
+
+  try {
+    return await work(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted || error?.name === 'AbortError') {
+      throw new Error(`${timeoutLabel} (${normalizedTimeoutMs}ms)`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function delayWhileRunning(scheduler, ms) {

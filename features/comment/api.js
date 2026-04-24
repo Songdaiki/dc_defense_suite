@@ -293,17 +293,18 @@ async function fetchAllComments(config = {}, postNo, esno, pageConcurrency = 4) 
  * @param {number} maxPages
  * @returns {Promise<{comments: Array, totalCnt: number, fetchedPages: number}>}
  */
-async function fetchRecentComments(config = {}, postNo, esno, maxPages = 2) {
-  return withDcRequestLease({ feature: 'comment', kind: 'fetchRecentComments' }, async () => {
+async function fetchRecentComments(config = {}, postNo, esno, maxPages = 2, options = {}) {
+  return withDcRequestLease({ feature: 'comment', kind: 'fetchRecentComments' }, async (lease) => {
+    const signal = options.signal || lease.signal;
     const normalizedMaxPages = Math.max(1, Number(maxPages) || 1);
-    const firstPage = await fetchComments(config, postNo, esno, 1);
+    const firstPage = await fetchComments(config, postNo, esno, 1, { signal });
     const allComments = [...firstPage.comments];
     const firstPageSize = firstPage.comments.length || 20;
     const totalPages = Math.max(1, Math.ceil(firstPage.totalCnt / firstPageSize));
     const pagesToFetch = Math.min(normalizedMaxPages, totalPages);
 
     for (let page = 2; page <= pagesToFetch; page += 1) {
-      const pageResult = await fetchComments(config, postNo, esno, page);
+      const pageResult = await fetchComments(config, postNo, esno, page, { signal });
       allComments.push(...pageResult.comments);
     }
 
@@ -393,8 +394,9 @@ async function deleteComments(config = {}, postNo, commentNos) {
  * @param {string[]} commentNos - 차단+삭제할 댓글 번호 배열
  * @returns {Promise<{success: boolean, message: string}>}
  */
-async function deleteAndBanComments(config = {}, postNo, commentNos) {
-  return withDcRequestLease({ feature: 'comment', kind: 'deleteAndBanComments' }, async () => {
+async function deleteAndBanComments(config = {}, postNo, commentNos, options = {}) {
+  return withDcRequestLease({ feature: 'comment', kind: 'deleteAndBanComments' }, async (lease) => {
+    const signal = options.signal || lease.signal;
     const normalizedCommentNos = normalizeCommentNos(commentNos);
     if (normalizedCommentNos.length === 0) {
       return { success: true, message: '차단할 댓글 없음' };
@@ -409,7 +411,7 @@ async function deleteAndBanComments(config = {}, postNo, commentNos) {
     const commentNoChunks = chunkArray(normalizedCommentNos, COMMENT_ACTION_BATCH_LIMIT);
     for (let index = 0; index < commentNoChunks.length; index += 1) {
       const chunk = commentNoChunks[index];
-      const chunkResult = await deleteAndBanCommentsChunk(resolved, postNo, ciToken, chunk);
+      const chunkResult = await deleteAndBanCommentsChunk(resolved, postNo, ciToken, chunk, { signal });
       if (!chunkResult.success) {
         return {
           success: false,
@@ -418,7 +420,7 @@ async function deleteAndBanComments(config = {}, postNo, commentNos) {
       }
 
       if (index < commentNoChunks.length - 1) {
-        await delay(getChunkJitterDelayMs());
+        await delay(getChunkJitterDelayMs(), signal);
       }
     }
 
@@ -570,7 +572,7 @@ async function deleteCommentsChunk(resolvedConfig, postNo, ciToken, commentNos) 
   }
 }
 
-async function deleteAndBanCommentsChunk(resolvedConfig, postNo, ciToken, commentNos) {
+async function deleteAndBanCommentsChunk(resolvedConfig, postNo, ciToken, commentNos, options = {}) {
   const url = `${resolvedConfig.baseUrl}/ajax/minor_manager_board_ajax/update_avoid_list`;
   const body = new URLSearchParams();
   body.set('ci_t', ciToken);
@@ -596,6 +598,7 @@ async function deleteAndBanCommentsChunk(resolvedConfig, postNo, ciToken, commen
       'Origin': resolvedConfig.baseUrl,
     },
     body: body.toString(),
+    signal: options.signal,
   });
 
   const responseText = await response.text();
