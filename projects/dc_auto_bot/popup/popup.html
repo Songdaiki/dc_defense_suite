@@ -72,6 +72,10 @@
         <span id="trustedUserCountText" class="status-value">0명</span>
       </div>
       <div class="status-item">
+        <span class="status-label">관리자 사용자</span>
+        <span id="adminUserCountText" class="status-value">0명</span>
+      </div>
+      <div class="status-item">
         <span class="status-label">처리 시도</span>
         <span id="totalAttemptedText" class="status-value">0회</span>
       </div>
@@ -153,6 +157,29 @@
 
       <div id="trustedUserList" class="trusted-user-list">
         <div class="list-empty">등록된 신뢰 사용자가 없습니다.</div>
+      </div>
+    </details>
+
+    <details class="admin-users-section">
+      <summary>관리자 사용자</summary>
+      <div class="section-header">
+        <p>작성자/최근100개 필터 없이 Gemini 판정으로 바로 보냅니다.</p>
+      </div>
+
+      <div class="settings-grid">
+        <div class="setting-item">
+          <label for="adminUserIdInput">user_id</label>
+          <input type="text" id="adminUserIdInput" placeholder="image8481">
+        </div>
+        <div class="setting-item">
+          <label for="adminUserLabelInput">label</label>
+          <input type="text" id="adminUserLabelInput" maxlength="20" placeholder="だいき">
+        </div>
+        <button id="addAdminUserBtn" class="btn btn-primary">관리자 사용자 추가</button>
+      </div>
+
+      <div id="adminUserList" class="trusted-user-list">
+        <div class="list-empty">등록된 관리자 사용자가 없습니다.</div>
       </div>
     </details>
 

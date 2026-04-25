@@ -6,6 +6,7 @@ const DEFAULT_CONFIG = {
   reportPostNo: '0',
   pollIntervalMs: 60000,
   trustedUsers: [],
+  adminUsers: [],
   dailyLimitPerUser: 2,
   commandPrefix: '@특갤봇',
   avoidHour: '6',

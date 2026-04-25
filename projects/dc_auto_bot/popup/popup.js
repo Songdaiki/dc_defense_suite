@@ -5,6 +5,7 @@ const statusText = document.getElementById('statusText');
 const phaseText = document.getElementById('phaseText');
 const lastPollAtText = document.getElementById('lastPollAtText');
 const trustedUserCountText = document.getElementById('trustedUserCountText');
+const adminUserCountText = document.getElementById('adminUserCountText');
 const totalAttemptedText = document.getElementById('totalAttemptedText');
 const totalSucceededText = document.getElementById('totalSucceededText');
 const totalFailedText = document.getElementById('totalFailedText');
@@ -24,6 +25,10 @@ const trustedUserIdInput = document.getElementById('trustedUserIdInput');
 const trustedUserLabelInput = document.getElementById('trustedUserLabelInput');
 const addTrustedUserBtn = document.getElementById('addTrustedUserBtn');
 const trustedUserList = document.getElementById('trustedUserList');
+const adminUserIdInput = document.getElementById('adminUserIdInput');
+const adminUserLabelInput = document.getElementById('adminUserLabelInput');
+const addAdminUserBtn = document.getElementById('addAdminUserBtn');
+const adminUserList = document.getElementById('adminUserList');
 const logList = document.getElementById('logList');
 const resetBtn = document.getElementById('resetBtn');
 const llmAuthStatus = document.getElementById('llmAuthStatus');
@@ -118,28 +123,14 @@ function bindEvents() {
   });
 
   addTrustedUserBtn.addEventListener('click', async () => {
-    const userId = trustedUserIdInput.value.trim();
-    const label = trustedUserLabelInput.value.trim();
-
-    if (!userId) {
-      alert('user_id를 입력하세요.');
-      trustedUserIdInput.focus();
+    const input = validateUserInputFromPopup(trustedUserIdInput, trustedUserLabelInput);
+    if (!input.success) {
+      alert(input.message);
+      input.focusTarget?.focus();
       return;
     }
 
-    if (!label) {
-      alert('label을 입력하세요.');
-      trustedUserLabelInput.focus();
-      return;
-    }
-
-    if (label.length > 20) {
-      alert('label은 20자 이하로 입력하세요.');
-      trustedUserLabelInput.focus();
-      return;
-    }
-
-    const response = await sendMessage({ action: 'addTrustedUser', userId, label });
+    const response = await sendMessage({ action: 'addTrustedUser', userId: input.userId, label: input.label });
     if (!response?.success) {
       alert(response?.message || '신뢰 사용자 등록에 실패했습니다.');
       await refreshStatus();
@@ -148,6 +139,26 @@ function bindEvents() {
 
     trustedUserIdInput.value = '';
     trustedUserLabelInput.value = '';
+    applyStatus(response.status);
+  });
+
+  addAdminUserBtn.addEventListener('click', async () => {
+    const input = validateUserInputFromPopup(adminUserIdInput, adminUserLabelInput);
+    if (!input.success) {
+      alert(input.message);
+      input.focusTarget?.focus();
+      return;
+    }
+
+    const response = await sendMessage({ action: 'addAdminUser', userId: input.userId, label: input.label });
+    if (!response?.success) {
+      alert(response?.message || '관리자 사용자 등록에 실패했습니다.');
+      await refreshStatus();
+      return;
+    }
+
+    adminUserIdInput.value = '';
+    adminUserLabelInput.value = '';
     applyStatus(response.status);
   });
 
@@ -214,6 +225,7 @@ function applyStatus(status) {
   phaseText.textContent = status.phase || 'IDLE';
   lastPollAtText.textContent = formatTimestamp(status.lastPollAt);
   trustedUserCountText.textContent = `${status.trustedUserCount || 0}명`;
+  adminUserCountText.textContent = `${status.adminUserCount || 0}명`;
   totalAttemptedText.textContent = `${status.totalAttemptedCommands || 0}회`;
   totalSucceededText.textContent = `${status.totalSucceededCommands || 0}회`;
   totalFailedText.textContent = `${status.totalFailedCommands || 0}회`;
@@ -247,18 +259,39 @@ function applyStatus(status) {
   llmTestResult.textContent = llm.lastTestResult ? JSON.stringify(llm.lastTestResult, null, 2) : '결과가 없습니다.';
 
   renderTrustedUsers(config.trustedUsers || []);
+  renderAdminUsers(config.adminUsers || []);
   renderLogs(status.logs || []);
   applyRunningLocks(Boolean(status.isRunning), Boolean(llm.isTesting));
   applyLoginOwnershipLocks(Boolean(login.managedByBroker));
 }
 
 function renderTrustedUsers(users) {
+  renderUserList({
+    users,
+    listEl: trustedUserList,
+    emptyText: '등록된 신뢰 사용자가 없습니다.',
+    removeAction: 'removeTrustedUser',
+    removeFailText: '신뢰 사용자 삭제에 실패했습니다.',
+  });
+}
+
+function renderAdminUsers(users) {
+  renderUserList({
+    users,
+    listEl: adminUserList,
+    emptyText: '등록된 관리자 사용자가 없습니다.',
+    removeAction: 'removeAdminUser',
+    removeFailText: '관리자 사용자 삭제에 실패했습니다.',
+  });
+}
+
+function renderUserList({ users, listEl, emptyText, removeAction, removeFailText }) {
   if (!users.length) {
-    trustedUserList.innerHTML = '<div class="list-empty">등록된 신뢰 사용자가 없습니다.</div>';
+    listEl.innerHTML = `<div class="list-empty">${emptyText}</div>`;
     return;
   }
 
-  trustedUserList.innerHTML = '';
+  listEl.innerHTML = '';
   for (const user of users) {
     const item = document.createElement('div');
     item.className = 'trusted-user-item';
@@ -278,9 +311,9 @@ function renderTrustedUsers(users) {
     removeBtn.className = 'remove-btn';
     removeBtn.textContent = '삭제';
     removeBtn.addEventListener('click', async () => {
-      const response = await sendMessage({ action: 'removeTrustedUser', userId: user.userId });
+      const response = await sendMessage({ action: removeAction, userId: user.userId });
       if (!response?.success) {
-        alert(response?.message || '신뢰 사용자 삭제에 실패했습니다.');
+        alert(response?.message || removeFailText);
         await refreshStatus();
         return;
       }
@@ -291,8 +324,27 @@ function renderTrustedUsers(users) {
     meta.appendChild(userId);
     item.appendChild(meta);
     item.appendChild(removeBtn);
-    trustedUserList.appendChild(item);
+    listEl.appendChild(item);
   }
+}
+
+function validateUserInputFromPopup(userIdInput, labelInput) {
+  const userId = userIdInput.value.trim();
+  const label = labelInput.value.trim();
+
+  if (!userId) {
+    return { success: false, message: 'user_id를 입력하세요.', focusTarget: userIdInput };
+  }
+
+  if (!label) {
+    return { success: false, message: 'label을 입력하세요.', focusTarget: labelInput };
+  }
+
+  if (label.length > 20) {
+    return { success: false, message: 'label은 20자 이하로 입력하세요.', focusTarget: labelInput };
+  }
+
+  return { success: true, userId, label };
 }
 
 function renderLogs(logs) {

@@ -36,6 +36,7 @@ body {
 .helper-status-section,
 .settings-section,
 .trusted-users-section,
+.admin-users-section,
 .llm-section,
 .helper-guide-section,
 .log-section {
@@ -237,6 +238,7 @@ body {
 .settings-section,
 .helper-status-section,
 .trusted-users-section,
+.admin-users-section,
 .llm-section,
 .helper-guide-section,
 .log-section {
@@ -246,6 +248,7 @@ body {
 
 .settings-section summary,
 .trusted-users-section summary,
+.admin-users-section summary,
 .llm-section summary,
 .helper-guide-section summary {
   cursor: pointer;
@@ -255,6 +258,7 @@ body {
 
 .settings-section summary::-webkit-details-marker,
 .trusted-users-section summary::-webkit-details-marker,
+.admin-users-section summary::-webkit-details-marker,
 .llm-section summary::-webkit-details-marker,
 .helper-guide-section summary::-webkit-details-marker {
   display: none;
@@ -262,6 +266,7 @@ body {
 
 .settings-section summary::after,
 .trusted-users-section summary::after,
+.admin-users-section summary::after,
 .llm-section summary::after,
 .helper-guide-section summary::after {
   content: '▾';
@@ -272,6 +277,7 @@ body {
 
 .settings-section:not([open]) summary::after,
 .trusted-users-section:not([open]) summary::after,
+.admin-users-section:not([open]) summary::after,
 .llm-section:not([open]) summary::after,
 .helper-guide-section:not([open]) summary::after {
   transform: rotate(-90deg);

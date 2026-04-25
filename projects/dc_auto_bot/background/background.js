@@ -7,7 +7,12 @@ import {
   normalizeCliHelperEndpoint,
   resolveConfig,
 } from './api.js';
-import { extractPostContentForLlm, normalizeReportTarget, parseTargetUrl } from './parser.js';
+import {
+  extractPostContentForLlm,
+  normalizeReportTarget,
+  normalizeTrustedUsers,
+  parseTargetUrl,
+} from './parser.js';
 
 const scheduler = new Scheduler();
 const SCHEDULER_STORAGE_KEY = 'reportBotSchedulerState';
@@ -220,6 +225,14 @@ async function handleMessage(message) {
       await scheduler.saveState();
       return { success: true, status: buildCombinedStatus() };
 
+    case 'addAdminUser':
+      return addAdminUser(message.userId, message.label);
+
+    case 'removeAdminUser':
+      scheduler.removeAdminUser(String(message.userId || '').trim());
+      await scheduler.saveState();
+      return { success: true, status: buildCombinedStatus() };
+
     case 'runLlmTest':
       return runLlmTest(message.targetUrl || '', message.reportReason || '');
 
@@ -324,6 +337,8 @@ async function updateConfig(config) {
   nextConfig.loginAutomationEnabled = false;
   nextConfig.dcLoginUserId = '';
   nextConfig.dcLoginPassword = '';
+  nextConfig.trustedUsers = normalizeTrustedUsers(nextConfig.trustedUsers || []);
+  nextConfig.adminUsers = normalizeTrustedUsers(nextConfig.adminUsers || []);
 
   const helperEndpoint = normalizeCliHelperEndpoint(nextConfig.cliHelperEndpoint);
   if (!helperEndpoint.success) {
@@ -351,6 +366,7 @@ async function updateConfig(config) {
     scheduler.totalFailedCommands = 0;
     scheduler.lastSeenCommentNo = '0';
     scheduler.processedCommandKeys = [];
+    scheduler.processedAdminCommandKeys = [];
     scheduler.processedTargetPostNos = [];
     scheduler.logs = [];
     scheduler.seeded = false;
@@ -389,22 +405,42 @@ async function startAutomation() {
 }
 
 async function addTrustedUser(userId, label) {
+  const validation = validateUserInput(userId, label);
+  if (!validation.success) {
+    return { success: false, message: validation.message, status: buildCombinedStatus() };
+  }
+
+  scheduler.addTrustedUser(validation.userId, validation.label);
+  await scheduler.saveState();
+  return { success: true, status: buildCombinedStatus() };
+}
+
+async function addAdminUser(userId, label) {
+  const validation = validateUserInput(userId, label);
+  if (!validation.success) {
+    return { success: false, message: validation.message, status: buildCombinedStatus() };
+  }
+
+  scheduler.addAdminUser(validation.userId, validation.label);
+  await scheduler.saveState();
+  return { success: true, status: buildCombinedStatus() };
+}
+
+function validateUserInput(userId, label) {
   const normalizedUserId = String(userId || '').trim();
   const normalizedLabel = String(label || '').trim();
 
   if (!normalizedUserId) {
-    return { success: false, message: 'user_id를 입력하세요.', status: buildCombinedStatus() };
+    return { success: false, message: 'user_id를 입력하세요.' };
   }
   if (!normalizedLabel) {
-    return { success: false, message: 'label을 입력하세요.', status: buildCombinedStatus() };
+    return { success: false, message: 'label을 입력하세요.' };
   }
   if (normalizedLabel.length > 20) {
-    return { success: false, message: 'label은 20자 이하로 입력하세요.', status: buildCombinedStatus() };
+    return { success: false, message: 'label은 20자 이하로 입력하세요.' };
   }
 
-  scheduler.addTrustedUser(normalizedUserId, normalizedLabel);
-  await scheduler.saveState();
-  return { success: true, status: buildCombinedStatus() };
+  return { success: true, userId: normalizedUserId, label: normalizedLabel };
 }
 
 function mapAuthorFilterResult(authorCheck) {

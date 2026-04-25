@@ -56,6 +56,7 @@ class Scheduler {
     this.totalFailedCommands = 0;
     this.lastSeenCommentNo = '0';
     this.processedCommandKeys = [];
+    this.processedAdminCommandKeys = [];
     this.processedTargetPostNos = [];
     this.dailyUsage = {};
     this.logs = [];
@@ -82,6 +83,7 @@ class Scheduler {
       ...DEFAULT_CONFIG,
       ...(state.config || {}),
       trustedUsers: normalizeTrustedUsers(state.config?.trustedUsers || []),
+      adminUsers: normalizeTrustedUsers(state.config?.adminUsers || []),
     };
     this.config.cliHelperTimeoutMs = migrateLegacyHelperTimeout(this.config.cliHelperTimeoutMs);
     this.isRunning = Boolean(state.isRunning);
@@ -94,6 +96,7 @@ class Scheduler {
     this.totalFailedCommands = Number(state.totalFailedCommands || 0);
     this.lastSeenCommentNo = String(state.lastSeenCommentNo || '0').trim() || '0';
     this.processedCommandKeys = normalizeStringArray(state.processedCommandKeys);
+    this.processedAdminCommandKeys = normalizeStringArray(state.processedAdminCommandKeys);
     this.processedTargetPostNos = normalizeStringArray(state.processedTargetPostNos);
     this.dailyUsage = normalizeDailyUsage(state.dailyUsage);
     this.logs = normalizeLogs(state.logs);
@@ -106,6 +109,7 @@ class Scheduler {
         config: {
           ...this.config,
           trustedUsers: normalizeTrustedUsers(this.config.trustedUsers),
+          adminUsers: normalizeTrustedUsers(this.config.adminUsers),
         },
         isRunning: this.isRunning,
         phase: this.phase,
@@ -117,6 +121,7 @@ class Scheduler {
         totalFailedCommands: this.totalFailedCommands,
         lastSeenCommentNo: this.lastSeenCommentNo,
         processedCommandKeys: trimRecentArray(this.processedCommandKeys, 5000),
+        processedAdminCommandKeys: trimRecentArray(this.processedAdminCommandKeys, 5000),
         processedTargetPostNos: trimRecentArray(this.processedTargetPostNos, 5000),
         dailyUsage: this.dailyUsage,
         logs: trimArray(this.logs, 200),
@@ -130,6 +135,7 @@ class Scheduler {
       config: {
         ...this.config,
         trustedUsers: normalizeTrustedUsers(this.config.trustedUsers),
+        adminUsers: normalizeTrustedUsers(this.config.adminUsers),
       },
       isRunning: this.isRunning,
       phase: this.phase,
@@ -141,6 +147,7 @@ class Scheduler {
       totalFailedCommands: this.totalFailedCommands,
       processedTargetCount: this.processedTargetPostNos.length,
       trustedUserCount: normalizeTrustedUsers(this.config.trustedUsers).length,
+      adminUserCount: normalizeTrustedUsers(this.config.adminUsers).length,
       logs: this.logs,
     };
   }
@@ -162,6 +169,7 @@ class Scheduler {
     this.config.reportTarget = normalization.reportTarget;
     this.config.reportPostNo = normalization.reportPostNo;
     this.config.trustedUsers = normalizeTrustedUsers(this.config.trustedUsers);
+    this.config.adminUsers = normalizeTrustedUsers(this.config.adminUsers);
 
     this.isRunning = true;
     this.phase = PHASE.SEEDING;
@@ -305,14 +313,17 @@ class Scheduler {
 
   async processComment(comment, signal) {
     const commentNo = String(comment?.no || '').trim();
-    const trustedUser = isTrustedUser(comment, this.config.trustedUsers);
+    const adminUser = isTrustedUser(comment, this.config.adminUsers);
+    const trustedUser = adminUser || isTrustedUser(comment, this.config.trustedUsers);
+    const isAdminFastPath = Boolean(adminUser);
     if (!trustedUser) {
       return;
     }
+    const displayLabel = isAdminFastPath ? `관리자 ${trustedUser.label}` : trustedUser.label;
 
     const parsedCommand = parseCommandComment(comment, this.config.commandPrefix);
     if (!parsedCommand.success) {
-      this.addLog(`📝 [${trustedUser.label}] 명령 아님 #${commentNo} - ${parsedCommand.reason}`);
+      this.addLog(`📝 [${displayLabel}] 명령 아님 #${commentNo} - ${parsedCommand.reason}`);
       return;
     }
 
@@ -322,26 +333,35 @@ class Scheduler {
       parsedCommand.targetPostNo,
     );
 
-    if (this.hasProcessedCommandKey(commandKey)) {
-      this.addLog(`↩️ [${trustedUser.label}] 중복 링크 무시 #${parsedCommand.targetPostNo}`);
-      return;
-    }
+    if (isAdminFastPath) {
+      if (this.hasProcessedAdminCommandKey(commandKey)) {
+        this.addLog(`↩️ [${displayLabel}] 중복 링크 무시 #${parsedCommand.targetPostNo}`);
+        return;
+      }
+    } else {
+      if (this.hasProcessedCommandKey(commandKey)) {
+        this.addLog(`↩️ [${displayLabel}] 중복 링크 무시 #${parsedCommand.targetPostNo}`);
+        return;
+      }
 
-    if (this.isDailyLimitExceeded(trustedUser.userId)) {
-      this.addLog(`⛔ [${trustedUser.label}] 일일 ${getDailyLimitLabel(this.config.dailyLimitPerUser)}회 제한 초과`);
-      return;
+      if (this.isDailyLimitExceeded(trustedUser.userId)) {
+        this.addLog(`⛔ [${displayLabel}] 일일 ${getDailyLimitLabel(this.config.dailyLimitPerUser)}회 제한 초과`);
+        return;
+      }
     }
 
     const isForeignGallery = parsedCommand.targetGalleryId
       && parsedCommand.targetGalleryId !== this.config.galleryId;
 
-    this.markCommandSeen(commandKey, parsedCommand.targetPostNo);
+    if (!isAdminFastPath) {
+      this.markCommandSeen(commandKey, parsedCommand.targetPostNo);
+    }
     this.totalProcessedCommands += 1;
     this.totalAttemptedCommands += 1;
 
     if (isForeignGallery) {
       this.totalFailedCommands += 1;
-      this.addLog(`⚠️ [${trustedUser.label}] 다른 갤 링크 무시 #${parsedCommand.targetPostNo}`);
+      this.addLog(`⚠️ [${displayLabel}] 다른 갤 링크 무시 #${parsedCommand.targetPostNo}`);
       return;
     }
 
@@ -542,11 +562,17 @@ class Scheduler {
         source: 'auto_report',
         status: 'pending',
         createdAt: normalizeIsoDateValue(reusePendingRecord?.createdAt) || '',
-        reporterUserId: String(reusePendingRecord?.reporterUserId || '').trim() || trustedUser.userId,
-        reporterLabel: String(reusePendingRecord?.reporterLabel || '').trim() || trustedUser.label,
+        reporterUserId: isAdminFastPath
+          ? trustedUser.userId
+          : (String(reusePendingRecord?.reporterUserId || '').trim() || trustedUser.userId),
+        reporterLabel: isAdminFastPath
+          ? trustedUser.label
+          : (String(reusePendingRecord?.reporterLabel || '').trim() || trustedUser.label),
         targetUrl: parsedCommand.targetUrl,
         targetPostNo: parsedCommand.targetPostNo,
-        reportReason: String(reusePendingRecord?.reportReason || '').trim() || parsedCommand.reasonText,
+        reportReason: isAdminFastPath
+          ? parsedCommand.reasonText
+          : (String(reusePendingRecord?.reportReason || '').trim() || parsedCommand.reasonText),
         title: content.title,
         bodyText: content.bodyText,
         imageUrls: content.imageUrls,
@@ -555,32 +581,42 @@ class Scheduler {
       await persistTransparencyRecordBestEffort(this.config, activePendingRecord, signal);
       startPendingHeartbeat();
 
-      const authorCheck = await this.evaluateTargetAuthorFromPageHtml(pageHtml, this.config, signal);
+      let authorCheck = {
+        success: true,
+        allowed: true,
+        message: '관리자 fast path',
+        authorNick: '',
+        adminFastPath: true,
+      };
 
-      if (!authorCheck.success) {
-        this.totalFailedCommands += 1;
-        this.addLog(`❌ [${trustedUser.label}] 작성자 판정 실패 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
-        await persistActiveTransparencyRecord({
-          status: 'failed',
-          reason: `작성자 판정 실패: ${authorCheck.message}`,
-        }, { terminal: true });
-        return;
-      }
+      if (!isAdminFastPath) {
+        authorCheck = await this.evaluateTargetAuthorFromPageHtml(pageHtml, this.config, signal);
 
-      if (!authorCheck.allowed) {
-        this.totalFailedCommands += 1;
-        this.addLog(`⏭️ [${trustedUser.label}] 자동 처리 제외 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
-        await persistActiveTransparencyRecord({
-          status: 'failed',
-          reason: `v2 core 작성자 필터 미통과: ${authorCheck.message}`,
-        }, { terminal: true });
-        return;
+        if (!authorCheck.success) {
+          this.totalFailedCommands += 1;
+          this.addLog(`❌ [${displayLabel}] 작성자 판정 실패 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
+          await persistActiveTransparencyRecord({
+            status: 'failed',
+            reason: `작성자 판정 실패: ${authorCheck.message}`,
+          }, { terminal: true });
+          return;
+        }
+
+        if (!authorCheck.allowed) {
+          this.totalFailedCommands += 1;
+          this.addLog(`⏭️ [${displayLabel}] 자동 처리 제외 #${parsedCommand.targetPostNo} - ${authorCheck.message}`);
+          await persistActiveTransparencyRecord({
+            status: 'failed',
+            reason: `v2 core 작성자 필터 미통과: ${authorCheck.message}`,
+          }, { terminal: true });
+          return;
+        }
       }
 
       const recommendState = extractRecommendState(pageHtml);
       if (!recommendState.success) {
         this.totalFailedCommands += 1;
-        this.addLog(`❌ [${trustedUser.label}] 개념글 판정 실패 #${parsedCommand.targetPostNo} - ${recommendState.message}`);
+        this.addLog(`❌ [${displayLabel}] 개념글 판정 실패 #${parsedCommand.targetPostNo} - ${recommendState.message}`);
         await persistActiveTransparencyRecord({
           status: 'failed',
           reason: `개념글 판정 실패: ${recommendState.message}`,
@@ -590,7 +626,7 @@ class Scheduler {
 
       if (recommendState.isConcept) {
         this.totalFailedCommands += 1;
-        this.addLog(`⏭️ [${trustedUser.label}] 개념글 자동 처리 제외 #${parsedCommand.targetPostNo}`);
+        this.addLog(`⏭️ [${displayLabel}] 개념글 자동 처리 제외 #${parsedCommand.targetPostNo}`);
         await persistActiveTransparencyRecord({
           status: 'failed',
           reason: '개념글은 자동 삭제/차단하지 않습니다.',
@@ -598,28 +634,30 @@ class Scheduler {
         return;
       }
 
-      let recentRegularPosts = null;
-      try {
-        recentRegularPosts = await this.getRecentRegularPosts(signal);
-      } catch (error) {
-        this.totalFailedCommands += 1;
-        this.addLog(`❌ [${trustedUser.label}] 최근 100개 판정 실패 #${parsedCommand.targetPostNo} - ${error.message}`);
-        await persistActiveTransparencyRecord({
-          status: 'failed',
-          reason: `최근 100개 판정 실패: ${error.message}`,
-        }, { terminal: true });
-        return;
-      }
+      if (!isAdminFastPath) {
+        let recentRegularPosts = null;
+        try {
+          recentRegularPosts = await this.getRecentRegularPosts(signal);
+        } catch (error) {
+          this.totalFailedCommands += 1;
+          this.addLog(`❌ [${displayLabel}] 최근 100개 판정 실패 #${parsedCommand.targetPostNo} - ${error.message}`);
+          await persistActiveTransparencyRecord({
+            status: 'failed',
+            reason: `최근 100개 판정 실패: ${error.message}`,
+          }, { terminal: true });
+          return;
+        }
 
-      const isWithinRecentWindow = recentRegularPosts.some((post) => String(post.no) === String(parsedCommand.targetPostNo));
-      if (!isWithinRecentWindow) {
-        this.totalFailedCommands += 1;
-        this.addLog(`⏭️ [${trustedUser.label}] 최근 100개 밖 자동 처리 제외 #${parsedCommand.targetPostNo}`);
-        await persistActiveTransparencyRecord({
-          status: 'failed',
-          reason: '최근 100개 regular row 밖 게시물입니다.',
-        }, { terminal: true });
-        return;
+        const isWithinRecentWindow = recentRegularPosts.some((post) => String(post.no) === String(parsedCommand.targetPostNo));
+        if (!isWithinRecentWindow) {
+          this.totalFailedCommands += 1;
+          this.addLog(`⏭️ [${displayLabel}] 최근 100개 밖 자동 처리 제외 #${parsedCommand.targetPostNo}`);
+          await persistActiveTransparencyRecord({
+            status: 'failed',
+            reason: '최근 100개 regular row 밖 게시물입니다.',
+          }, { terminal: true });
+          return;
+        }
       }
 
       const helperResult = await callCliHelperJudge(
@@ -630,73 +668,79 @@ class Scheduler {
           bodyText: content.bodyText,
           imageUrls: content.imageUrls,
           reportReason: parsedCommand.reasonText,
-          requestLabel: trustedUser.label,
+          requestLabel: isAdminFastPath ? `관리자:${trustedUser.label}` : trustedUser.label,
           authorNick: authorCheck.authorNick || '',
-          authorFilter: mapAuthorFilterResult(authorCheck),
+          authorFilter: isAdminFastPath ? 'admin_fast_path' : mapAuthorFilterResult(authorCheck),
         },
         signal,
       );
 
       if (!helperResult.success) {
-        const helperForceAllowFallback = getHelperForceAllowFallback(helperResult, content);
-        if (helperForceAllowFallback) {
-          const loginSessionResult = await this.ensureLoginSessionForAction();
-          if (!loginSessionResult.success) {
+        if (!isAdminFastPath) {
+          const helperForceAllowFallback = getHelperForceAllowFallback(helperResult, content);
+          if (helperForceAllowFallback) {
+            const loginSessionResult = await this.ensureLoginSessionForAction();
+            if (!loginSessionResult.success) {
+              this.totalFailedCommands += 1;
+              this.addLog(`❌ [${displayLabel}] 로그인 세션 실패 #${parsedCommand.targetPostNo} - ${loginSessionResult.message}`);
+              await persistActiveTransparencyRecord({
+                status: 'failed',
+                reason: buildHelperForceAllowFallbackFailureReason(helperForceAllowFallback, `로그인 세션 실패: ${loginSessionResult.message}`),
+              }, { terminal: true });
+              return;
+            }
+
+            const actionResult = await this.executeDeleteAndBanWithRecovery(
+              this.config,
+              parsedCommand.targetPostNo,
+              trustedUser.label,
+              parsedCommand.reasonText,
+              signal,
+            );
+
+            if (actionResult.success) {
+              this.incrementDailyUsage(trustedUser.userId);
+              this.totalSucceededCommands += 1;
+              this.addLog(
+                `✅ [${displayLabel}] ${helperForceAllowFallback.logLabel} 처리 #${parsedCommand.targetPostNo}`
+                + (actionResult.recoveredByLoginRetry ? ' (세션 재검증 후 복구)' : ''),
+              );
+              await persistActiveTransparencyRecord({
+                status: 'completed',
+                decisionSource: helperForceAllowFallback.decisionSource,
+                decision: 'allow',
+                confidence: null,
+                policyIds: [],
+                reason: helperForceAllowFallback.reason,
+              }, { terminal: true });
+              return;
+            }
+
             this.totalFailedCommands += 1;
-            this.addLog(`❌ [${trustedUser.label}] 로그인 세션 실패 #${parsedCommand.targetPostNo} - ${loginSessionResult.message}`);
-            await persistActiveTransparencyRecord({
-              status: 'failed',
-              reason: buildHelperForceAllowFallbackFailureReason(helperForceAllowFallback, `로그인 세션 실패: ${loginSessionResult.message}`),
-            }, { terminal: true });
-            return;
-          }
-
-          const actionResult = await this.executeDeleteAndBanWithRecovery(
-            this.config,
-            parsedCommand.targetPostNo,
-            trustedUser.label,
-            parsedCommand.reasonText,
-            signal,
-          );
-
-          if (actionResult.success) {
-            this.incrementDailyUsage(trustedUser.userId);
-            this.totalSucceededCommands += 1;
             this.addLog(
-              `✅ [${trustedUser.label}] ${helperForceAllowFallback.logLabel} 처리 #${parsedCommand.targetPostNo}`
-              + (actionResult.recoveredByLoginRetry ? ' (세션 재검증 후 복구)' : ''),
+              `❌ [${displayLabel}] ${helperForceAllowFallback.logLabel} 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`
+              + buildDeleteActionDiagnosticSuffix(actionResult),
             );
             await persistActiveTransparencyRecord({
-              status: 'completed',
-              decisionSource: helperForceAllowFallback.decisionSource,
-              decision: 'allow',
-              confidence: null,
-              policyIds: [],
-              reason: helperForceAllowFallback.reason,
+              status: 'failed',
+              reason: buildHelperForceAllowFallbackFailureReason(helperForceAllowFallback, actionResult.message || '응답 확인 실패'),
+              ...buildDeleteActionDebugFields(actionResult),
             }, { terminal: true });
             return;
           }
-
-          this.totalFailedCommands += 1;
-          this.addLog(
-            `❌ [${trustedUser.label}] ${helperForceAllowFallback.logLabel} 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`
-            + buildDeleteActionDiagnosticSuffix(actionResult),
-          );
-          await persistActiveTransparencyRecord({
-            status: 'failed',
-            reason: buildHelperForceAllowFallbackFailureReason(helperForceAllowFallback, actionResult.message || '응답 확인 실패'),
-            ...buildDeleteActionDebugFields(actionResult),
-          }, { terminal: true });
-          return;
         }
 
         this.totalFailedCommands += 1;
-        this.addLog(`❌ [${trustedUser.label}] LLM helper 실패 #${parsedCommand.targetPostNo} - ${helperResult.message || '응답 확인 실패'}`);
+        this.addLog(`❌ [${displayLabel}] LLM helper 실패 #${parsedCommand.targetPostNo} - ${helperResult.message || '응답 확인 실패'}`);
         await persistActiveTransparencyRecord({
           status: 'failed',
           reason: helperResult.message || 'CLI helper 판정 실패',
         }, { terminal: true });
         return;
+      }
+
+      if (isAdminFastPath) {
+        this.markAdminCommandSeen(commandKey, parsedCommand.targetPostNo);
       }
 
       await persistActiveTransparencyRecord({
@@ -708,18 +752,22 @@ class Scheduler {
       });
 
       if (helperResult.decision !== 'allow') {
-        this.incrementDailyUsage(trustedUser.userId);
+        if (!isAdminFastPath) {
+          this.incrementDailyUsage(trustedUser.userId);
+        }
         this.totalFailedCommands += 1;
-        this.addLog(`⏭️ [${trustedUser.label}] LLM 보류 #${parsedCommand.targetPostNo} - ${formatLlmDecisionSummary(helperResult)}`);
+        this.addLog(`⏭️ [${displayLabel}] LLM 보류 #${parsedCommand.targetPostNo} - ${formatLlmDecisionSummary(helperResult)}`);
         await markPendingTerminalFinalized();
         return;
       }
 
       const confidenceThreshold = clampConfidenceThreshold(this.config.llmConfidenceThreshold);
       if (helperResult.confidence < confidenceThreshold) {
-        this.incrementDailyUsage(trustedUser.userId);
+        if (!isAdminFastPath) {
+          this.incrementDailyUsage(trustedUser.userId);
+        }
         this.totalFailedCommands += 1;
-        this.addLog(`⏭️ [${trustedUser.label}] LLM 신뢰도 부족 #${parsedCommand.targetPostNo} - ${formatLlmDecisionSummary(helperResult)} / threshold=${confidenceThreshold.toFixed(2)}`);
+        this.addLog(`⏭️ [${displayLabel}] LLM 신뢰도 부족 #${parsedCommand.targetPostNo} - ${formatLlmDecisionSummary(helperResult)} / threshold=${confidenceThreshold.toFixed(2)}`);
         await markPendingTerminalFinalized();
         return;
       }
@@ -727,7 +775,7 @@ class Scheduler {
       const loginSessionResult = await this.ensureLoginSessionForAction();
       if (!loginSessionResult.success) {
         this.totalFailedCommands += 1;
-        this.addLog(`❌ [${trustedUser.label}] 로그인 세션 실패 #${parsedCommand.targetPostNo} - ${loginSessionResult.message}`);
+        this.addLog(`❌ [${displayLabel}] 로그인 세션 실패 #${parsedCommand.targetPostNo} - ${loginSessionResult.message}`);
         await persistActiveTransparencyRecord({
           status: 'failed',
           reason: `로그인 세션 실패: ${loginSessionResult.message || 'login 연결실패'}`,
@@ -744,10 +792,12 @@ class Scheduler {
       );
 
       if (actionResult.success) {
-        this.incrementDailyUsage(trustedUser.userId);
+        if (!isAdminFastPath) {
+          this.incrementDailyUsage(trustedUser.userId);
+        }
         this.totalSucceededCommands += 1;
         this.addLog(
-          `✅ [${trustedUser.label}] 처리 완료 #${parsedCommand.targetPostNo} `
+          `✅ [${displayLabel}] 처리 완료 #${parsedCommand.targetPostNo} `
           + `(${authorCheck.message} / ${formatLlmDecisionSummary(helperResult)} / ${actionResult.reasonText})`
           + (actionResult.recoveredByLoginRetry ? ' [세션 재검증 후 복구]' : ''),
         );
@@ -757,7 +807,7 @@ class Scheduler {
 
       this.totalFailedCommands += 1;
       this.addLog(
-        `❌ [${trustedUser.label}] 처리 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`
+        `❌ [${displayLabel}] 처리 실패 #${parsedCommand.targetPostNo} - ${actionResult.message || '응답 확인 실패'}`
         + buildDeleteActionDiagnosticSuffix(actionResult),
       );
       await persistActiveTransparencyRecord({
@@ -990,6 +1040,19 @@ class Scheduler {
     }
   }
 
+  hasProcessedAdminCommandKey(commandKey) {
+    return this.processedAdminCommandKeys.includes(String(commandKey));
+  }
+
+  markAdminCommandSeen(commandKey, targetPostNo) {
+    if (!this.hasProcessedAdminCommandKey(commandKey)) {
+      this.processedAdminCommandKeys.push(String(commandKey));
+      this.processedAdminCommandKeys = trimRecentArray(this.processedAdminCommandKeys, 5000);
+    }
+
+    this.markCommandSeen(commandKey, targetPostNo);
+  }
+
   isDailyLimitExceeded(userId) {
     const todayKey = getKstDateKey();
     const usage = Number(this.dailyUsage?.[userId]?.[todayKey] || 0);
@@ -1016,6 +1079,7 @@ class Scheduler {
     this.totalFailedCommands = 0;
     this.lastSeenCommentNo = '0';
     this.processedCommandKeys = [];
+    this.processedAdminCommandKeys = [];
     this.processedTargetPostNos = [];
     this.dailyUsage = {};
     this.logs = [];
@@ -1032,6 +1096,19 @@ class Scheduler {
   removeTrustedUser(userId) {
     this.config.trustedUsers = normalizeTrustedUsers(
       this.config.trustedUsers.filter((entry) => entry.userId !== userId),
+    );
+  }
+
+  addAdminUser(userId, label) {
+    this.config.adminUsers = normalizeTrustedUsers([
+      ...(this.config.adminUsers || []),
+      { userId, label },
+    ]);
+  }
+
+  removeAdminUser(userId) {
+    this.config.adminUsers = normalizeTrustedUsers(
+      (this.config.adminUsers || []).filter((entry) => entry.userId !== userId),
     );
   }
 
