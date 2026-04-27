@@ -134,11 +134,26 @@ function extractPostTargetFromUrl(url, rawValue = '') {
     };
   }
 
+  const desktopShortLinkMatch = isGallDcInsideHost(url.hostname)
+    ? pathname.match(/^\/([^/]+)\/(\d+)$/i)
+    : null;
+
+  if (desktopShortLinkMatch) {
+    return {
+      targetGalleryId: String(desktopShortLinkMatch[1] || '').trim(),
+      targetPostNo: String(desktopShortLinkMatch[2] || '').trim(),
+    };
+  }
+
   const fallbackTarget = extractPostTargetFromRawText(rawValue || String(url || ''));
   return {
     targetGalleryId: fallbackTarget.targetGalleryId || targetGalleryId,
     targetPostNo: fallbackTarget.targetPostNo || targetPostNo,
   };
+}
+
+function isGallDcInsideHost(hostname) {
+  return String(hostname || '').trim().toLowerCase() === 'gall.dcinside.com';
 }
 
 function extractPostTargetFromRawText(rawText) {
@@ -148,11 +163,19 @@ function extractPostTargetFromRawText(rawText) {
   const noMatch = text.match(/[?&]no=(\d+)/i);
   const idMatch = text.match(/[?&]id=([^&#]+)/i);
   const mobileBoardMatch = text.match(/\/board\/([^/?#]+)\/(\d+)/i);
+  const desktopShortLinkMatch = text.match(/https?:\/\/gall\.dcinside\.com\/([^/?#\s<>'"“”‘’「」『』]+)\/(\d+)/i);
 
   if (mobileBoardMatch) {
     return {
       targetGalleryId: String(mobileBoardMatch[1] || '').trim(),
       targetPostNo: String(mobileBoardMatch[2] || '').trim(),
+    };
+  }
+
+  if (desktopShortLinkMatch) {
+    return {
+      targetGalleryId: String(desktopShortLinkMatch[1] || '').trim(),
+      targetPostNo: String(desktopShortLinkMatch[2] || '').trim(),
     };
   }
 
