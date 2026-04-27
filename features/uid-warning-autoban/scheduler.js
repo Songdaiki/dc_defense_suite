@@ -3,6 +3,7 @@ import {
   ATTACK_TITLE_BAN_REASON_TEXT,
   EMPTY_ATTACK_TITLE_PATTERN_CORPUS,
   detectAttackTitleClusters,
+  isAlreadySpamHead,
   loadBundledAttackTitlePatternCorpus,
 } from './attack-title-cluster.js';
 import {
@@ -18,6 +19,7 @@ import {
   PREVIOUS_DEFAULT_AVOID_REASON_TEXT,
   delay,
   fetchUidWarningAutoBanListHTML,
+  fetchUidWarningAutoBanPostViewHTML,
 } from './api.js';
 import {
   createImmediateTitleBanTargetPosts,
@@ -25,6 +27,7 @@ import {
   getNewestPostNo,
   getRecentRowsWithinWindow,
   groupRowsByUid,
+  hasUserHttpsLinkInPostBody,
   normalizeImmediateTitleBanRules,
   normalizeImmediateTitleValue,
   parseImmediateTitleBanRows,
@@ -55,10 +58,12 @@ const DELETE_MODE_REASON = {
 const UID_ACTION_RETENTION_MS = 24 * 60 * 60 * 1000;
 const ATTACK_COMMENT_ACTION_RETENTION_MS = 10 * 60 * 1000;
 const SINGLE_SIGHT_TOTAL_ACTIVITY_THRESHOLD = 20;
+const DEFAULT_LINKBAIT_TITLE_NEEDLE = normalizeImmediateTitleValue('이거 진짜');
 
 class Scheduler {
   constructor(dependencies = {}) {
     this.fetchListHtml = dependencies.fetchListHtml || fetchUidWarningAutoBanListHTML;
+    this.fetchPostViewHtml = dependencies.fetchPostViewHtml || fetchUidWarningAutoBanPostViewHTML;
     this.parseRows = dependencies.parseRows || parseUidWarningAutoBanRows;
     this.parseImmediateRows = dependencies.parseImmediateRows || parseImmediateTitleBanRows;
     this.fetchUidStats = dependencies.fetchUidStats || getOrFetchUidStats;
@@ -88,6 +93,11 @@ class Scheduler {
     this.lastSingleSightTriggeredPostCount = 0;
     this.lastImmediateTitleBanCount = 0;
     this.lastImmediateTitleBanMatchedTitle = '';
+    this.lastLinkbaitBodyLinkCandidateCount = 0;
+    this.lastLinkbaitBodyLinkCheckedCount = 0;
+    this.lastLinkbaitBodyLinkMatchedCount = 0;
+    this.lastLinkbaitBodyLinkActionCount = 0;
+    this.lastLinkbaitBodyLinkRepresentative = '';
     this.lastAttackTitleClusterCount = 0;
     this.lastAttackTitleClusterPostCount = 0;
     this.lastAttackTitleClusterRepresentative = '';
@@ -100,6 +110,7 @@ class Scheduler {
     this.totalTriggeredUidCount = 0;
     this.totalSingleSightTriggeredUidCount = 0;
     this.totalImmediateTitleBanPostCount = 0;
+    this.totalLinkbaitBodyLinkPostCount = 0;
     this.totalAttackTitleClusterPostCount = 0;
     this.totalAttackCommentClusterDeleteCount = 0;
     this.totalSingleSightBannedPostCount = 0;
@@ -116,6 +127,7 @@ class Scheduler {
     this.lastDeleteLimitMessage = '';
     this.recentUidActions = {};
     this.recentImmediatePostActions = {};
+    this.recentLinkbaitBodyLinkActions = {};
     this.recentAttackTitlePostActions = {};
     this.recentAttackCommentActions = {};
     this.commentSnapshotByPostNo = {};
@@ -196,7 +208,7 @@ class Scheduler {
         this.phase = PHASE.WAITING;
         this.currentPage = 1;
         this.log(
-          `✅ 사이클 #${this.cycleCount} 완료 - page1 글 ${this.lastPageRowCount}개 / uid ${this.lastPageUidCount}명 / 누적 uid 제재 ${this.totalTriggeredUidCount}명 / 제목 직차단 ${this.totalImmediateTitleBanPostCount}개 / 실제공격 ${this.totalAttackTitleClusterPostCount}개 / 댓글군집 ${this.totalAttackCommentClusterDeleteCount}개 / 단일깡계 ${this.totalSingleSightBannedPostCount}개`,
+          `✅ 사이클 #${this.cycleCount} 완료 - page1 글 ${this.lastPageRowCount}개 / uid ${this.lastPageUidCount}명 / 누적 uid 제재 ${this.totalTriggeredUidCount}명 / 제목 직차단 ${this.totalImmediateTitleBanPostCount}개 / 이거진짜 링크본문 ${this.totalLinkbaitBodyLinkPostCount}개 / 실제공격 ${this.totalAttackTitleClusterPostCount}개 / 댓글군집 ${this.totalAttackCommentClusterDeleteCount}개 / 단일깡계 ${this.totalSingleSightBannedPostCount}개`,
         );
         await this.saveState();
       } catch (error) {
@@ -223,6 +235,11 @@ class Scheduler {
     this.lastError = '';
     this.lastImmediateTitleBanCount = 0;
     this.lastImmediateTitleBanMatchedTitle = '';
+    this.lastLinkbaitBodyLinkCandidateCount = 0;
+    this.lastLinkbaitBodyLinkCheckedCount = 0;
+    this.lastLinkbaitBodyLinkMatchedCount = 0;
+    this.lastLinkbaitBodyLinkActionCount = 0;
+    this.lastLinkbaitBodyLinkRepresentative = '';
     this.lastAttackTitleClusterCount = 0;
     this.lastAttackTitleClusterPostCount = 0;
     this.lastAttackTitleClusterRepresentative = '';
@@ -232,6 +249,7 @@ class Scheduler {
     this.lastAttackCommentClusterRepresentative = '';
     pruneRecentUidActions(this.recentUidActions);
     pruneRecentImmediatePostActions(this.recentImmediatePostActions);
+    pruneRecentLinkbaitBodyLinkActions(this.recentLinkbaitBodyLinkActions);
     pruneRecentAttackTitlePostActions(this.recentAttackTitlePostActions);
     pruneRecentAttackCommentActions(this.recentAttackCommentActions);
     const nowMs = Date.now();
@@ -243,12 +261,21 @@ class Scheduler {
     this.log(`📄 page1 snapshot ${allRows.length}개 / uid ${this.lastPageUidCount}명`);
     await this.saveState();
     const processedImmediatePostNos = await this.handleImmediateTitleBanRows(allRows, nowMs);
-    const processedAttackTitlePostNos = await this.handleAttackTitleClusterRows(
+    const processedLinkbaitBodyLinkPostNos = await this.handleLinkbaitBodyLinkRows(
       allRows.filter((row) => !processedImmediatePostNos.has(Number(row?.no) || 0)),
+      nowMs,
+    );
+    const processedAttackTitlePostNos = await this.handleAttackTitleClusterRows(
+      allRows.filter((row) => {
+        const postNo = Number(row?.no) || 0;
+        return !processedImmediatePostNos.has(postNo)
+          && !processedLinkbaitBodyLinkPostNos.has(postNo);
+      }),
       nowMs,
     );
     const processedPostNos = new Set([
       ...processedImmediatePostNos,
+      ...processedLinkbaitBodyLinkPostNos,
       ...processedAttackTitlePostNos,
     ]);
     try {
@@ -834,6 +861,166 @@ class Scheduler {
       .filter((comment) => !removedNos.has(String(comment?.no || '').trim()));
   }
 
+  async handleLinkbaitBodyLinkRows(rows = [], nowMs = Date.now()) {
+    const processedLinkbaitBodyLinkPostNos = new Set();
+    if (!getLinkbaitBodyLinkEnabled(this.config)) {
+      return processedLinkbaitBodyLinkPostNos;
+    }
+
+    const candidates = [];
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const postNo = Math.max(0, Number(row?.no) || 0);
+      if (!isLinkbaitBodyLinkTitleCandidate(row, this.config)) {
+        continue;
+      }
+
+      this.lastLinkbaitBodyLinkCandidateCount += 1;
+      const actionKey = buildLinkbaitBodyLinkActionKey(postNo);
+      if (
+        shouldSkipRecentLinkbaitBodyLinkAction(
+          this.recentLinkbaitBodyLinkActions[actionKey],
+          nowMs,
+          getRetryCooldownMs(this.config),
+        )
+      ) {
+        processedLinkbaitBodyLinkPostNos.add(postNo);
+        this.log(`ℹ️ 이거진짜 링크본문 스킵 - #${postNo}는 최근 처리 이력이 있어 건너뜀`);
+        continue;
+      }
+
+      candidates.push(row);
+    }
+
+    if (candidates.length <= 0) {
+      return processedLinkbaitBodyLinkPostNos;
+    }
+
+    this.log(`🔎 이거진짜 링크본문 후보 ${candidates.length}개 확인 시작`);
+    const checkedResults = await mapWithConcurrencyWorkerPool(
+      candidates,
+      getLinkbaitBodyLinkFetchConcurrency(this.config),
+      getLinkbaitBodyLinkFetchRequestDelayMs(this.config),
+      async (row) => {
+        const postNo = Math.max(0, Number(row?.no) || 0);
+        try {
+          const viewHtml = await runWithTimeoutSignal(
+            getLinkbaitBodyLinkFetchTimeoutMs(this.config),
+            (signal) => this.fetchPostViewHtml(this.config, postNo, { signal }),
+            '이거진짜 링크본문 조회 시간 초과',
+          );
+
+          return {
+            row,
+            postNo,
+            matched: hasUserHttpsLinkInPostBody(viewHtml),
+          };
+        } catch (error) {
+          this.log(`⚠️ 이거진짜 링크본문 조회 실패 - #${postNo}: ${error.message}`);
+          return {
+            row,
+            postNo,
+            matched: false,
+            failed: true,
+          };
+        }
+      },
+      () => this.isRunning,
+      this.delayFn,
+    );
+
+    this.lastLinkbaitBodyLinkCheckedCount = candidates.length;
+    const matchedRows = [];
+    for (const result of checkedResults) {
+      if (!result || result.failed) {
+        continue;
+      }
+
+      if (result.matched === true) {
+        matchedRows.push(result.row);
+        continue;
+      }
+
+      if (result.postNo > 0) {
+        this.log(`ℹ️ 이거진짜 링크본문 스킵 - #${result.postNo} 본문 사용자 https 링크 없음`);
+      }
+    }
+    this.lastLinkbaitBodyLinkMatchedCount = matchedRows.length;
+
+    if (!this.isRunning || matchedRows.length <= 0) {
+      return processedLinkbaitBodyLinkPostNos;
+    }
+
+    const targetPosts = createImmediateTitleBanTargetPosts(matchedRows);
+    if (targetPosts.length <= 0) {
+      this.log('ℹ️ 이거진짜 링크본문 스킵 - page1 대상 글번호를 만들지 못함');
+      return processedLinkbaitBodyLinkPostNos;
+    }
+
+    this.lastLinkbaitBodyLinkRepresentative = summarizeMatchedTitles(
+      matchedRows.map((row) => row?.title || row?.subject || ''),
+    );
+    this.lastLinkbaitBodyLinkActionCount += targetPosts.length;
+    this.log(`🚨 이거진짜 링크본문 "${this.lastLinkbaitBodyLinkRepresentative || '제목'}" ${targetPosts.length}개 -> 차단/삭제 시작`);
+
+    const result = await this.executeBan({
+      feature: 'uidWarningAutoBan',
+      config: {
+        ...this.config,
+        avoidHour: ATTACK_TITLE_BAN_HOUR,
+        avoidReason: '0',
+        avoidReasonText: ATTACK_TITLE_BAN_REASON_TEXT,
+        delChk: true,
+        avoidTypeChk: true,
+      },
+      posts: targetPosts,
+      deleteEnabled: this.runtimeDeleteEnabled,
+      onDeleteLimitFallbackSuccess: (fallbackResult) => {
+        this.log(`🔁 삭제 한도 계정 전환 성공 - ${fallbackResult.activeAccountLabel}로 같은 run을 이어갑니다.`);
+      },
+      onDeleteLimitBanOnlyActivated: (message) => {
+        this.activateDeleteLimitBanOnly(message);
+      },
+    });
+
+    this.totalLinkbaitBodyLinkPostCount += result.successNos.length;
+    this.totalBannedPostCount += result.successNos.length;
+    this.totalFailedPostCount += result.failedNos.length;
+    this.deleteLimitFallbackCount += result.deleteLimitFallbackCount;
+    if (result.banOnlyFallbackUsed) {
+      this.banOnlyFallbackCount += 1;
+    }
+    this.runtimeDeleteEnabled = result.finalDeleteEnabled;
+
+    if (result.successNos.length > 0) {
+      this.log(`⛔ 이거진짜 링크본문 글 ${result.successNos.length}개 차단${result.finalDeleteEnabled ? '/삭제' : ''} 완료`);
+    }
+
+    if (result.banOnlyRetrySuccessCount > 0) {
+      this.log(`🧯 이거진짜 링크본문 글 ${result.banOnlyRetrySuccessCount}개는 차단만 수행`);
+    }
+
+    if (result.failedNos.length > 0) {
+      this.log(`⚠️ 이거진짜 링크본문 제재 실패 ${result.failedNos.length}개 - ${result.failedNos.join(', ')}`);
+    }
+
+    const actionAt = new Date().toISOString();
+    const successNos = new Set(result.successNos.map((postNo) => String(postNo)));
+    for (const targetPost of targetPosts) {
+      const postNo = Number(targetPost.no) || 0;
+      if (postNo > 0) {
+        processedLinkbaitBodyLinkPostNos.add(postNo);
+      }
+      this.recentLinkbaitBodyLinkActions[buildLinkbaitBodyLinkActionKey(targetPost.no)] =
+        createRecentLinkbaitBodyLinkActionEntry({
+          success: successNos.has(String(targetPost.no)),
+          nowIso: actionAt,
+        });
+    }
+
+    await this.saveState();
+    return processedLinkbaitBodyLinkPostNos;
+  }
+
   async handleAttackTitleClusterRows(rows = [], nowMs = Date.now()) {
     const processedAttackTitlePostNos = new Set();
     const patternCorpus = await this.getAttackTitlePatternCorpus();
@@ -1160,6 +1347,11 @@ class Scheduler {
           lastSingleSightTriggeredPostCount: this.lastSingleSightTriggeredPostCount,
           lastImmediateTitleBanCount: this.lastImmediateTitleBanCount,
           lastImmediateTitleBanMatchedTitle: this.lastImmediateTitleBanMatchedTitle,
+          lastLinkbaitBodyLinkCandidateCount: this.lastLinkbaitBodyLinkCandidateCount,
+          lastLinkbaitBodyLinkCheckedCount: this.lastLinkbaitBodyLinkCheckedCount,
+          lastLinkbaitBodyLinkMatchedCount: this.lastLinkbaitBodyLinkMatchedCount,
+          lastLinkbaitBodyLinkActionCount: this.lastLinkbaitBodyLinkActionCount,
+          lastLinkbaitBodyLinkRepresentative: this.lastLinkbaitBodyLinkRepresentative,
           lastAttackTitleClusterCount: this.lastAttackTitleClusterCount,
           lastAttackTitleClusterPostCount: this.lastAttackTitleClusterPostCount,
           lastAttackTitleClusterRepresentative: this.lastAttackTitleClusterRepresentative,
@@ -1172,6 +1364,7 @@ class Scheduler {
           totalTriggeredUidCount: this.totalTriggeredUidCount,
           totalSingleSightTriggeredUidCount: this.totalSingleSightTriggeredUidCount,
           totalImmediateTitleBanPostCount: this.totalImmediateTitleBanPostCount,
+          totalLinkbaitBodyLinkPostCount: this.totalLinkbaitBodyLinkPostCount,
           totalAttackTitleClusterPostCount: this.totalAttackTitleClusterPostCount,
           totalAttackCommentClusterDeleteCount: this.totalAttackCommentClusterDeleteCount,
           totalSingleSightBannedPostCount: this.totalSingleSightBannedPostCount,
@@ -1187,6 +1380,7 @@ class Scheduler {
           lastDeleteLimitMessage: this.lastDeleteLimitMessage,
           recentUidActions: this.recentUidActions,
           recentImmediatePostActions: this.recentImmediatePostActions,
+          recentLinkbaitBodyLinkActions: this.recentLinkbaitBodyLinkActions,
           recentAttackTitlePostActions: this.recentAttackTitlePostActions,
           recentAttackCommentActions: this.recentAttackCommentActions,
           commentSnapshotByPostNo: this.commentSnapshotByPostNo,
@@ -1219,6 +1413,11 @@ class Scheduler {
       this.lastSingleSightTriggeredPostCount = Math.max(0, Number(schedulerState.lastSingleSightTriggeredPostCount) || 0);
       this.lastImmediateTitleBanCount = Math.max(0, Number(schedulerState.lastImmediateTitleBanCount) || 0);
       this.lastImmediateTitleBanMatchedTitle = String(schedulerState.lastImmediateTitleBanMatchedTitle || '');
+      this.lastLinkbaitBodyLinkCandidateCount = Math.max(0, Number(schedulerState.lastLinkbaitBodyLinkCandidateCount) || 0);
+      this.lastLinkbaitBodyLinkCheckedCount = Math.max(0, Number(schedulerState.lastLinkbaitBodyLinkCheckedCount) || 0);
+      this.lastLinkbaitBodyLinkMatchedCount = Math.max(0, Number(schedulerState.lastLinkbaitBodyLinkMatchedCount) || 0);
+      this.lastLinkbaitBodyLinkActionCount = Math.max(0, Number(schedulerState.lastLinkbaitBodyLinkActionCount) || 0);
+      this.lastLinkbaitBodyLinkRepresentative = String(schedulerState.lastLinkbaitBodyLinkRepresentative || '');
       this.lastAttackTitleClusterCount = Math.max(0, Number(schedulerState.lastAttackTitleClusterCount) || 0);
       this.lastAttackTitleClusterPostCount = Math.max(0, Number(schedulerState.lastAttackTitleClusterPostCount) || 0);
       this.lastAttackTitleClusterRepresentative = String(schedulerState.lastAttackTitleClusterRepresentative || '');
@@ -1231,6 +1430,7 @@ class Scheduler {
       this.totalTriggeredUidCount = Math.max(0, Number(schedulerState.totalTriggeredUidCount) || 0);
       this.totalSingleSightTriggeredUidCount = Math.max(0, Number(schedulerState.totalSingleSightTriggeredUidCount) || 0);
       this.totalImmediateTitleBanPostCount = Math.max(0, Number(schedulerState.totalImmediateTitleBanPostCount) || 0);
+      this.totalLinkbaitBodyLinkPostCount = Math.max(0, Number(schedulerState.totalLinkbaitBodyLinkPostCount) || 0);
       this.totalAttackTitleClusterPostCount = Math.max(0, Number(schedulerState.totalAttackTitleClusterPostCount) || 0);
       this.totalAttackCommentClusterDeleteCount = Math.max(0, Number(schedulerState.totalAttackCommentClusterDeleteCount) || 0);
       this.totalSingleSightBannedPostCount = Math.max(0, Number(schedulerState.totalSingleSightBannedPostCount) || 0);
@@ -1255,6 +1455,7 @@ class Scheduler {
       this.lastDeleteLimitMessage = String(schedulerState.lastDeleteLimitMessage || '');
       this.recentUidActions = normalizeRecentUidActions(schedulerState.recentUidActions);
       this.recentImmediatePostActions = normalizeRecentImmediatePostActions(schedulerState.recentImmediatePostActions);
+      this.recentLinkbaitBodyLinkActions = normalizeRecentLinkbaitBodyLinkActions(schedulerState.recentLinkbaitBodyLinkActions);
       this.recentAttackTitlePostActions = normalizeRecentAttackTitlePostActions(schedulerState.recentAttackTitlePostActions);
       this.recentAttackCommentActions = normalizeRecentAttackCommentActions(schedulerState.recentAttackCommentActions);
       this.commentSnapshotByPostNo = normalizeCommentSnapshots(schedulerState.commentSnapshotByPostNo);
@@ -1266,6 +1467,7 @@ class Scheduler {
       });
       pruneRecentUidActions(this.recentUidActions);
       pruneRecentImmediatePostActions(this.recentImmediatePostActions);
+      pruneRecentLinkbaitBodyLinkActions(this.recentLinkbaitBodyLinkActions);
       pruneRecentAttackTitlePostActions(this.recentAttackTitlePostActions);
       pruneRecentAttackCommentActions(this.recentAttackCommentActions);
     } catch (error) {
@@ -1297,6 +1499,8 @@ class Scheduler {
 
   getStatus() {
     pruneRecentUidActions(this.recentUidActions);
+    pruneRecentImmediatePostActions(this.recentImmediatePostActions);
+    pruneRecentLinkbaitBodyLinkActions(this.recentLinkbaitBodyLinkActions);
     pruneRecentAttackTitlePostActions(this.recentAttackTitlePostActions);
     pruneRecentAttackCommentActions(this.recentAttackCommentActions);
     return {
@@ -1312,6 +1516,11 @@ class Scheduler {
       lastSingleSightTriggeredPostCount: this.lastSingleSightTriggeredPostCount,
       lastImmediateTitleBanCount: this.lastImmediateTitleBanCount,
       lastImmediateTitleBanMatchedTitle: this.lastImmediateTitleBanMatchedTitle,
+      lastLinkbaitBodyLinkCandidateCount: this.lastLinkbaitBodyLinkCandidateCount,
+      lastLinkbaitBodyLinkCheckedCount: this.lastLinkbaitBodyLinkCheckedCount,
+      lastLinkbaitBodyLinkMatchedCount: this.lastLinkbaitBodyLinkMatchedCount,
+      lastLinkbaitBodyLinkActionCount: this.lastLinkbaitBodyLinkActionCount,
+      lastLinkbaitBodyLinkRepresentative: this.lastLinkbaitBodyLinkRepresentative,
       lastAttackTitleClusterCount: this.lastAttackTitleClusterCount,
       lastAttackTitleClusterPostCount: this.lastAttackTitleClusterPostCount,
       lastAttackTitleClusterRepresentative: this.lastAttackTitleClusterRepresentative,
@@ -1324,6 +1533,7 @@ class Scheduler {
       totalTriggeredUidCount: this.totalTriggeredUidCount,
       totalSingleSightTriggeredUidCount: this.totalSingleSightTriggeredUidCount,
       totalImmediateTitleBanPostCount: this.totalImmediateTitleBanPostCount,
+      totalLinkbaitBodyLinkPostCount: this.totalLinkbaitBodyLinkPostCount,
       totalAttackTitleClusterPostCount: this.totalAttackTitleClusterPostCount,
       totalAttackCommentClusterDeleteCount: this.totalAttackCommentClusterDeleteCount,
       totalSingleSightBannedPostCount: this.totalSingleSightBannedPostCount,
@@ -1375,6 +1585,14 @@ function normalizeConfig(config = {}) {
     attackCommentDeleteDelayMs: Math.max(0, Number(config.attackCommentDeleteDelayMs) || DEFAULT_CONFIG.attackCommentDeleteDelayMs),
     attackCommentDeleteTimeoutMs: Math.max(1000, Number(config.attackCommentDeleteTimeoutMs) || DEFAULT_CONFIG.attackCommentDeleteTimeoutMs),
     attackCommentSnapshotTtlMs: Math.max(1000, Number(config.attackCommentSnapshotTtlMs) || DEFAULT_CONFIG.attackCommentSnapshotTtlMs),
+    linkbaitBodyLinkEnabled: config.linkbaitBodyLinkEnabled === undefined
+      ? Boolean(DEFAULT_CONFIG.linkbaitBodyLinkEnabled)
+      : Boolean(config.linkbaitBodyLinkEnabled),
+    linkbaitBodyLinkTitleNeedle: String(config.linkbaitBodyLinkTitleNeedle || DEFAULT_CONFIG.linkbaitBodyLinkTitleNeedle).trim()
+      || DEFAULT_CONFIG.linkbaitBodyLinkTitleNeedle,
+    linkbaitBodyLinkFetchConcurrency: Math.max(1, Number(config.linkbaitBodyLinkFetchConcurrency) || DEFAULT_CONFIG.linkbaitBodyLinkFetchConcurrency),
+    linkbaitBodyLinkFetchRequestDelayMs: Math.max(0, Number(config.linkbaitBodyLinkFetchRequestDelayMs) || DEFAULT_CONFIG.linkbaitBodyLinkFetchRequestDelayMs),
+    linkbaitBodyLinkFetchTimeoutMs: Math.max(1000, Number(config.linkbaitBodyLinkFetchTimeoutMs) || DEFAULT_CONFIG.linkbaitBodyLinkFetchTimeoutMs),
   };
 }
 
@@ -1550,7 +1768,15 @@ function buildAttackTitlePostActionKey(postNo) {
   return buildImmediatePostActionKey(postNo);
 }
 
+function buildLinkbaitBodyLinkActionKey(postNo) {
+  return buildImmediatePostActionKey(postNo);
+}
+
 function createRecentAttackTitlePostActionEntry({ success, nowIso }) {
+  return createRecentImmediatePostActionEntry({ success, nowIso });
+}
+
+function createRecentLinkbaitBodyLinkActionEntry({ success, nowIso }) {
   return createRecentImmediatePostActionEntry({ success, nowIso });
 }
 
@@ -1558,7 +1784,15 @@ function shouldSkipRecentAttackTitlePostAction(entry, nowMs, retryCooldownMs) {
   return shouldSkipRecentImmediatePostAction(entry, nowMs, retryCooldownMs);
 }
 
+function shouldSkipRecentLinkbaitBodyLinkAction(entry, nowMs, retryCooldownMs) {
+  return shouldSkipRecentImmediatePostAction(entry, nowMs, retryCooldownMs);
+}
+
 function normalizeRecentAttackTitlePostActions(raw = {}) {
+  return normalizeRecentImmediatePostActions(raw);
+}
+
+function normalizeRecentLinkbaitBodyLinkActions(raw = {}) {
   return normalizeRecentImmediatePostActions(raw);
 }
 
@@ -1706,6 +1940,10 @@ function pruneRecentAttackTitlePostActions(entries = {}) {
   pruneRecentImmediatePostActions(entries);
 }
 
+function pruneRecentLinkbaitBodyLinkActions(entries = {}) {
+  pruneRecentImmediatePostActions(entries);
+}
+
 function pruneRecentAttackCommentActions(entries = {}) {
   const nowMs = Date.now();
   for (const [key, value] of Object.entries(entries || {})) {
@@ -1778,6 +2016,47 @@ function getAttackCommentDeleteTimeoutMs(config = {}) {
 
 function getAttackCommentSnapshotTtlMs(config = {}) {
   return Math.max(1000, Number(config.attackCommentSnapshotTtlMs) || DEFAULT_CONFIG.attackCommentSnapshotTtlMs);
+}
+
+function getLinkbaitBodyLinkEnabled(config = {}) {
+  return config.linkbaitBodyLinkEnabled !== false;
+}
+
+function getLinkbaitBodyLinkTitleNeedle(config = {}) {
+  const normalizedNeedle = normalizeImmediateTitleValue(
+    config.linkbaitBodyLinkTitleNeedle || DEFAULT_CONFIG.linkbaitBodyLinkTitleNeedle,
+  );
+  return normalizedNeedle || DEFAULT_LINKBAIT_TITLE_NEEDLE;
+}
+
+function getLinkbaitBodyLinkFetchConcurrency(config = {}) {
+  return Math.max(1, Number(config.linkbaitBodyLinkFetchConcurrency) || DEFAULT_CONFIG.linkbaitBodyLinkFetchConcurrency);
+}
+
+function getLinkbaitBodyLinkFetchRequestDelayMs(config = {}) {
+  return Math.max(0, Number(config.linkbaitBodyLinkFetchRequestDelayMs) || DEFAULT_CONFIG.linkbaitBodyLinkFetchRequestDelayMs);
+}
+
+function getLinkbaitBodyLinkFetchTimeoutMs(config = {}) {
+  return Math.max(1000, Number(config.linkbaitBodyLinkFetchTimeoutMs) || DEFAULT_CONFIG.linkbaitBodyLinkFetchTimeoutMs);
+}
+
+function isLinkbaitBodyLinkTitleCandidate(row = {}, config = {}) {
+  const postNo = Number(row?.no) || 0;
+  if (postNo <= 0) {
+    return false;
+  }
+
+  if (row?.isFluid !== true) {
+    return false;
+  }
+
+  if (isAlreadySpamHead(row?.currentHead)) {
+    return false;
+  }
+
+  const normalizedTitle = normalizeImmediateTitleValue(row?.title || row?.subject || '');
+  return normalizedTitle.includes(getLinkbaitBodyLinkTitleNeedle(config));
 }
 
 function parseTimestamp(value) {
@@ -1967,14 +2246,24 @@ async function mapWithConcurrencyWorkerPool(
 async function runWithTimeoutSignal(timeoutMs, work, timeoutLabel = '작업 시간 초과') {
   const normalizedTimeoutMs = Math.max(1000, Number(timeoutMs) || 0);
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, normalizedTimeoutMs);
+  let timeoutId = null;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`${timeoutLabel} (${normalizedTimeoutMs}ms)`));
+    }, normalizedTimeoutMs);
+  });
 
   try {
-    return await work(controller.signal);
+    return await Promise.race([
+      Promise.resolve().then(() => work(controller.signal)),
+      timeoutPromise,
+    ]);
   } catch (error) {
     if (controller.signal.aborted || error?.name === 'AbortError') {
+      if (String(error?.message || '').includes(timeoutLabel)) {
+        throw error;
+      }
       throw new Error(`${timeoutLabel} (${normalizedTimeoutMs}ms)`);
     }
 

@@ -502,6 +502,9 @@ const FEATURE_DOM = {
     immediateTitleRuleCount: document.getElementById('uidWarningAutoBanImmediateTitleRuleCount'),
     lastImmediateTitleBanMatchedTitle: document.getElementById('uidWarningAutoBanLastImmediateTitleBanMatchedTitle'),
     lastImmediateTitleBanCount: document.getElementById('uidWarningAutoBanLastImmediateTitleBanCount'),
+    lastLinkbaitBodyLinkCandidateCount: document.getElementById('uidWarningAutoBanLastLinkbaitBodyLinkCandidateCount'),
+    lastLinkbaitBodyLinkActionCount: document.getElementById('uidWarningAutoBanLastLinkbaitBodyLinkActionCount'),
+    lastLinkbaitBodyLinkRepresentative: document.getElementById('uidWarningAutoBanLastLinkbaitBodyLinkRepresentative'),
     lastAttackTitleClusterCount: document.getElementById('uidWarningAutoBanLastAttackTitleClusterCount'),
     lastAttackTitleClusterPostCount: document.getElementById('uidWarningAutoBanLastAttackTitleClusterPostCount'),
     lastAttackTitleClusterRepresentative: document.getElementById('uidWarningAutoBanLastAttackTitleClusterRepresentative'),
@@ -510,6 +513,7 @@ const FEATURE_DOM = {
     lastAttackCommentClusterPostCount: document.getElementById('uidWarningAutoBanLastAttackCommentClusterPostCount'),
     lastAttackCommentClusterRepresentative: document.getElementById('uidWarningAutoBanLastAttackCommentClusterRepresentative'),
     totalImmediateTitleBanPostCount: document.getElementById('uidWarningAutoBanTotalImmediateTitleBanPostCount'),
+    totalLinkbaitBodyLinkPostCount: document.getElementById('uidWarningAutoBanTotalLinkbaitBodyLinkPostCount'),
     totalAttackTitleClusterPostCount: document.getElementById('uidWarningAutoBanTotalAttackTitleClusterPostCount'),
     totalAttackCommentClusterDeleteCount: document.getElementById('uidWarningAutoBanTotalAttackCommentClusterDeleteCount'),
     totalSingleSightBannedPostCount: document.getElementById('uidWarningAutoBanTotalSingleSightBannedPostCount'),
@@ -4244,6 +4248,9 @@ function updateUidWarningAutoBanUI(status) {
   dom.immediateTitleRuleCount.textContent = `${(nextStatus.config?.immediateTitleBanRules || []).length}개`;
   dom.lastImmediateTitleBanMatchedTitle.textContent = nextStatus.lastImmediateTitleBanMatchedTitle || '-';
   dom.lastImmediateTitleBanCount.textContent = `${nextStatus.lastImmediateTitleBanCount ?? 0}개`;
+  dom.lastLinkbaitBodyLinkCandidateCount.textContent = `${nextStatus.lastLinkbaitBodyLinkCandidateCount ?? 0}개`;
+  dom.lastLinkbaitBodyLinkActionCount.textContent = `${nextStatus.lastLinkbaitBodyLinkActionCount ?? 0}개`;
+  dom.lastLinkbaitBodyLinkRepresentative.textContent = nextStatus.lastLinkbaitBodyLinkRepresentative || '-';
   dom.lastAttackTitleClusterCount.textContent = `${nextStatus.lastAttackTitleClusterCount ?? 0}개`;
   dom.lastAttackTitleClusterPostCount.textContent = `${nextStatus.lastAttackTitleClusterPostCount ?? 0}개`;
   dom.lastAttackTitleClusterRepresentative.textContent = nextStatus.lastAttackTitleClusterRepresentative || '-';
@@ -4254,6 +4261,7 @@ function updateUidWarningAutoBanUI(status) {
   dom.totalTriggeredUidCount.textContent = `${nextStatus.totalTriggeredUidCount ?? 0}명`;
   dom.totalSingleSightTriggeredUidCount.textContent = `${nextStatus.totalSingleSightTriggeredUidCount ?? 0}명`;
   dom.totalImmediateTitleBanPostCount.textContent = `${nextStatus.totalImmediateTitleBanPostCount ?? 0}개`;
+  dom.totalLinkbaitBodyLinkPostCount.textContent = `${nextStatus.totalLinkbaitBodyLinkPostCount ?? 0}개`;
   dom.totalAttackTitleClusterPostCount.textContent = `${nextStatus.totalAttackTitleClusterPostCount ?? 0}개`;
   dom.totalAttackCommentClusterDeleteCount.textContent = `${nextStatus.totalAttackCommentClusterDeleteCount ?? 0}개`;
   dom.totalSingleSightBannedPostCount.textContent = `${nextStatus.totalSingleSightBannedPostCount ?? 0}개`;
@@ -6169,6 +6177,11 @@ function buildDefaultUidWarningAutoBanStatus() {
     lastSingleSightTriggeredPostCount: 0,
     lastImmediateTitleBanCount: 0,
     lastImmediateTitleBanMatchedTitle: '',
+    lastLinkbaitBodyLinkCandidateCount: 0,
+    lastLinkbaitBodyLinkCheckedCount: 0,
+    lastLinkbaitBodyLinkMatchedCount: 0,
+    lastLinkbaitBodyLinkActionCount: 0,
+    lastLinkbaitBodyLinkRepresentative: '',
     lastAttackTitleClusterCount: 0,
     lastAttackTitleClusterPostCount: 0,
     lastAttackTitleClusterRepresentative: '',
@@ -6180,6 +6193,7 @@ function buildDefaultUidWarningAutoBanStatus() {
     totalTriggeredUidCount: 0,
     totalSingleSightTriggeredUidCount: 0,
     totalImmediateTitleBanPostCount: 0,
+    totalLinkbaitBodyLinkPostCount: 0,
     totalAttackTitleClusterPostCount: 0,
     totalAttackCommentClusterDeleteCount: 0,
     totalSingleSightBannedPostCount: 0,
@@ -6237,7 +6251,7 @@ function buildUidWarningAutoBanMetaText(status = {}) {
     : 0;
 
   if (!status.isRunning) {
-    return `10초마다 1페이지를 확인해 제목 직차단 ${immediateTitleRuleCount}개 규칙, 실제공격 제목/댓글 군집, 글댓총합 20 미만 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 봅니다.`;
+    return `10초마다 1페이지를 확인해 제목 직차단 ${immediateTitleRuleCount}개 규칙, 이거진짜 링크본문, 실제공격 제목/댓글 군집, 글댓총합 20 미만 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 봅니다.`;
   }
 
   if (status.lastError) {
@@ -6261,6 +6275,10 @@ function buildUidWarningAutoBanMetaText(status = {}) {
     return `최근 제목 직차단 ${status.lastImmediateTitleBanMatchedTitle || '규칙'} / page1 글 ${status.lastImmediateTitleBanCount ?? 0}개`;
   }
 
+  if ((status.lastLinkbaitBodyLinkActionCount ?? 0) > 0) {
+    return `최근 이거진짜 링크본문 ${status.lastLinkbaitBodyLinkRepresentative || '제목'} / page1 유동글 ${status.lastLinkbaitBodyLinkActionCount ?? 0}개 제재`;
+  }
+
   if ((status.lastAttackTitleClusterPostCount ?? 0) > 0) {
     return `최근 실제공격 제목 군집 ${status.lastAttackTitleClusterRepresentative || '패턴'} / page1 유동글 ${status.lastAttackTitleClusterPostCount ?? 0}개`;
   }
@@ -6278,10 +6296,10 @@ function buildUidWarningAutoBanMetaText(status = {}) {
   }
 
   if (immediateTitleRuleCount > 0) {
-    return `현재는 제목 직차단 ${immediateTitleRuleCount}개 규칙, 실제공격 제목/댓글 군집, 글댓총합 20 미만인 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 감시 중입니다.`;
+    return `현재는 제목 직차단 ${immediateTitleRuleCount}개 규칙, 이거진짜 링크본문, 실제공격 제목/댓글 군집, 글댓총합 20 미만인 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 감시 중입니다.`;
   }
 
-  return '현재는 제목 직차단 / 실제공격 제목·댓글 군집 / 글댓총합 20 미만 page1 burst 깡계 / 방명록 잠금 저활동 깡계를 함께 대기 중입니다.';
+  return '현재는 제목 직차단 / 이거진짜 링크본문 / 실제공격 제목·댓글 군집 / 글댓총합 20 미만 page1 burst 깡계 / 방명록 잠금 저활동 깡계를 함께 대기 중입니다.';
 }
 
 function updateToggle(dom, isRunning) {

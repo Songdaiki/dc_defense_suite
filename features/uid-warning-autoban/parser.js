@@ -14,6 +14,13 @@ const IMMEDIATE_TITLE_CONFUSABLE_CHAR_MAP = new Map([
   ['ⴸ', 'v'],
   ['ꓦ', 'v'],
 ]);
+const POST_BODY_MARKER_CLASS_NAMES = [
+  'appending_file_box',
+  'view_bottom_btnbox',
+  'btn_recommend_box',
+  'comment_wrap',
+  'view_comment',
+];
 
 function parseUidWarningAutoBanRows(html) {
   return parsePage1BoardRows(html, { requireUid: true });
@@ -549,8 +556,124 @@ function stripTags(value) {
     .trim();
 }
 
+function extractPostBodyHtml(viewHtml) {
+  const html = String(viewHtml || '');
+  const writeDivMatch = html.match(buildDivClassRegex('write_div'));
+  if (!writeDivMatch) {
+    return '';
+  }
+
+  const startIndex = writeDivMatch.index;
+  const searchStart = startIndex + writeDivMatch[0].length;
+  const directWriteDivEndIndex = findMatchingDivEndIndex(html, searchStart);
+  if (directWriteDivEndIndex > startIndex) {
+    return html.slice(startIndex, directWriteDivEndIndex);
+  }
+
+  const tailHtml = html.slice(searchStart);
+  const markerRegexes = [
+    ...POST_BODY_MARKER_CLASS_NAMES.map((className) => buildDivClassRegex(className)),
+    /<\/article>/i,
+  ];
+  const markerIndexes = markerRegexes
+    .map((regex) => {
+      const markerMatch = tailHtml.match(regex);
+      return markerMatch ? searchStart + markerMatch.index : -1;
+    })
+    .filter((index) => index > startIndex);
+  const endIndex = markerIndexes.length > 0
+    ? Math.min(...markerIndexes)
+    : Math.min(html.length, startIndex + 100000);
+
+  return html.slice(startIndex, endIndex);
+}
+
+function findMatchingDivEndIndex(html, contentStart) {
+  const source = String(html || '');
+  const startIndex = Math.max(0, Number(contentStart) || 0);
+  const searchLimit = Math.min(source.length, startIndex + 100000);
+  const divTagRegex = /<\/?div\b[^>]*>/gi;
+  divTagRegex.lastIndex = startIndex;
+  let depth = 1;
+  let match;
+
+  while ((match = divTagRegex.exec(source)) !== null) {
+    if (match.index > searchLimit) {
+      break;
+    }
+
+    const tag = match[0];
+    if (/^<\s*\/div\b/i.test(tag)) {
+      depth -= 1;
+      if (depth <= 0) {
+        return match.index;
+      }
+      continue;
+    }
+
+    depth += 1;
+  }
+
+  return -1;
+}
+
+function hasUserHttpsLinkInPostBody(viewHtml) {
+  const bodyHtml = extractPostBodyHtml(viewHtml);
+  if (!bodyHtml) {
+    return false;
+  }
+
+  const safeBodyHtml = bodyHtml
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<img\b[\s\S]*?>/gi, ' ');
+  const anchorHrefMatches = [...safeBodyHtml.matchAll(/<a\b[^>]*\shref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)];
+  const hasAnchorHttps = anchorHrefMatches.some((match) => {
+    const href = match[1] || match[2] || match[3] || '';
+    return isUserHttpsUrl(decodeHtml(href));
+  });
+  if (hasAnchorHttps) {
+    return true;
+  }
+
+  const visibleText = decodeHtml(stripTags(safeBodyHtml));
+  return hasUserHttpsUrlText(visibleText);
+}
+
+function buildDivClassRegex(className) {
+  return new RegExp(
+    `<div\\b[^>]*\\bclass\\s*=\\s*(?:"[^"]*\\b${className}\\b[^"]*"|'[^']*\\b${className}\\b[^']*'|[^\\s>]*\\b${className}\\b[^\\s>]*)[^>]*>`,
+    'i',
+  );
+}
+
+function hasUserHttpsUrlText(value) {
+  return /https:\/\//i.test(String(value || ''));
+}
+
+function isUserHttpsUrl(value) {
+  const url = String(value || '').trim();
+  if (!/^https:\/\//i.test(url)) {
+    return false;
+  }
+
+  return !/^https:\/\/(?:[^/]+\.)?(?:dcinside\.com|dcimg\d*\.dcinside\.com|nstatic\.dcinside\.com|wstatic\.dcinside\.com)\b/i.test(url);
+}
+
 function decodeHtml(value) {
   return String(value || '')
+    .replace(/&#x([0-9a-f]+);/gi, (match, hex) => {
+      const codePoint = Number.parseInt(hex, 16);
+      return Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10FFFF
+        ? String.fromCodePoint(codePoint)
+        : match;
+    })
+    .replace(/&#(\d+);/g, (match, decimal) => {
+      const codePoint = Number.parseInt(decimal, 10);
+      return Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10FFFF
+        ? String.fromCodePoint(codePoint)
+        : match;
+    })
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/&#39;/g, '\'')
@@ -562,9 +685,11 @@ function decodeHtml(value) {
 export {
   createImmediateTitleBanTargetPosts,
   createUidBanTargetPosts,
+  extractPostBodyHtml,
   getNewestPostNo,
   getRecentRowsWithinWindow,
   groupRowsByUid,
+  hasUserHttpsLinkInPostBody,
   normalizeImmediateTitleBanRules,
   normalizeImmediateTitleValue,
   parseImmediateTitleBanRows,

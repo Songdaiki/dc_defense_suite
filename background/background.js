@@ -1720,6 +1720,11 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.lastSingleSightTriggeredPostCount = 0;
     scheduler.lastImmediateTitleBanCount = 0;
     scheduler.lastImmediateTitleBanMatchedTitle = '';
+    scheduler.lastLinkbaitBodyLinkCandidateCount = 0;
+    scheduler.lastLinkbaitBodyLinkCheckedCount = 0;
+    scheduler.lastLinkbaitBodyLinkMatchedCount = 0;
+    scheduler.lastLinkbaitBodyLinkActionCount = 0;
+    scheduler.lastLinkbaitBodyLinkRepresentative = '';
     scheduler.lastAttackTitleClusterCount = 0;
     scheduler.lastAttackTitleClusterPostCount = 0;
     scheduler.lastAttackTitleClusterRepresentative = '';
@@ -1732,6 +1737,7 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.totalTriggeredUidCount = 0;
     scheduler.totalSingleSightTriggeredUidCount = 0;
     scheduler.totalImmediateTitleBanPostCount = 0;
+    scheduler.totalLinkbaitBodyLinkPostCount = 0;
     scheduler.totalAttackTitleClusterPostCount = 0;
     scheduler.totalAttackCommentClusterDeleteCount = 0;
     scheduler.totalSingleSightBannedPostCount = 0;
@@ -1747,6 +1753,7 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.runtimeDeleteEnabled = Boolean(scheduler.config?.delChk);
     scheduler.recentUidActions = {};
     scheduler.recentImmediatePostActions = {};
+    scheduler.recentLinkbaitBodyLinkActions = {};
     scheduler.recentAttackTitlePostActions = {};
     scheduler.recentAttackCommentActions = {};
     scheduler.commentSnapshotByPostNo = {};
@@ -2795,6 +2802,11 @@ function resetUidWarningAutoBanSchedulerState(message) {
   scheduler.lastSingleSightTriggeredPostCount = 0;
   scheduler.lastImmediateTitleBanCount = 0;
   scheduler.lastImmediateTitleBanMatchedTitle = '';
+  scheduler.lastLinkbaitBodyLinkCandidateCount = 0;
+  scheduler.lastLinkbaitBodyLinkCheckedCount = 0;
+  scheduler.lastLinkbaitBodyLinkMatchedCount = 0;
+  scheduler.lastLinkbaitBodyLinkActionCount = 0;
+  scheduler.lastLinkbaitBodyLinkRepresentative = '';
   scheduler.lastAttackTitleClusterCount = 0;
   scheduler.lastAttackTitleClusterPostCount = 0;
   scheduler.lastAttackTitleClusterRepresentative = '';
@@ -2807,6 +2819,7 @@ function resetUidWarningAutoBanSchedulerState(message) {
   scheduler.totalTriggeredUidCount = 0;
   scheduler.totalSingleSightTriggeredUidCount = 0;
   scheduler.totalImmediateTitleBanPostCount = 0;
+  scheduler.totalLinkbaitBodyLinkPostCount = 0;
   scheduler.totalAttackTitleClusterPostCount = 0;
   scheduler.totalAttackCommentClusterDeleteCount = 0;
   scheduler.totalSingleSightBannedPostCount = 0;
@@ -2822,6 +2835,7 @@ function resetUidWarningAutoBanSchedulerState(message) {
   scheduler.lastDeleteLimitMessage = '';
   scheduler.recentUidActions = {};
   scheduler.recentImmediatePostActions = {};
+  scheduler.recentLinkbaitBodyLinkActions = {};
   scheduler.recentAttackTitlePostActions = {};
   scheduler.recentAttackCommentActions = {};
   scheduler.commentSnapshotByPostNo = {};

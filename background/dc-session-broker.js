@@ -374,25 +374,37 @@ async function syncDcSessionBrokerSharedConfig(nextSharedConfig = {}) {
   return getDcSessionBrokerStatus();
 }
 
-async function waitUntilDcSessionReady() {
+async function waitUntilDcSessionReady(options = {}) {
+  const signal = options.signal;
   await initializeDcSessionBroker();
 
   while (brokerState.switchInProgress || brokerState.requestGateBlocked) {
+    if (signal?.aborted) {
+      throw createAbortError();
+    }
+
     if (runtime.pendingSessionAutomationPromise) {
       try {
-        await runtime.pendingSessionAutomationPromise;
-      } catch {
+        await waitForPromiseOrAbort(runtime.pendingSessionAutomationPromise, signal);
+      } catch (error) {
+        if (error?.name === 'AbortError') {
+          throw error;
+        }
         // 세션 자동화가 실패해도 gate 해제 이후 다음 요청은 계속 진행한다.
       }
       continue;
     }
 
-    await sleep(100);
+    await sleep(100, signal);
   }
 }
 
-async function acquireDcRequestLease(meta = {}) {
-  await waitUntilDcSessionReady();
+async function acquireDcRequestLease(meta = {}, options = {}) {
+  await waitUntilDcSessionReady({ signal: options.signal });
+
+  if (options.signal?.aborted) {
+    throw createAbortError();
+  }
 
   const leaseId = runtime.nextLeaseId;
   runtime.nextLeaseId += 1;
@@ -415,8 +427,8 @@ async function acquireDcRequestLease(meta = {}) {
   };
 }
 
-async function withDcRequestLease(meta = {}, work) {
-  const lease = await acquireDcRequestLease(meta);
+async function withDcRequestLease(meta = {}, work, options = {}) {
+  const lease = await acquireDcRequestLease(meta, { signal: options.signal });
   try {
     return await work(lease);
   } finally {
@@ -1483,10 +1495,72 @@ function formatTimestamp(value) {
   }
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, Math.max(0, Number(ms) || 0));
+function sleep(ms, signal) {
+  if (signal?.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, Math.max(0, Number(ms) || 0));
+    const onAbort = () => {
+      cleanup();
+      reject(createAbortError());
+    };
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+    };
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
   });
+}
+
+function waitForPromiseOrAbort(promise, signal) {
+  if (!signal) {
+    return promise;
+  }
+
+  if (signal.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      cleanup();
+      reject(createAbortError());
+    };
+    const cleanup = () => {
+      signal.removeEventListener('abort', onAbort);
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+    Promise.resolve(promise)
+      .then((value) => {
+        cleanup();
+        resolve(value);
+      })
+      .catch((error) => {
+        cleanup();
+        reject(error);
+      });
+  });
+}
+
+function createAbortError() {
+  try {
+    return new DOMException('The operation was aborted.', 'AbortError');
+  } catch {
+    const error = new Error('The operation was aborted.');
+    error.name = 'AbortError';
+    return error;
+  }
 }
 
 const __test = {

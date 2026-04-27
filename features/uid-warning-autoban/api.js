@@ -29,6 +29,11 @@ const DEFAULT_CONFIG = {
   attackCommentDeleteDelayMs: 100,
   attackCommentDeleteTimeoutMs: 15 * 1000,
   attackCommentSnapshotTtlMs: 30 * 1000,
+  linkbaitBodyLinkEnabled: true,
+  linkbaitBodyLinkTitleNeedle: '이거 진짜',
+  linkbaitBodyLinkFetchConcurrency: 10,
+  linkbaitBodyLinkFetchRequestDelayMs: 100,
+  linkbaitBodyLinkFetchTimeoutMs: 5 * 1000,
 };
 
 function resolveConfig(config = {}) {
@@ -48,6 +53,37 @@ async function fetchUidWarningAutoBanListHTML(config = {}, page = 1) {
     const response = await dcFetchWithRetry(url.toString());
     return response.text();
   });
+}
+
+async function fetchUidWarningAutoBanPostViewHTML(config = {}, postNo, options = {}) {
+  return withDcRequestLease(
+    { feature: 'uidWarningAutoBan', kind: 'fetchPostViewHTML' },
+    async (lease) => {
+      const resolved = resolveConfig(config);
+      const normalizedPostNo = Math.max(0, Number(postNo) || 0);
+      if (normalizedPostNo <= 0) {
+        throw new Error('글번호 없음');
+      }
+
+      const url = new URL('/mgallery/board/view/', resolved.baseUrl);
+      url.searchParams.set('id', resolved.galleryId);
+      url.searchParams.set('no', String(normalizedPostNo));
+      url.searchParams.set('page', '1');
+
+      const response = await dcFetchWithRetry(url.toString(), {
+        signal: mergeAbortSignals(options.signal, lease.signal),
+        headers: {
+          Referer: `${resolved.baseUrl}/mgallery/board/lists/?id=${encodeURIComponent(resolved.galleryId)}&page=1`,
+        },
+      });
+      const html = await response.text();
+      if (html.includes('정상적인 접근이 아닙니다')) {
+        throw new Error('정상적인 접근이 아닙니다');
+      }
+      return html;
+    },
+    { signal: options.signal },
+  );
 }
 
 async function fetchGallogHomeHtml(config = {}, uid = '') {
@@ -99,23 +135,30 @@ async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
   let lastError = null;
 
   for (let attempt = 0; attempt < retries; attempt += 1) {
+    if (options.signal?.aborted) {
+      throw createAbortError();
+    }
+
     try {
       const response = await dcFetch(url, options);
 
       if (response.status === 429) {
-        await delay((attempt + 1) * 2000);
+        await delay((attempt + 1) * 2000, options.signal);
         continue;
       }
 
       if (response.status === 403) {
-        await delay(5000);
+        await delay(5000, options.signal);
         continue;
       }
 
       return response;
     } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw error;
+      }
       lastError = error;
-      await delay(1000);
+      await delay(1000, options.signal);
     }
   }
 
@@ -126,8 +169,68 @@ async function dcFetchWithRetry(url, options = {}, maxRetries = 3) {
   );
 }
 
-async function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+async function delay(ms, signal) {
+  const timeoutMs = Math.max(0, Number(ms) || 0);
+  if (!signal) {
+    return new Promise((resolve) => setTimeout(resolve, timeoutMs));
+  }
+
+  if (signal.aborted) {
+    throw createAbortError();
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, timeoutMs);
+    const onAbort = () => {
+      cleanup();
+      reject(createAbortError());
+    };
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      signal.removeEventListener('abort', onAbort);
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function createAbortError() {
+  try {
+    return new DOMException('The operation was aborted.', 'AbortError');
+  } catch {
+    const error = new Error('The operation was aborted.');
+    error.name = 'AbortError';
+    return error;
+  }
+}
+
+function mergeAbortSignals(...signals) {
+  const normalizedSignals = signals.filter(Boolean);
+  if (normalizedSignals.length === 0) {
+    return undefined;
+  }
+
+  if (normalizedSignals.length === 1) {
+    return normalizedSignals[0];
+  }
+
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function') {
+    return AbortSignal.any(normalizedSignals);
+  }
+
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  for (const signal of normalizedSignals) {
+    if (signal.aborted) {
+      controller.abort();
+      break;
+    }
+    signal.addEventListener('abort', abort, { once: true });
+  }
+  return controller.signal;
 }
 
 export {
@@ -139,5 +242,6 @@ export {
   fetchGallogGuestbookHtml,
   fetchGallogHomeHtml,
   fetchUidWarningAutoBanListHTML,
+  fetchUidWarningAutoBanPostViewHTML,
   resolveConfig,
 };
