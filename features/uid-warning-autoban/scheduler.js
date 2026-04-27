@@ -2137,10 +2137,6 @@ function isLinkbaitBodyLinkTitleCandidate(row = {}, config = {}) {
     return false;
   }
 
-  if (row?.isPicturePost === true || row?.hasImageIcon === true) {
-    return false;
-  }
-
   const normalizedTitle = normalizeLinkbaitBodyLinkTitleValue(row?.title || row?.subject || '');
   if (getLinkbaitBodyLinkTitleNeedles(config).some((needle) => normalizedTitle.includes(needle))) {
     return true;
