@@ -2047,10 +2047,6 @@ function isLinkbaitBodyLinkTitleCandidate(row = {}, config = {}) {
     return false;
   }
 
-  if (row?.isFluid !== true) {
-    return false;
-  }
-
   if (isAlreadySpamHead(row?.currentHead)) {
     return false;
   }
