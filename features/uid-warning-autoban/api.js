@@ -31,6 +31,7 @@ const DEFAULT_CONFIG = {
   attackCommentSnapshotTtlMs: 30 * 1000,
   linkbaitBodyLinkEnabled: true,
   linkbaitBodyLinkTitleNeedle: '이거 진짜',
+  linkbaitBodyLinkTitleNeedles: ['이거 진짜', '이거 ㄹㅇ', '레전드네', '개웃기네'],
   linkbaitBodyLinkFetchConcurrency: 10,
   linkbaitBodyLinkFetchRequestDelayMs: 100,
   linkbaitBodyLinkFetchTimeoutMs: 5 * 1000,

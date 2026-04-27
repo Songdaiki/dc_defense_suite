@@ -77,7 +77,8 @@ function parsePage1BoardRows(html, options = {}) {
     const currentHead = extractCurrentHead(rowHtml);
     const writerToken = uid || ip;
     const contentType = decodeHtml(extractAttribute(rowTagHtml, 'data-type'));
-    const isPicturePost = contentType === 'icon_pic';
+    const hasImageIcon = contentType === 'icon_pic' || hasBoardPictureIcon(rowHtml);
+    const isPicturePost = hasImageIcon;
     const hasUid = Boolean(uid);
     const isFluid = Boolean(ip);
 
@@ -95,6 +96,7 @@ function parsePage1BoardRows(html, options = {}) {
       writerKey: makeWriterKey(nick, writerToken || ip || uid),
       writerDisplay: buildWriterDisplay(nick, writerToken),
       contentType,
+      hasImageIcon,
       isPicturePost,
       isFluid,
       hasUid,
@@ -443,17 +445,27 @@ function shouldSkipBoardRow(rowHtml) {
 }
 
 function extractBoardTitle(rowHtml) {
-  const titleMatch = rowHtml.match(/<td[^>]*class="gall_tit[^"]*"[^>]*>([\s\S]*?)<\/td>/i);
-  if (!titleMatch) {
+  const titleCellHtml = extractBoardTitleCellHtml(rowHtml);
+  if (!titleCellHtml) {
     return '';
   }
 
-  const titleHtml = titleMatch[1]
+  const titleHtml = titleCellHtml
     .replace(/<em[^>]*class="icon_[^"]*"[\s\S]*?<\/em>/gi, ' ')
     .replace(/<span[^>]*class="[^"]*reply_num[^"]*"[\s\S]*?<\/span>/gi, ' ')
     .replace(/<[^>]+>/g, ' ');
 
   return decodeHtml(titleHtml).replace(/\s+/g, ' ').trim();
+}
+
+function extractBoardTitleCellHtml(rowHtml) {
+  const titleMatch = String(rowHtml || '').match(/<td[^>]*class="gall_tit[^"]*"[^>]*>([\s\S]*?)<\/td>/i);
+  return titleMatch ? titleMatch[1] : '';
+}
+
+function hasBoardPictureIcon(rowHtml) {
+  const titleCellHtml = extractBoardTitleCellHtml(rowHtml);
+  return /<em\b[^>]*class=["'][^"']*\bicon_pic\b[^"']*["'][^>]*>/i.test(titleCellHtml);
 }
 
 function extractCommentCount(rowHtml) {
@@ -630,14 +642,14 @@ function hasUserHttpsLinkInPostBody(viewHtml) {
   const anchorHrefMatches = [...safeBodyHtml.matchAll(/<a\b[^>]*\shref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)];
   const hasAnchorHttps = anchorHrefMatches.some((match) => {
     const href = match[1] || match[2] || match[3] || '';
-    return isUserHttpsUrl(decodeHtml(href));
+    return isUserHttpsKrPathUrl(decodeHtml(href));
   });
   if (hasAnchorHttps) {
     return true;
   }
 
   const visibleText = decodeHtml(stripTags(safeBodyHtml));
-  return hasUserHttpsUrlText(visibleText);
+  return hasUserHttpsKrPathUrlText(visibleText);
 }
 
 function buildDivClassRegex(className) {
@@ -647,13 +659,24 @@ function buildDivClassRegex(className) {
   );
 }
 
-function hasUserHttpsUrlText(value) {
-  return /https:\/\//i.test(String(value || ''));
+function hasUserHttpsKrPathUrlText(value) {
+  const urlMatches = String(value || '').match(/https:\/\/[^\s<>"']+/gi) || [];
+  return urlMatches.some((url) => isUserHttpsKrPathUrl(url));
 }
 
-function isUserHttpsUrl(value) {
+function isUserHttpsKrPathUrl(value) {
   const url = String(value || '').trim();
-  if (!/^https:\/\//i.test(url)) {
+  const urlMatch = url.match(/^https:\/\/([^/\s?#]+)\//i);
+  if (!urlMatch) {
+    return false;
+  }
+
+  const hostname = String(urlMatch[1] || '')
+    .split('@')
+    .pop()
+    .replace(/:\d+$/, '')
+    .toLowerCase();
+  if (!hostname.endsWith('.kr')) {
     return false;
   }
 

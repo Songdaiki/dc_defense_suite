@@ -58,7 +58,9 @@ const DELETE_MODE_REASON = {
 const UID_ACTION_RETENTION_MS = 24 * 60 * 60 * 1000;
 const ATTACK_COMMENT_ACTION_RETENTION_MS = 10 * 60 * 1000;
 const SINGLE_SIGHT_TOTAL_ACTIVITY_THRESHOLD = 20;
-const DEFAULT_LINKBAIT_TITLE_NEEDLE = normalizeImmediateTitleValue('이거 진짜');
+const LINKBAIT_TITLE_KEEP_REGEX = /[^가-힣ㄱ-ㅎㅏ-ㅣ\u1100-\u11FFa-z]/g;
+const LINKBAIT_TITLE_HANGUL_BETWEEN_LATIN_REGEX = /(?<=[가-힣ㄱ-ㅎㅏ-ㅣ\u1100-\u11FF])[a-z]+(?=[가-힣ㄱ-ㅎㅏ-ㅣ\u1100-\u11FF])/g;
+const LINKBAIT_TITLE_JAMO_REGEX = /[ㄱ-ㅎㅏ-ㅣ\u1100-\u11FF]/;
 
 class Scheduler {
   constructor(dependencies = {}) {
@@ -941,7 +943,7 @@ class Scheduler {
       }
 
       if (result.postNo > 0) {
-        this.log(`ℹ️ 이거진짜 링크본문 스킵 - #${result.postNo} 본문 사용자 https 링크 없음`);
+        this.log(`ℹ️ 이거진짜 링크본문 스킵 - #${result.postNo} 본문 사용자 https .kr 링크 없음`);
       }
     }
     this.lastLinkbaitBodyLinkMatchedCount = matchedRows.length;
@@ -1590,6 +1592,7 @@ function normalizeConfig(config = {}) {
       : Boolean(config.linkbaitBodyLinkEnabled),
     linkbaitBodyLinkTitleNeedle: String(config.linkbaitBodyLinkTitleNeedle || DEFAULT_CONFIG.linkbaitBodyLinkTitleNeedle).trim()
       || DEFAULT_CONFIG.linkbaitBodyLinkTitleNeedle,
+    linkbaitBodyLinkTitleNeedles: normalizeRawLinkbaitBodyLinkTitleNeedles(config),
     linkbaitBodyLinkFetchConcurrency: Math.max(1, Number(config.linkbaitBodyLinkFetchConcurrency) || DEFAULT_CONFIG.linkbaitBodyLinkFetchConcurrency),
     linkbaitBodyLinkFetchRequestDelayMs: Math.max(0, Number(config.linkbaitBodyLinkFetchRequestDelayMs) || DEFAULT_CONFIG.linkbaitBodyLinkFetchRequestDelayMs),
     linkbaitBodyLinkFetchTimeoutMs: Math.max(1000, Number(config.linkbaitBodyLinkFetchTimeoutMs) || DEFAULT_CONFIG.linkbaitBodyLinkFetchTimeoutMs),
@@ -2022,11 +2025,94 @@ function getLinkbaitBodyLinkEnabled(config = {}) {
   return config.linkbaitBodyLinkEnabled !== false;
 }
 
-function getLinkbaitBodyLinkTitleNeedle(config = {}) {
-  const normalizedNeedle = normalizeImmediateTitleValue(
-    config.linkbaitBodyLinkTitleNeedle || DEFAULT_CONFIG.linkbaitBodyLinkTitleNeedle,
-  );
-  return normalizedNeedle || DEFAULT_LINKBAIT_TITLE_NEEDLE;
+function normalizeLinkbaitBodyLinkTitleValue(value) {
+  return normalizeImmediateTitleValue(value);
+}
+
+function normalizeLinkbaitBodyLinkTitleValueWithJamo(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(LINKBAIT_TITLE_HANGUL_BETWEEN_LATIN_REGEX, '')
+    .replace(LINKBAIT_TITLE_KEEP_REGEX, '');
+}
+
+function normalizeRawLinkbaitBodyLinkTitleNeedles(config = {}) {
+  const rawNeedles = [];
+  if (Array.isArray(config.linkbaitBodyLinkTitleNeedles)) {
+    rawNeedles.push(...config.linkbaitBodyLinkTitleNeedles);
+  } else {
+    const legacyNeedle = String(config.linkbaitBodyLinkTitleNeedle || '').trim();
+    const normalizedLegacyNeedle = normalizeLinkbaitBodyLinkTitleValue(legacyNeedle);
+    const normalizedDefaultLegacyNeedle = normalizeLinkbaitBodyLinkTitleValue(DEFAULT_CONFIG.linkbaitBodyLinkTitleNeedle);
+    if (normalizedLegacyNeedle && normalizedLegacyNeedle !== normalizedDefaultLegacyNeedle) {
+      rawNeedles.push(legacyNeedle);
+    } else if (Array.isArray(DEFAULT_CONFIG.linkbaitBodyLinkTitleNeedles)) {
+      rawNeedles.push(...DEFAULT_CONFIG.linkbaitBodyLinkTitleNeedles);
+    }
+  }
+
+  const dedupedNeedles = [];
+  const seenNeedles = new Set();
+  for (const rawNeedle of rawNeedles) {
+    const normalizedNeedle = String(rawNeedle || '').trim();
+    if (!normalizedNeedle || seenNeedles.has(normalizedNeedle)) {
+      continue;
+    }
+
+    seenNeedles.add(normalizedNeedle);
+    dedupedNeedles.push(normalizedNeedle);
+  }
+
+  return dedupedNeedles;
+}
+
+function getRawLinkbaitBodyLinkTitleNeedles(config = {}) {
+  return normalizeRawLinkbaitBodyLinkTitleNeedles(config);
+}
+
+function normalizeLinkbaitBodyLinkTitleNeedles(config = {}) {
+  const rawNeedles = getRawLinkbaitBodyLinkTitleNeedles(config)
+    .filter((rawNeedle) => !LINKBAIT_TITLE_JAMO_REGEX.test(String(rawNeedle || '').normalize('NFKC')));
+  const dedupedNeedles = [];
+  const seenNeedles = new Set();
+  for (const rawNeedle of rawNeedles) {
+    const normalizedNeedle = normalizeLinkbaitBodyLinkTitleValue(rawNeedle);
+    if (!normalizedNeedle || seenNeedles.has(normalizedNeedle)) {
+      continue;
+    }
+
+    seenNeedles.add(normalizedNeedle);
+    dedupedNeedles.push(normalizedNeedle);
+  }
+
+  return dedupedNeedles;
+}
+
+function normalizeLinkbaitBodyLinkJamoTitleNeedles(config = {}) {
+  const rawNeedles = getRawLinkbaitBodyLinkTitleNeedles(config)
+    .filter((rawNeedle) => LINKBAIT_TITLE_JAMO_REGEX.test(String(rawNeedle || '').normalize('NFKC')));
+  const dedupedNeedles = [];
+  const seenNeedles = new Set();
+  for (const rawNeedle of rawNeedles) {
+    const normalizedNeedle = normalizeLinkbaitBodyLinkTitleValueWithJamo(rawNeedle);
+    if (!normalizedNeedle || seenNeedles.has(normalizedNeedle)) {
+      continue;
+    }
+
+    seenNeedles.add(normalizedNeedle);
+    dedupedNeedles.push(normalizedNeedle);
+  }
+
+  return dedupedNeedles;
+}
+
+function getLinkbaitBodyLinkTitleNeedles(config = {}) {
+  return normalizeLinkbaitBodyLinkTitleNeedles(config);
+}
+
+function getLinkbaitBodyLinkJamoTitleNeedles(config = {}) {
+  return normalizeLinkbaitBodyLinkJamoTitleNeedles(config);
 }
 
 function getLinkbaitBodyLinkFetchConcurrency(config = {}) {
@@ -2051,8 +2137,17 @@ function isLinkbaitBodyLinkTitleCandidate(row = {}, config = {}) {
     return false;
   }
 
-  const normalizedTitle = normalizeImmediateTitleValue(row?.title || row?.subject || '');
-  return normalizedTitle.includes(getLinkbaitBodyLinkTitleNeedle(config));
+  if (row?.isPicturePost === true || row?.hasImageIcon === true) {
+    return false;
+  }
+
+  const normalizedTitle = normalizeLinkbaitBodyLinkTitleValue(row?.title || row?.subject || '');
+  if (getLinkbaitBodyLinkTitleNeedles(config).some((needle) => normalizedTitle.includes(needle))) {
+    return true;
+  }
+
+  const normalizedJamoTitle = normalizeLinkbaitBodyLinkTitleValueWithJamo(row?.title || row?.subject || '');
+  return getLinkbaitBodyLinkJamoTitleNeedles(config).some((needle) => normalizedJamoTitle.includes(needle));
 }
 
 function parseTimestamp(value) {
