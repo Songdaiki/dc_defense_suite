@@ -8,6 +8,7 @@ import {
   extractActionableManagementRows,
   extractMaxBlockDataNum,
   isLikelyManagementBlockHtml,
+  MATCH_KIND,
   parseDetectedMaxPage,
 } from './parser.js';
 
@@ -239,8 +240,11 @@ class Scheduler {
       seenAvoidNos,
       maxAllowedBlockDataNum: this.currentCycleBaselineMaxBlockDataNum,
     });
-    const hanTitleMatchCount = actionableRows.filter((row) => row.matchKind === 'han_title').length;
-    const dobaeReasonMatchCount = actionableRows.filter((row) => row.matchKind === 'dobae_reason').length;
+    const starReasonRows = actionableRows.filter((row) => row.matchKind === MATCH_KIND.STAR_REASON);
+    const defaultRows = actionableRows.filter((row) => row.matchKind !== MATCH_KIND.STAR_REASON);
+    const starReasonMatchCount = starReasonRows.length;
+    const hanTitleMatchCount = defaultRows.filter((row) => row.matchKind === MATCH_KIND.HAN_TITLE).length;
+    const dobaeReasonMatchCount = defaultRows.filter((row) => row.matchKind === MATCH_KIND.DOBAE_REASON).length;
     const avoidNos = actionableRows.map((row) => row.avoidNo);
 
     this.currentCycleScannedRows += rows.length;
@@ -254,40 +258,63 @@ class Scheduler {
     }
 
     if (avoidNos.length === 0) {
-      this.log(`📄 ${page}페이지: 검사 ${rows.length}줄, 대상 0줄 (한자 0 / 도배사유 0)`);
+      this.log(`📄 ${page}페이지: 검사 ${rows.length}줄, 대상 0줄 (*사유 0 / 한자 0 / 도배사유 0)`);
       await this.saveState();
       return {
         actionableRowCount: 0,
       };
     }
 
-    let result = null;
-    try {
-      result = await this.rebanManagementRows(this.config, avoidNos, page);
-    } catch (error) {
-      this.currentCycleBanFailureCount += avoidNos.length;
-      this.log(`❌ ${page}페이지 재차단 요청 실패 - ${error.message}`);
-      await this.saveState();
-      return {
-        actionableRowCount: avoidNos.length,
-      };
+    const groupResults = [];
+    if (starReasonRows.length > 0 && this.isRunning) {
+      groupResults.push(await runRebanGroup(
+        this,
+        page,
+        starReasonRows,
+        buildStarReasonRebanConfig(this.config),
+        '*',
+      ));
     }
 
-    const successCount = result.successNos?.length || 0;
-    const failureCount = result.failedNos?.length || 0;
+    if (defaultRows.length > 0 && this.isRunning) {
+      groupResults.push(await runRebanGroup(
+        this,
+        page,
+        defaultRows,
+        this.config,
+        '기존갱차',
+      ));
+    }
+
+    const successCount = groupResults.reduce(
+      (sum, result) => sum + (result.successNos?.length || 0),
+      0,
+    );
+    const failureCount = groupResults.reduce(
+      (sum, result) => sum + (result.failedNos?.length || 0),
+      0,
+    );
+    const skippedCount = Math.max(0, avoidNos.length - successCount - failureCount);
     this.currentCycleBanSuccessCount += successCount;
     this.currentCycleBanFailureCount += failureCount;
 
-    if (failureCount <= 0) {
+    if (skippedCount > 0) {
       this.log(
-        `✅ ${page}페이지: 검사 ${rows.length}줄, 대상 ${avoidNos.length}줄 (한자 ${hanTitleMatchCount} / 도배사유 ${dobaeReasonMatchCount}), 재차단 ${successCount}건`,
+        `⏹️ ${page}페이지: 검사 ${rows.length}줄, 대상 ${avoidNos.length}줄 (*사유 ${starReasonMatchCount} / 한자 ${hanTitleMatchCount} / 도배사유 ${dobaeReasonMatchCount}), 성공 ${successCount}건 / 실패 ${failureCount}건 / 미시도 ${skippedCount}건`,
+      );
+    } else if (failureCount <= 0) {
+      this.log(
+        `✅ ${page}페이지: 검사 ${rows.length}줄, 대상 ${avoidNos.length}줄 (*사유 ${starReasonMatchCount} / 한자 ${hanTitleMatchCount} / 도배사유 ${dobaeReasonMatchCount}), 재차단 ${successCount}건`,
       );
     } else {
       this.log(
-        `⚠️ ${page}페이지: 검사 ${rows.length}줄, 대상 ${avoidNos.length}줄 (한자 ${hanTitleMatchCount} / 도배사유 ${dobaeReasonMatchCount}), 성공 ${successCount}건 / 실패 ${failureCount}건`,
+        `⚠️ ${page}페이지: 검사 ${rows.length}줄, 대상 ${avoidNos.length}줄 (*사유 ${starReasonMatchCount} / 한자 ${hanTitleMatchCount} / 도배사유 ${dobaeReasonMatchCount}), 성공 ${successCount}건 / 실패 ${failureCount}건`,
       );
+    }
+
+    for (const result of groupResults) {
       if (result.message) {
-        this.log(`⚠️ ${page}페이지 상세: ${result.message}`);
+        this.log(`⚠️ ${page}페이지 ${result.label} 상세: ${result.message}`);
       }
     }
 
@@ -507,6 +534,59 @@ function resetCycleMetrics(scheduler) {
   scheduler.currentCycleBanSuccessCount = 0;
   scheduler.currentCycleBanFailureCount = 0;
   scheduler.currentCycleBaselineMaxBlockDataNum = 0;
+}
+
+function buildStarReasonRebanConfig(config = {}) {
+  return {
+    ...config,
+    avoidHour: '6',
+    avoidReason: '0',
+    avoidReasonText: '*',
+  };
+}
+
+async function runRebanGroup(scheduler, page, rows, config, label) {
+  const avoidNos = (rows || []).map((row) => row.avoidNo);
+  if (avoidNos.length <= 0) {
+    return {
+      label,
+      successNos: [],
+      failedNos: [],
+      message: '',
+    };
+  }
+
+  try {
+    const result = await scheduler.rebanManagementRows(config, avoidNos, page);
+    if (!result || typeof result !== 'object') {
+      return {
+        label,
+        successNos: [],
+        failedNos: avoidNos,
+        message: `${label} 요청 결과가 비어 있습니다.`,
+      };
+    }
+
+    const successNos = Array.isArray(result?.successNos) ? result.successNos : [];
+    let failedNos = Array.isArray(result?.failedNos) ? result.failedNos : [];
+    if (result?.success === false && successNos.length + failedNos.length <= 0) {
+      failedNos = avoidNos;
+    }
+
+    return {
+      label,
+      successNos,
+      failedNos,
+      message: String(result?.message || '').trim(),
+    };
+  } catch (error) {
+    return {
+      label,
+      successNos: [],
+      failedNos: avoidNos,
+      message: `${label} 요청 실패 - ${error.message}`,
+    };
+  }
 }
 
 function normalizeDetectedMaxPage(value, fallbackMaxPage) {

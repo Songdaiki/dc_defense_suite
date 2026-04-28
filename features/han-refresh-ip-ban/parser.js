@@ -7,6 +7,7 @@ const CURRENT_PAGE_REGEX = /<(?:em|strong|b|span)[^>]*>\s*1\s*<\/(?:em|strong|b|
 const PAGING_BOX_REGEX = /<div[^>]*class="[^"]*(?:\bbottom_paging_box\b[^"]*\biconpaging\b|\biconpaging\b[^"]*\bbottom_paging_box\b)[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
 const MIN_HAN_CHAR_COUNT = 2;
 const MATCH_KIND = {
+  STAR_REASON: 'star_reason',
   HAN_TITLE: 'han_title',
   DOBAE_REASON: 'dobae_reason',
 };
@@ -80,10 +81,6 @@ function extractActionableManagementRows(html, options = {}) {
     }
 
     if (!row.isActive) {
-      continue;
-    }
-
-    if (!isIpLikeWriterToken(row.writerToken)) {
       continue;
     }
 
@@ -161,6 +158,14 @@ function isIpLikeWriterToken(value) {
 }
 
 function getActionableMatchKind(row) {
+  if (hasStarReason(row?.reason || '')) {
+    return MATCH_KIND.STAR_REASON;
+  }
+
+  if (!isIpLikeWriterToken(row?.writerToken)) {
+    return '';
+  }
+
   if (getHanScriptCharCount(row?.title || '') >= MIN_HAN_CHAR_COUNT) {
     return MATCH_KIND.HAN_TITLE;
   }
@@ -170,6 +175,10 @@ function getActionableMatchKind(row) {
   }
 
   return '';
+}
+
+function hasStarReason(value) {
+  return String(value || '').includes('*');
 }
 
 function hasDobaeReason(value) {
@@ -232,6 +241,7 @@ export {
   extractMaxBlockDataNum,
   extractPageNumberFromHref,
   hasDobaeReason,
+  hasStarReason,
   isIpLikeWriterToken,
   isLikelyManagementBlockHtml,
   isRebannableBlockRow,
