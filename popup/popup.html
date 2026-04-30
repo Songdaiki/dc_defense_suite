@@ -1670,7 +1670,7 @@
           <div class="manual-utility-header">
             <div>
               <h3>분탕자동차단</h3>
-              <p>10초마다 1페이지를 확인해 금칙 제목, 실제공격 제목/댓글 군집, uid 분탕조건을 처리합니다</p>
+              <p>10초마다 1페이지를 확인해 광고 닉네임, 금칙 제목, 실제공격 제목/댓글 군집, uid 분탕조건을 처리합니다</p>
             </div>
             <div class="toggle-section">
               <label class="toggle-switch">
@@ -1733,6 +1733,14 @@
               <span id="uidWarningAutoBanImmediateTitleRuleCount" class="status-value">0개</span>
             </div>
             <div class="status-item">
+              <span class="status-label">최근 광고닉</span>
+              <span id="uidWarningAutoBanLastAdNickBanMatchedNick" class="status-value">-</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">최근 광고닉 제재</span>
+              <span id="uidWarningAutoBanLastAdNickBanCount" class="status-value">0개</span>
+            </div>
+            <div class="status-item">
               <span class="status-label">최근 제목 매치</span>
               <span id="uidWarningAutoBanLastImmediateTitleBanMatchedTitle" class="status-value">-</span>
             </div>
@@ -1789,6 +1797,10 @@
               <span id="uidWarningAutoBanTotalSingleSightTriggeredUidCount" class="status-value">0명</span>
             </div>
             <div class="status-item">
+              <span class="status-label">누적 광고닉</span>
+              <span id="uidWarningAutoBanTotalAdNickBanPostCount" class="status-value">0개</span>
+            </div>
+            <div class="status-item">
               <span class="status-label">누적 제목 직차단</span>
               <span id="uidWarningAutoBanTotalImmediateTitleBanPostCount" class="status-value">0개</span>
             </div>
@@ -1826,7 +1838,7 @@
             </div>
           </div>
 
-          <p id="uidWarningAutoBanMetaText" class="manual-utility-meta">10초마다 1페이지를 확인해 금칙 제목, 이거진짜 링크본문, 실제공격 제목/댓글 군집, 글댓총합 20 미만 burst 깡계, 방명록 잠금 저활동 깡계를 함께 처리합니다.</p>
+          <p id="uidWarningAutoBanMetaText" class="manual-utility-meta">10초마다 1페이지를 확인해 광고 닉네임, 금칙 제목, 이거진짜 링크본문, 실제공격 제목/댓글 군집, 글댓총합 20 미만 burst 깡계, 방명록 잠금 저활동 깡계를 함께 처리합니다.</p>
 
           <details class="settings-section uid-warning-title-ban-section">
             <summary>제목 직차단 금칙어</summary>

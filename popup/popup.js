@@ -500,6 +500,8 @@ const FEATURE_DOM = {
     totalTriggeredUidCount: document.getElementById('uidWarningAutoBanTotalTriggeredUidCount'),
     totalSingleSightTriggeredUidCount: document.getElementById('uidWarningAutoBanTotalSingleSightTriggeredUidCount'),
     immediateTitleRuleCount: document.getElementById('uidWarningAutoBanImmediateTitleRuleCount'),
+    lastAdNickBanMatchedNick: document.getElementById('uidWarningAutoBanLastAdNickBanMatchedNick'),
+    lastAdNickBanCount: document.getElementById('uidWarningAutoBanLastAdNickBanCount'),
     lastImmediateTitleBanMatchedTitle: document.getElementById('uidWarningAutoBanLastImmediateTitleBanMatchedTitle'),
     lastImmediateTitleBanCount: document.getElementById('uidWarningAutoBanLastImmediateTitleBanCount'),
     lastLinkbaitBodyLinkCandidateCount: document.getElementById('uidWarningAutoBanLastLinkbaitBodyLinkCandidateCount'),
@@ -512,6 +514,7 @@ const FEATURE_DOM = {
     lastAttackCommentClusterDeleteCount: document.getElementById('uidWarningAutoBanLastAttackCommentClusterDeleteCount'),
     lastAttackCommentClusterPostCount: document.getElementById('uidWarningAutoBanLastAttackCommentClusterPostCount'),
     lastAttackCommentClusterRepresentative: document.getElementById('uidWarningAutoBanLastAttackCommentClusterRepresentative'),
+    totalAdNickBanPostCount: document.getElementById('uidWarningAutoBanTotalAdNickBanPostCount'),
     totalImmediateTitleBanPostCount: document.getElementById('uidWarningAutoBanTotalImmediateTitleBanPostCount'),
     totalLinkbaitBodyLinkPostCount: document.getElementById('uidWarningAutoBanTotalLinkbaitBodyLinkPostCount'),
     totalAttackTitleClusterPostCount: document.getElementById('uidWarningAutoBanTotalAttackTitleClusterPostCount'),
@@ -4246,6 +4249,8 @@ function updateUidWarningAutoBanUI(status) {
   dom.lastSingleSightTriggeredUid.textContent = nextStatus.lastSingleSightTriggeredUid || '-';
   dom.lastSingleSightTriggeredPostCount.textContent = `${nextStatus.lastSingleSightTriggeredPostCount ?? 0}개`;
   dom.immediateTitleRuleCount.textContent = `${(nextStatus.config?.immediateTitleBanRules || []).length}개`;
+  dom.lastAdNickBanMatchedNick.textContent = nextStatus.lastAdNickBanMatchedNick || '-';
+  dom.lastAdNickBanCount.textContent = `${nextStatus.lastAdNickBanCount ?? 0}개`;
   dom.lastImmediateTitleBanMatchedTitle.textContent = nextStatus.lastImmediateTitleBanMatchedTitle || '-';
   dom.lastImmediateTitleBanCount.textContent = `${nextStatus.lastImmediateTitleBanCount ?? 0}개`;
   dom.lastLinkbaitBodyLinkCandidateCount.textContent = `${nextStatus.lastLinkbaitBodyLinkCandidateCount ?? 0}개`;
@@ -4260,6 +4265,7 @@ function updateUidWarningAutoBanUI(status) {
   dom.lastAttackCommentClusterRepresentative.textContent = nextStatus.lastAttackCommentClusterRepresentative || '-';
   dom.totalTriggeredUidCount.textContent = `${nextStatus.totalTriggeredUidCount ?? 0}명`;
   dom.totalSingleSightTriggeredUidCount.textContent = `${nextStatus.totalSingleSightTriggeredUidCount ?? 0}명`;
+  dom.totalAdNickBanPostCount.textContent = `${nextStatus.totalAdNickBanPostCount ?? 0}개`;
   dom.totalImmediateTitleBanPostCount.textContent = `${nextStatus.totalImmediateTitleBanPostCount ?? 0}개`;
   dom.totalLinkbaitBodyLinkPostCount.textContent = `${nextStatus.totalLinkbaitBodyLinkPostCount ?? 0}개`;
   dom.totalAttackTitleClusterPostCount.textContent = `${nextStatus.totalAttackTitleClusterPostCount ?? 0}개`;
@@ -6175,6 +6181,8 @@ function buildDefaultUidWarningAutoBanStatus() {
     lastBurstRecentCount: 0,
     lastSingleSightTriggeredUid: '',
     lastSingleSightTriggeredPostCount: 0,
+    lastAdNickBanMatchedNick: '',
+    lastAdNickBanCount: 0,
     lastImmediateTitleBanCount: 0,
     lastImmediateTitleBanMatchedTitle: '',
     lastLinkbaitBodyLinkCandidateCount: 0,
@@ -6192,6 +6200,7 @@ function buildDefaultUidWarningAutoBanStatus() {
     lastPageUidCount: 0,
     totalTriggeredUidCount: 0,
     totalSingleSightTriggeredUidCount: 0,
+    totalAdNickBanPostCount: 0,
     totalImmediateTitleBanPostCount: 0,
     totalLinkbaitBodyLinkPostCount: 0,
     totalAttackTitleClusterPostCount: 0,
@@ -6251,7 +6260,7 @@ function buildUidWarningAutoBanMetaText(status = {}) {
     : 0;
 
   if (!status.isRunning) {
-    return `10초마다 1페이지를 확인해 제목 직차단 ${immediateTitleRuleCount}개 규칙, 이거진짜 링크본문, 실제공격 제목/댓글 군집, 글댓총합 20 미만 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 봅니다.`;
+    return `10초마다 1페이지를 확인해 광고 닉네임, 제목 직차단 ${immediateTitleRuleCount}개 규칙, 이거진짜 링크본문, 실제공격 제목/댓글 군집, 글댓총합 20 미만 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 봅니다.`;
   }
 
   if (status.lastError) {
@@ -6269,6 +6278,10 @@ function buildUidWarningAutoBanMetaText(status = {}) {
 
     const detail = status.lastDeleteLimitMessage ? ` (${status.lastDeleteLimitMessage})` : '';
     return `삭제 한도 보호 상태라 새 글이 와도 당분간 차단만 수행합니다${detail}`;
+  }
+
+  if ((status.lastAdNickBanCount ?? 0) > 0) {
+    return `최근 광고 닉네임 ${status.lastAdNickBanMatchedNick || '닉네임'} / page1 글 ${status.lastAdNickBanCount ?? 0}개 제재`;
   }
 
   if ((status.lastImmediateTitleBanCount ?? 0) > 0) {
@@ -6296,10 +6309,10 @@ function buildUidWarningAutoBanMetaText(status = {}) {
   }
 
   if (immediateTitleRuleCount > 0) {
-    return `현재는 제목 직차단 ${immediateTitleRuleCount}개 규칙, 이거진짜 링크본문, 실제공격 제목/댓글 군집, 글댓총합 20 미만인 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 감시 중입니다.`;
+    return `현재는 광고 닉네임, 제목 직차단 ${immediateTitleRuleCount}개 규칙, 이거진짜 링크본문, 실제공격 제목/댓글 군집, 글댓총합 20 미만인 page1 burst 깡계, 방명록 잠금 저활동 깡계를 함께 감시 중입니다.`;
   }
 
-  return '현재는 제목 직차단 / 이거진짜 링크본문 / 실제공격 제목·댓글 군집 / 글댓총합 20 미만 page1 burst 깡계 / 방명록 잠금 저활동 깡계를 함께 대기 중입니다.';
+  return '현재는 광고 닉네임 / 제목 직차단 / 이거진짜 링크본문 / 실제공격 제목·댓글 군집 / 글댓총합 20 미만 page1 burst 깡계 / 방명록 잠금 저활동 깡계를 함께 대기 중입니다.';
 }
 
 function updateToggle(dom, isRunning) {

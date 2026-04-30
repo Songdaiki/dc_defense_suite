@@ -1718,6 +1718,8 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.lastBurstRecentCount = 0;
     scheduler.lastSingleSightTriggeredUid = '';
     scheduler.lastSingleSightTriggeredPostCount = 0;
+    scheduler.lastAdNickBanMatchedNick = '';
+    scheduler.lastAdNickBanCount = 0;
     scheduler.lastImmediateTitleBanCount = 0;
     scheduler.lastImmediateTitleBanMatchedTitle = '';
     scheduler.lastLinkbaitBodyLinkCandidateCount = 0;
@@ -1736,6 +1738,7 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.lastPageUidCount = 0;
     scheduler.totalTriggeredUidCount = 0;
     scheduler.totalSingleSightTriggeredUidCount = 0;
+    scheduler.totalAdNickBanPostCount = 0;
     scheduler.totalImmediateTitleBanPostCount = 0;
     scheduler.totalLinkbaitBodyLinkPostCount = 0;
     scheduler.totalAttackTitleClusterPostCount = 0;
@@ -1752,6 +1755,7 @@ function resetSchedulerStats(feature, scheduler) {
     scheduler.lastDeleteLimitMessage = '';
     scheduler.runtimeDeleteEnabled = Boolean(scheduler.config?.delChk);
     scheduler.recentUidActions = {};
+    scheduler.recentAdNickBanPostActions = {};
     scheduler.recentImmediatePostActions = {};
     scheduler.recentLinkbaitBodyLinkActions = {};
     scheduler.recentAttackTitlePostActions = {};
@@ -2800,6 +2804,8 @@ function resetUidWarningAutoBanSchedulerState(message) {
   scheduler.lastBurstRecentCount = 0;
   scheduler.lastSingleSightTriggeredUid = '';
   scheduler.lastSingleSightTriggeredPostCount = 0;
+  scheduler.lastAdNickBanMatchedNick = '';
+  scheduler.lastAdNickBanCount = 0;
   scheduler.lastImmediateTitleBanCount = 0;
   scheduler.lastImmediateTitleBanMatchedTitle = '';
   scheduler.lastLinkbaitBodyLinkCandidateCount = 0;
@@ -2818,6 +2824,7 @@ function resetUidWarningAutoBanSchedulerState(message) {
   scheduler.lastPageUidCount = 0;
   scheduler.totalTriggeredUidCount = 0;
   scheduler.totalSingleSightTriggeredUidCount = 0;
+  scheduler.totalAdNickBanPostCount = 0;
   scheduler.totalImmediateTitleBanPostCount = 0;
   scheduler.totalLinkbaitBodyLinkPostCount = 0;
   scheduler.totalAttackTitleClusterPostCount = 0;
@@ -2834,6 +2841,7 @@ function resetUidWarningAutoBanSchedulerState(message) {
   scheduler.lastDeleteLimitExceededAt = '';
   scheduler.lastDeleteLimitMessage = '';
   scheduler.recentUidActions = {};
+  scheduler.recentAdNickBanPostActions = {};
   scheduler.recentImmediatePostActions = {};
   scheduler.recentLinkbaitBodyLinkActions = {};
   scheduler.recentAttackTitlePostActions = {};
