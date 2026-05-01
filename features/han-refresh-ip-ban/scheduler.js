@@ -541,7 +541,7 @@ function buildStarReasonRebanConfig(config = {}) {
     ...config,
     avoidHour: '6',
     avoidReason: '0',
-    avoidReasonText: '*',
+    avoidReasonText: '*갱차IP(무고한 경우 방명록문의)',
   };
 }
 

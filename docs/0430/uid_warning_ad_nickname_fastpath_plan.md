@@ -1,5 +1,97 @@
 # 분탕자동차단 광고 닉네임 fast-path 구현 문서
 
+## 2026-04-30 구현 후 교차검증 요약
+
+이 문서는 최초에는 작업 전 설계 문서로 작성했지만, 구현 완료 후 실제 코드와 다시 대조했다.
+
+검증 기준 커밋:
+
+```text
+81f1c34 분탕자동차단 광고 닉네임 제재 추가
+```
+
+실제 반영 파일:
+
+```text
+features/uid-warning-autoban/api.js
+features/uid-warning-autoban/scheduler.js
+background/background.js
+popup/popup.html
+popup/popup.js
+docs/0430/uid_warning_ad_nickname_fastpath_plan.md
+```
+
+최종 판단:
+
+```text
+문서 설계대로 구현되어 있다.
+광고 닉네임 분기는 기존 분탕자동차단 10초 cycle 안에서 가장 먼저 돈다.
+처리된 글번호는 이후 제목 직차단/링크본문/실제공격 제목군집/댓글군집/UID 경로에서 제외된다.
+삭제 한도 fallback과 차단만 유지 모드는 기존 executeBanWithDeleteFallback 경로를 그대로 탄다.
+```
+
+추가 검증:
+
+```text
+2026-04-30 CLI에서 79개 assertion으로 mock flow를 재검증했다.
+- DEFAULT_CONFIG 광고닉 기본값 6개/6시간/*광고 확인
+- page1 data-nick 파싱 확인
+- 닉네임 공백/zero-width 정규화와 exact-match 확인
+- recent-skip 중복 API 방지 확인
+- runtimeDeleteEnabled=false 차단만 모드 전달 확인
+- runCycle에서 광고닉 처리 글이 뒤 분기로 넘어가지 않는지 확인
+- saveState/loadState/getStatus/popup/background 연결 확인
+- executeBanWithDeleteFallback del_chk overwrite/fallback 경로 정적 확인
+```
+
+문서 보정 사항:
+
+```text
+여러 닉네임이 한 cycle에서 동시에 매칭될 때 UI/로그 대표값은 전체 닉을 전부 나열하지 않는다.
+기존 summarizeMatchedTitles()를 쓰므로 "유서니 외 1개"처럼 요약될 수 있다.
+제재 대상 자체는 정상적으로 모든 매칭 글번호가 들어간다.
+```
+
+예시:
+
+```text
+page1:
+- #101 유서니
+- #102 혜비닝
+
+실제 로그:
+🚨 광고 닉네임 유서니 외 1개 매치 -> page1 2개 차단/삭제 시작
+
+실제 payload 대상:
+nos[]=101
+nos[]=102
+avoid_reason_txt=*광고
+avoid_hour=6
+del_chk=1
+avoid_type_chk=1
+```
+
+의도된 tradeoff:
+
+```text
+광고 닉네임으로 매칭된 글은 recent-skip 상태여도 processedAdNickBanPostNos에 들어간다.
+즉 같은 글이 최근 처리 이력 때문에 광고닉 API 재호출은 안 하더라도,
+다른 분기에서 다시 중복 제재하지 않는다.
+
+예시:
+이전 cycle에서 #101 유서니 차단/삭제 성공
+다음 cycle에도 #101이 목록에 잠깐 남아 있음
+-> 광고닉 recent-skip
+-> 제목 직차단/링크본문/UID 경로에는 넘기지 않음
+```
+
+이 tradeoff를 둔 이유:
+
+```text
+같은 글이 여러 분기에서 중복 API 호출되는 것이 더 위험하다.
+실패한 글은 retryCooldownMs 이후 광고닉 분기에서 다시 시도된다.
+```
+
 ## 목표
 
 `분탕자동차단`이 10초마다 1페이지 HTML을 보는 흐름에 작성자 닉네임 기반 광고 차단 분기를 추가한다.
@@ -156,9 +248,9 @@ nick = decodeHtml(extractAttribute(writerTag, 'data-nick') || 'ㅇㅇ')
 
 화면에는 `유서니 님`처럼 보일 수 있지만, 실제 비교 대상은 `data-nick="유서니"`다.
 
-## 현재 scheduler 실행 순서
+## scheduler 실행 순서
 
-현재 `runCycle()` 흐름:
+구현 전 `runCycle()` 흐름:
 
 ```text
 1. page1 HTML fetch
@@ -171,7 +263,7 @@ nick = decodeHtml(extractAttribute(writerTag, 'data-nick') || 'ㅇㅇ')
 8. uid 기반 burst/활동비율/방명록 검사
 ```
 
-현재 중복 방지:
+기존 중복 방지:
 
 ```text
 processedImmediatePostNos
@@ -180,9 +272,9 @@ processedAttackTitlePostNos
 processedPostNos
 ```
 
-새 광고 닉네임 분기는 `allRows` 직후, 제목 직차단보다 앞에 둔다.
+광고 닉네임 분기는 `allRows` 직후, 제목 직차단보다 앞에 둔다.
 
-패치 후 순서:
+구현 후 순서:
 
 ```text
 1. page1 HTML fetch
@@ -193,6 +285,16 @@ processedPostNos
 6. 실제공격 제목 군집
 7. 실제공격 댓글 군집
 8. uid 기반 burst/활동비율/방명록 검사
+```
+
+실제 코드 위치:
+
+```text
+features/uid-warning-autoban/scheduler.js
+runCycle()
+-> allRows = this.parseImmediateRows(html)
+-> processedAdNickBanPostNos = await this.handleAdNickBanRows(allRows, nowMs)
+-> 이후 모든 post-level 후보에서 processedAdNickBanPostNos 제외
 ```
 
 이 순서가 맞는 이유:
@@ -892,6 +994,254 @@ exact match 실패
 45. 기존 총 성공/실패 카운트에 합산되므로 전체 통계가 어긋나지 않는다.
 46. 광고 닉네임 처리 뒤 사용자가 토글 OFF를 누른 경우, 제재 API 시작 전 `this.isRunning`을 다시 확인해야 한다.
 47. `processedPostNos` 생성 전에 실행되는 실제공격 제목 군집 filter에도 광고 닉네임 processed set을 직접 넣어야 한다.
+
+## 구현 후 실제 코드 연결 검증
+
+아래는 문서 설계와 실제 구현을 함수 단위로 다시 맞춰본 결과다.
+
+### 1. 기본값 연결
+
+확인 파일:
+
+```text
+features/uid-warning-autoban/api.js
+```
+
+확인 결과:
+
+```text
+DEFAULT_CONFIG에 아래 값이 존재한다.
+adNickBanEnabled=true
+adNickBanNicknames=6개
+adNickBanAvoidHour='6'
+adNickBanAvoidReason='0'
+adNickBanAvoidReasonText='*광고'
+```
+
+문제 없음.
+
+### 2. page1 row 파싱 연결
+
+확인 파일:
+
+```text
+features/uid-warning-autoban/parser.js
+```
+
+확인 결과:
+
+```text
+parseImmediateTitleBanRows(html)
+-> parsePage1BoardRows(html, { requireUid: false })
+-> row.nick = data-nick
+```
+
+따라서 광고 닉네임 분기는 UID 있는 고닉/반고닉뿐 아니라 순수 유동 row도 받는다.
+
+예시:
+
+```html
+<td class="gall_writer ub-writer" data-nick="혜서니" data-uid="airplane3841">
+```
+
+파서 결과:
+
+```js
+row.nick === '혜서니'
+row.uid === 'airplane3841'
+row.hasUid === true
+```
+
+문제 없음.
+
+### 3. scheduler 실행 순서 연결
+
+확인 파일:
+
+```text
+features/uid-warning-autoban/scheduler.js
+```
+
+확인 결과:
+
+```text
+runCycle()
+1. fetchListHtml()
+2. parseImmediateRows()
+3. handleAdNickBanRows(allRows, nowMs)
+4. handleImmediateTitleBanRows(ad 제외 rows)
+5. handleLinkbaitBodyLinkRows(ad/title 제외 rows)
+6. handleAttackTitleClusterRows(ad/title/linkbait 제외 rows)
+7. handleAttackCommentClusterRows(processedPostNos 제외 rows)
+8. UID 경로(processedPostNos 제외 rows)
+```
+
+문제 없음.
+
+### 4. 중복 처리 방지 연결
+
+확인 결과:
+
+```text
+handleAdNickBanRows()는 매칭 글번호를 processedAdNickBanPostNos에 넣는다.
+runCycle()은 processedAdNickBanPostNos를 processedPostNos에도 합친다.
+```
+
+따라서 광고 닉네임으로 걸린 글은 같은 cycle에서 다른 제재 분기로 넘어가지 않는다.
+
+예시:
+
+```text
+#101 닉네임 유서니, 제목도 제목 직차단 규칙에 걸림
+-> 광고닉 분기에서 먼저 처리
+-> #101은 제목 직차단 후보에서 제외
+```
+
+문제 없음.
+
+### 5. 제재 API 연결
+
+확인 파일:
+
+```text
+features/uid-warning-autoban/scheduler.js
+features/ip/ban-executor.js
+features/ip/api.js
+```
+
+확인 결과:
+
+```text
+handleAdNickBanRows()
+-> this.executeBan({ feature: 'uidWarningAutoBan', config: buildAdNickBanConfig(...), posts, deleteEnabled: runtimeDeleteEnabled })
+-> executeBanWithDeleteFallback()
+-> banPosts()
+-> POST /ajax/minor_manager_board_ajax/update_avoid_list
+```
+
+payload 핵심:
+
+```text
+avoid_hour=6
+avoid_reason=0
+avoid_reason_txt=*광고
+del_chk=1 또는 0
+avoid_type_chk=1
+```
+
+`buildAdNickBanConfig()`는 `delChk=true`를 넣지만, 실제 호출에서는 `executeBanWithDeleteFallback()`이 `deleteEnabled` 값으로 `delChk`를 다시 덮는다.
+
+예시:
+
+```text
+runtimeDeleteEnabled=true
+-> del_chk=1
+
+runtimeDeleteEnabled=false
+-> del_chk=0
+```
+
+문제 없음.
+
+### 6. 삭제 한도 fallback 연결
+
+확인 결과:
+
+```text
+delete_limit_exceeded 발생
+-> requestDeleteLimitAccountFallback()
+-> 성공하면 새 계정으로 delChk=true 재시도
+-> 실패하면 runtimeDeleteEnabled=false
+-> 남은 글은 delChk=false로 차단만 재시도
+```
+
+광고 닉네임 분기도 기존 제목직차단/실제공격 군집과 같은 fallback 경로를 탄다.
+
+문제 없음.
+
+### 7. 상태 저장/복원 연결
+
+확인 파일:
+
+```text
+features/uid-warning-autoban/scheduler.js
+```
+
+확인 결과:
+
+```text
+saveState():
+lastAdNickBanMatchedNick
+lastAdNickBanCount
+totalAdNickBanPostCount
+recentAdNickBanPostActions 저장
+
+loadState():
+위 값 복원
+
+getStatus():
+popup이 표시할 최근/누적 광고닉 값 반환
+```
+
+문제 없음.
+
+### 8. reset 연결
+
+확인 파일:
+
+```text
+background/background.js
+```
+
+확인 결과:
+
+```text
+resetSchedulerStats('uidWarningAutoBan')
+resetUidWarningAutoBanSchedulerState()
+```
+
+두 경로 모두 광고 닉네임 최근/누적/최근처리 캐시를 초기화한다.
+
+문제 없음.
+
+### 9. popup 연결
+
+확인 파일:
+
+```text
+popup/popup.html
+popup/popup.js
+```
+
+확인 결과:
+
+```text
+최근 광고닉
+최근 광고닉 제재
+누적 광고닉
+```
+
+세 상태 카드가 있고, `updateUidWarningAutoBanUI()`에서 status 값을 렌더링한다.
+
+메타 문구 우선순위도 확인했다.
+
+```text
+삭제한도/차단만 유지 경고
+-> 광고닉 최근 제재 문구
+-> 제목 직차단 문구
+```
+
+문제 없음.
+
+### 10. 확인된 의도 동작
+
+```text
+광고닉 목록을 빈 배열로 설정하면 기본 6개로 fallback된다.
+완전히 끄려면 adNickBanEnabled=false를 써야 한다.
+현재 UI에는 별도 토글이 없으므로 기본 운영 fast-path로 동작한다.
+```
+
+문제 없음.
 
 ## 구현 순서
 
