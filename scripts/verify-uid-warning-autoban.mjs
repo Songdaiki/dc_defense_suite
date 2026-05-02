@@ -3,6 +3,12 @@ import {
   normalizeConfig as normalizeSchedulerConfig,
 } from '../features/uid-warning-autoban/scheduler.js';
 import {
+  ATTACK_TITLE_CLUSTER_MIN_COUNT,
+  MIN_ATTACK_TITLE_LENGTH,
+  detectAttackTitleClusters,
+  normalizeAttackTitle,
+} from '../features/uid-warning-autoban/attack-title-cluster.js';
+import {
   getRecentRowsWithinWindow,
   groupRowsByUid,
   normalizeImmediateTitleBanRules,
@@ -372,6 +378,24 @@ async function runHelperAssertions() {
   ]);
   const parsedImmediate = parseImmediateTitleBanRows(html);
   const parsedUid = parseUidWarningAutoBanRows(html);
+  const attackIconHtml = buildBoardHtml([
+    makeRow({ no: 11, uid: '', ip: '1.1.*', nick: 'ㅇㅇ', title: '<em class="icon_pic">게시글</em>검ˇ열‧떡ˆ밥˳검ˊ열˗잼˳ㅋˋㅋ', createdAtMs: BASE_TIME_MS }),
+    makeRow({ no: 12, uid: '', ip: '2.2.*', nick: 'ㅇㅇ', title: '<em class="icon_pic">게시글</em>검¸열˖떡ʹ밥.검ʼ열˗잼·ㅋ˘ㅋ', createdAtMs: BASE_TIME_MS - 1000 }),
+    makeRow({ no: 13, uid: '', ip: '3.3.*', nick: 'ㅇㅇ', title: '<em class="icon_pic">게시글</em>검ˇ열ˏ떡˘밥˒검˔열ˈ잼ʹㅋ˗ㅋ', createdAtMs: BASE_TIME_MS - 2000 }),
+    makeRow({ no: 14, uid: '', ip: '4.4.*', nick: 'ㅇㅇ', title: '<em class="icon_pic">게시글</em>검;열·떡ˉ밥`검ˌ열˙잼˷ㅋ:ㅋ', createdAtMs: BASE_TIME_MS - 3000 }),
+  ]);
+  const attackRows = parseImmediateTitleBanRows(attackIconHtml);
+  const attackNormalizedTitle = normalizeAttackTitle(attackRows[0]?.title);
+  const attackThreeRowClusters = detectAttackTitleClusters(attackRows.slice(0, 3), {
+    rawCount: 0,
+    patternCount: 0,
+    patterns: [],
+  });
+  const attackClusters = detectAttackTitleClusters(attackRows, {
+    rawCount: 0,
+    patternCount: 0,
+    patterns: [],
+  });
 
   recordEqual(normalizedAv, 'av', '정규화가 confusable AV를 av로 접는지');
   recordEqual(normalizedSamsung, '삼성전자', '정규화가 특수문자를 제거하는지');
@@ -406,6 +430,13 @@ async function runHelperAssertions() {
   recordEqual(parsedUid[0].uid, 'uid-1', 'uid 파서가 uid를 유지하는지');
   recordEqual(parsedImmediate[1].isFluid, true, '즉시제목 파서가 유동 글을 인식하는지');
   recordEqual(parsedImmediate[2].isPicturePost, true, '즉시제목 파서가 사진글 플래그를 유지하는지');
+  recordEqual(MIN_ATTACK_TITLE_LENGTH, 5, '실제공격 제목 최소 정규화 길이가 5글자인지');
+  recordEqual(ATTACK_TITLE_CLUSTER_MIN_COUNT, 4, '실제공격 제목 군집 최소 개수가 4개인지');
+  recordEqual(attackRows[0]?.title, '검ˇ열‧떡ˆ밥˳검ˊ열˗잼˳ㅋˋㅋ', '실제 HTML 아이콘 텍스트 게시글은 제목에서 제거되는지');
+  recordEqual(attackNormalizedTitle, '검열떡밥검열잼', '실제공격 정규화가 초성/기호 제거 뒤 7글자 제목을 남기는지');
+  recordEqual(attackThreeRowClusters.length, 0, '7글자 실제공격 제목도 3개만 있으면 군집으로 잡지 않는지');
+  recordEqual(attackClusters.length, 1, '7글자 실제공격 제목도 4개 이상이면 군집으로 잡히는지');
+  recordEqual(attackClusters[0]?.rows?.length, 4, '7글자 실제공격 군집의 대상 글 수가 맞는지');
 }
 
 async function runMainScenarioAssertions() {

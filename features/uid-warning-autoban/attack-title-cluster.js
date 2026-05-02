@@ -1,8 +1,8 @@
 import { normalizeImmediateTitleValue } from './parser.js';
 
-const ATTACK_TITLE_CLUSTER_MIN_COUNT = 3;
+const ATTACK_TITLE_CLUSTER_MIN_COUNT = 4;
 const ATTACK_TITLE_SIMILARITY_THRESHOLD = 0.95;
-const MIN_ATTACK_TITLE_LENGTH = 8;
+const MIN_ATTACK_TITLE_LENGTH = 5;
 const MAX_ATTACK_TITLE_LENGTH = 120;
 const ATTACK_TITLE_BAN_REASON_TEXT = '도배기IP차단(무고한 경우 문의)';
 const ATTACK_TITLE_BAN_HOUR = '6';
