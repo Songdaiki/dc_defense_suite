@@ -1,0 +1,15 @@
+{
+  "name": "ai-moderator-dry-run",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "cross-env GEMINI_ARGS_JSON=[\\\"--model\\\",\\\"gemini-2.5-flash\\\"] node server.mjs",
+    "check": "node --check server.mjs && node --check scanner.mjs && node --check queue.mjs && node --check fetcher.mjs && node --check parser.mjs && node --check prompt.mjs && node --check judge.mjs && node --check db.mjs && node --check transparency.mjs"
+  },
+  "dependencies": {
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0"
+  }
+}

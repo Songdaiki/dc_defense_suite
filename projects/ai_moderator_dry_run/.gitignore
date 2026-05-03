@@ -1,0 +1,6 @@
+node_modules/
+data/*.jsonl
+data/transparency-assets/*
+data/gemini-inputs/*
+!data/transparency-assets/.gitkeep
+!data/gemini-inputs/.gitkeep

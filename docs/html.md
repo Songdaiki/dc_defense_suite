@@ -3,26 +3,26 @@
 <html lang="ko" class="darkmode">
 <head> 
 	<meta charset="UTF-8">
-	<title>이거진짜 에요? - 특이점이 온다 마이너 갤러리</title>
+	<title>머신 러닝 벤치마크 업데이트 - 특이점이 온다 마이너 갤러리</title>
 		<meta http-equiv="X-UA-Compatible" content="IE=edge">
 	<meta http-equiv="imagetoolbar" content="no">
 	<meta name="content-language" content="kr">
 		<meta name="google-site-verification" content="BIrCvkIFsSjOnGLZzGAZC6sKRmwLlkH2NYeLbrLMGCc">
-	<link rel="canonical" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147859"/>  	<link rel="alternate" media="only screen and (max-width: 640px)" href="https://m.dcinside.com/board/thesingularity/1147859">
+	<link rel="canonical" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155307"/>  	<link rel="alternate" media="only screen and (max-width: 640px)" href="https://m.dcinside.com/board/thesingularity/1155307">
   	<meta name="robots" content="index,follow">
-  	<meta name="title" content="이거진짜 에요? - 특이점이 온다 마이너 갤러리">
-  	<meta name="description" content="https://seveurate.kr/354297ㄹㅇ?">
+  	<meta name="title" content="머신 러닝 벤치마크 업데이트 - 특이점이 온다 마이너 갤러리">
+  	<meta name="description" content="5.5가 처음으로 80프로를 넘긴 모델이 됨 5.4보다 가격이 2배인데 오히려 이 벤치에서는 구동 비용이 절반 이하 라는 것도 주목할 부분 토큰을 훨씬 덜 쓰고도 더 뛰어난 성능을 낸거라 ">
   	<meta name="keywords" content="학술, 특이점이 온다, thesingularity, 초지능,신기술,특이점,휴머노이드,AI,로봇,AGI,ChatGPT,인공지능,바이브코딩, dc, 디시, gall, gallery, 갤러리, 커뮤니티">
   	<meta name="twitter:card" content="summary">
-  	<meta name="twitter:url" content="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147859">
-  	<meta name="twitter:title" content="이거진짜 에요? - 특이점이 온다 마이너 갤러리">
-  	<meta name="twitter:description" content="https://seveurate.kr/354297ㄹㅇ?">
- 	<meta name="twitter:image" content="https://dcimg2.dcinside.co.kr/viewimage.php?id=39b5d535ecdc3fb362bec4bc02c8&no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e394fb6724fcf61c2ed8161e48c1b7de590fecb32ee57dbce66c9d9f68a0ba91024cf92dd6dd4f6e610965da">	
+  	<meta name="twitter:url" content="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155307">
+  	<meta name="twitter:title" content="머신 러닝 벤치마크 업데이트 - 특이점이 온다 마이너 갤러리">
+  	<meta name="twitter:description" content="5.5가 처음으로 80프로를 넘긴 모델이 됨 5.4보다 가격이 2배인데 오히려 이 벤치에서는 구동 비용이 절반 이하 라는 것도 주목할 부분 토큰을 훨씬 덜 쓰고도 더 뛰어난 성능을 낸거라 ">
+ 	<meta name="twitter:image" content="https://dcimg2.dcinside.co.kr/viewimage.php?id=39b5d535ecdc3fb362bec4bc02c8&no=24b0d769e1d32ca73de787fa1bd625313384cc989dbda850395aa1d0f19ba5eb90f440a81c9f31345903fca0debfe51ed42c94ddf8641a427b255b6e4745ec452657e4e2b02567a689">	
   	<meta property="og:type" content="website">
-  	<meta property="og:url" content="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147859">
-  	<meta property="og:title" content="이거진짜 에요? - 특이점이 온다 마이너 갤러리">
-  	<meta property="og:description" content="https://seveurate.kr/354297ㄹㅇ?">
-  	<meta property="og:image" content="https://dcimg2.dcinside.co.kr/viewimage.php?id=39b5d535ecdc3fb362bec4bc02c8&no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e394fb6724fcf61c2ed8161e48c1b7de590fecb32ee57dbce66c9d9f68a0ba91024cf92dd6dd4f6e610965da">
+  	<meta property="og:url" content="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155307">
+  	<meta property="og:title" content="머신 러닝 벤치마크 업데이트 - 특이점이 온다 마이너 갤러리">
+  	<meta property="og:description" content="5.5가 처음으로 80프로를 넘긴 모델이 됨 5.4보다 가격이 2배인데 오히려 이 벤치에서는 구동 비용이 절반 이하 라는 것도 주목할 부분 토큰을 훨씬 덜 쓰고도 더 뛰어난 성능을 낸거라 ">
+  	<meta property="og:image" content="https://dcimg2.dcinside.co.kr/viewimage.php?id=39b5d535ecdc3fb362bec4bc02c8&no=24b0d769e1d32ca73de787fa1bd625313384cc989dbda850395aa1d0f19ba5eb90f440a81c9f31345903fca0debfe51ed42c94ddf8641a427b255b6e4745ec452657e4e2b02567a689">
 	
 		<meta name="referrer" content="unsafe-url">	
 		<link rel="shortcut icon" href="//nstatic.dcinside.com/dc/w/images/logo_icon.ico" />
@@ -69,9 +69,9 @@
 		var conn_n = 0;
 	</script>
 	
-	<script src="/_js/minify/user_memo.min.js?v=1777314725" type="text/javascript" charset="utf-8"></script>
-<script src="/_js/minify/outlink.min.js?v=1777314725" type="text/javascript" charset="utf-8"></script>
-<script src="/_js/minify/trusted_site.min.js?v=1777314725" type="text/javascript" charset="utf-8"></script>
+	<script src="/_js/minify/user_memo.min.js?v=1777572844" type="text/javascript" charset="utf-8"></script>
+<script src="/_js/minify/outlink.min.js?v=1777572844" type="text/javascript" charset="utf-8"></script>
+<script src="/_js/minify/trusted_site.min.js?v=1777572844" type="text/javascript" charset="utf-8"></script>
 <script src="/_js/view.js?v=260129" type="text/javascript" charset="utf-8"></script>
 <script src="/_js/recommend_box.js?v=250919" type="text/javascript" charset="utf-8"></script>
 <script src="/_js/search.js?v=251203" type="text/javascript" charset="utf-8"></script>
@@ -83,10 +83,11 @@
 <script src="https://nstatic.dcinside.com/dc/w/js/view.bundle.js?v=250828" type="text/javascript" charset="utf-8"></script>
 <script src="/_js/vr_clipboard.js?v=190304" type="text/javascript" charset="utf-8"></script>
 <script src="/_js/ad.js" type="text/javascript" charset="utf-8"></script>
-<script src="/_js/dccon/dccon.js?v=260211" type="text/javascript" charset="utf-8"></script>
+<script src="/_js/dccon/dccon.js?v=260430" type="text/javascript" charset="utf-8"></script>
 <script src="/_js/zzbang.js?v=241023" type="text/javascript" charset="utf-8"></script>
-<script src="//dccon.dcinside.com/_js/dc_common2.js?v=250422" type="text/javascript" charset="utf-8"></script>
+<script src="//dccon.dcinside.com/_js/dc_common2.js?v=260428" type="text/javascript" charset="utf-8"></script>
 <script src="/_js/gallery_bottom.js?v=241023" type="text/javascript" charset="utf-8"></script>
+<script src="/_js/dccon/dccon_favorite_folder.js?v=2604291521" type="text/javascript" charset="utf-8"></script>
 <script src="/_js/lazyload.js" type="text/javascript" charset="utf-8"></script>
 <script src="/_js/kcaptcha.js?v=260112" type="text/javascript" charset="utf-8"></script>
 <script src="/_js/spoiler.js?v=240201" type="text/javascript" charset="utf-8"></script>
@@ -202,19 +203,19 @@ const blockedState = adBlockDetection.getBlockedState(['banner_ad', "sponsored_a
     "@context":"https://schema.org",
     "@type":"DiscussionForumPosting",
     "inLanguage":"ko-KR",
-    "URL":"https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147859&page=",
-    "headline":"이거진짜 에요? - 특이점이 온다 마이너 갤러리",
-    "articleBody":"https://seveurate.kr/354297ㄹㅇ?",
+    "URL":"https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155307&page=",
+    "headline":"머신 러닝 벤치마크 업데이트 - 특이점이 온다 마이너 갤러리",
+    "articleBody":"5.5가 처음으로 80프로를 넘긴 모델이 됨 5.4보다 가격이 2배인데 오히려 이 벤치에서는 구동 비용이 절반 이하 라는 것도 주목할 부분 토큰을 훨씬 덜 쓰고도 더 뛰어난 성능을 낸거라 ",
     "keywords": "학술, 특이점이 온다, thesingularity, 초지능,신기술,특이점,휴머노이드,AI,로봇,AGI,ChatGPT,인공지능,바이브코딩, dc, 디시, gall, gallery, 갤러리, 커뮤니티",
     "image":{
         "@type":"ImageObject",
-        "URL":"https://dcimg2.dcinside.co.kr/viewimage.php?id=39b5d535ecdc3fb362bec4bc02c8&no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e394fb6724fcf61c2ed8161e48c1b7de590fecb32ee57dbce66c9d9f68a0ba91024cf92dd6dd4f6e610965da"
+        "URL":"https://dcimg2.dcinside.co.kr/viewimage.php?id=39b5d535ecdc3fb362bec4bc02c8&no=24b0d769e1d32ca73de787fa1bd625313384cc989dbda850395aa1d0f19ba5eb90f440a81c9f31345903fca0debfe51ed42c94ddf8641a427b255b6e4745ec452657e4e2b02567a689"
     },
-    "datePublished":"2026-04-28T04:04:09+09:00",
+    "datePublished":"2026-05-02T00:21:44+09:00",
     "author":{
         "@type":"Person",
         "name":"ㅇㅇ",
-        "url":"https://gallog.dcinside.com/helmet9281"
+        "url":"https://gallog.dcinside.com/scale9740"
     },
     "publisher":{
         "@id": "https://www.dcinside.com/#publisher",
@@ -231,17 +232,17 @@ const blockedState = adBlockDetection.getBlockedState(['banner_ad', "sponsored_a
     
     "mainEntityOfPage":{
         "@type":"WebPage",
-        "@id":"https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147859&page="
+        "@id":"https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155307&page="
     },
     "interactionStatistic":[
         {
             "@type":"InteractionCounter",
             "interactionType": "https://schema.org/CommentAction",
-            "userInteractionCount": 1        },
+            "userInteractionCount": 2        },
         {
             "@type": "InteractionCounter",
             "interactionType": "https://schema.org/ViewAction",
-            "userInteractionCount": 7        }
+            "userInteractionCount": 49        }
     ]
 }
 </script>
@@ -278,7 +279,7 @@ const blockedState = adBlockDetection.getBlockedState(['banner_ad', "sponsored_a
       "@type": "ListItem",
       "position": 4,
       "item": {
-        "@id": "https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147859&page=",
+        "@id": "https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155307&page=",
         "name": "특이점이 온다 마이너 갤러리 본문"
       }
     }
@@ -402,7 +403,7 @@ const blockedState = adBlockDetection.getBlockedState(['banner_ad', "sponsored_a
             </div>
             <!-- //#user_data_lyr.user_data -->
           </li> 
-		<li><a class="btn_top_loginout" href="https://sign.dcinside.com/logout?s_url=https%3A%2F%2Fgall.dcinside.com%2Fmgallery%2Fboard%2Fview%2F%3Fid%3Dthesingularity%26no%3D1147859%26page%3D1">로그아웃</a></li>
+		<li><a class="btn_top_loginout" href="https://sign.dcinside.com/logout?s_url=https%3A%2F%2Fgall.dcinside.com%2Fmgallery%2Fboard%2Fview%2F%3Fid%3Dthesingularity%26no%3D1155307%26page%3D1">로그아웃</a></li>
 				
 	  </ul>
 	  <div class="fl darkmodebox">
@@ -465,9 +466,9 @@ const blockedState = adBlockDetection.getBlockedState(['banner_ad', "sponsored_a
 
         <!-- 어제 게시글,댓글 등록 -->
         <div class="gall_exposure">
-          <div class="posts"><a href="https://gall.dcinside.com/board/lists/?id=dclottery">어제 <em class="num" id="total_content_count">903,455개</em> 게시글 등록</a></div>
-          <div class="reply"><a href="https://gall.dcinside.com/board/lists/?id=dclottery">어제 <em class="num" id="total_reple_count">2,690,988개</em> 댓글 등록</a></div>
-          <div class="gall">총 갤러리 수 <em class="num" id="total_gallery_count">94,358개</em></div>
+          <div class="posts"><a href="https://gall.dcinside.com/board/lists/?id=dclottery">어제 <em class="num" id="total_content_count">986,312개</em> 게시글 등록</a></div>
+          <div class="reply"><a href="https://gall.dcinside.com/board/lists/?id=dclottery">어제 <em class="num" id="total_reple_count">2,542,576개</em> 댓글 등록</a></div>
+          <div class="gall">총 갤러리 수 <em class="num" id="total_gallery_count">94,469개</em></div>
           <div class="ltr"><a href="https://gall.dcinside.com/board/lists/?id=dclottery">디시 로터리 응모</a></div>
         </div>
         <!-- /어제 게시글,댓글 등록 -->
@@ -684,7 +685,7 @@ lately_gall_init('thesingularity', '특이점이 온다', 'M');
 		</div>
 	</div>
 		<!-- //설정 추가 / 툴팁 추가  -->
-				<button type="button" class="relate" onclick="open_relation(28471)">연관 갤러리(0/63)<span class="new" style="display:none;"><em class="blind">NEW</em><em class="sp_img icon_new"></em></span><span class="blind">연관 갤러리 열기</span><em class="sp_img icon_relate_more"></em></button>
+				<button type="button" class="relate" onclick="open_relation(28471)">연관 갤러리(0/65)<span class="new" style="display:none;"><em class="blind">NEW</em><em class="sp_img icon_new"></em></span><span class="blind">연관 갤러리 열기</span><em class="sp_img icon_relate_more"></em></button>
 			<button type="button" class="adr_copy" onclick="copy_gall_url()">갤주소 복사</button>
 			<button type="button" class="gall_useinfo" onclick="open_user_guide()">이용안내</button>
 	
@@ -1260,7 +1261,7 @@ lately_gall_init('thesingularity', '특이점이 온다', 'M');
 																	<span class="mng_nick">かみ(<span title="thank3468">thank346…</span>)
 																	<span class="mng_nick">Asi(<span title="worship5388">worship5…</span>)
 																	<span class="mng_nick">203847년걸리겠죠(<span title="awful6856">awful685…</span>)
-																	<span class="mng_nick">2027AGI(<span title="tiger4366">tiger436…</span>)
+																	<span class="mng_nick">2027재귀개선(<span title="tiger4366">tiger436…</span>)
 																	<span class="mng_nick">회색(<span title="counsel8318">counsel8…</span>)
 																	<span class="mng_nick">だいき(<span title="image8481">image848…</span>)
 																	<span class="mng_nick">65세얀르쿤할아…(<span title="indoor4684">indoor46…</span>)
@@ -1326,7 +1327,7 @@ lately_gall_init('thesingularity', '특이점이 온다', 'M');
 		<div class="pop_wrap type4 sub" id="popup_4" style="left: 50%; z-index: 1; margin-left: -238px; display: none;">
 			<div class="inner mng_absence_tip sub"> <!--231010 부매니저 레이어 .sub 추가-->
 				<div class="minor_tip_txt">
-					<b>부매니저 <em class="font_red">2027AGI(tiger4366)</em>님은 부재중입니다.</b>
+					<b>부매니저 <em class="font_red">2027재귀개선(tiger4366)</em>님은 부재중입니다.</b>
 					<strong class="btit">부매니저 부재중 안내</strong>
 					<p>부매니저가 장기간(최소 10일 이상) 부재 시 부재중으로 표시되며, 매니저에 의해 해임될 수 있습니다.</p>
 				</div>
@@ -1399,8 +1400,8 @@ lately_gall_init('thesingularity', '특이점이 온다', 'M');
 		</div>
 		<div class="rank_img">
 		
-		  		  <span class="num_img num4"><em class="blind">4</em></span>
-		  		  <span class="num_img num3"><em class="blind">3</em></span>
+		  		  <span class="num_img num6"><em class="blind">6</em></span>
+		  		  <span class="num_img num8"><em class="blind">8</em></span>
 		  		  
 		  <span class="txt_img"><em class="blind">위</em></span>
 		</div>
@@ -1476,7 +1477,7 @@ lately_gall_init('thesingularity', '특이점이 온다', 'M');
 		  
 		  		  <div class="set_cont">
 			<label for="bid" class="cont_tit">차단 식별 코드</label>
-			<input type="text" id="bid" title="차단 식별 코드 입력" class="intxt" value="helmet9281">
+			<input type="text" id="bid" title="차단 식별 코드 입력" class="intxt" value="scale9740">
 			<button type="button" class="btn_enroll" onclick="ub_save_conf_one('thesingularity','특이점이 온다','M','id',$('#bid').val())">등록</button>
 		  </div>
 		  		  
@@ -1495,7 +1496,7 @@ lately_gall_init('thesingularity', '특이점이 온다', 'M');
 		<article>
 			<form id="_view_form_" name="frm">
 			    <input type="hidden" id="list_url" name="list_url" value="https://gall.dcinside.com/mgallery/board/lists/?id=thesingularity">
-				<input type="hidden" id="view_url" name="view_url" value="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147859&page=">
+				<input type="hidden" id="view_url" name="view_url" value="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155307&page=">
 				<input type="hidden" id="current_type" name="current_type" value="view">
 				<input type="hidden" id="current_params" name="current_params" value="&page=1">
 				<input type="hidden" id="exception_mode" name="exception_mode" value="all">
@@ -1506,7 +1507,7 @@ lately_gall_init('thesingularity', '특이점이 온다', 'M');
 				<input type="hidden" id="id" name="gallery_id" value="thesingularity">
 				<input type="hidden" id="gallery_id" name="gallery_id" value="thesingularity">
 				<input type="hidden" id="gallery_name" name="gallery_name" value="특이점이 온다">
-				<input type="hidden" id="no" name="gallery_no" value="1147859">
+				<input type="hidden" id="no" name="gallery_no" value="1155307">
 				<input type="hidden" id="s_type" name="s_type" value="">
 				<input type="hidden" id="s_keyword" name="s_keyword" value="">
 				<input type="hidden" id="e_s_n_o" name="e_s_n_o" value="3eabc219ebdd65fe3eef85e4">
@@ -1515,13 +1516,13 @@ lately_gall_init('thesingularity', '특이점이 온다', 'M');
 				<input type="hidden" id="kakao_rel_txt" value="">
 				<input type="hidden" id="cmt_wr" name="cmt_wr" value="10" />
 				<input type="hidden" id="comment_view" name="comment_view" value="">
-				<input type="hidden" id="comment_cnt" name="comment_cnt" value="1">
+				<input type="hidden" id="comment_cnt" name="comment_cnt" value="2">
 				<input type="hidden" id="is_login" name="is_login" value="Y" />
 				<input type="hidden" id="_GALLTYPE_" name="_GALLTYPE_" value="M">
 				<input type="hidden" id="nec" name="nec" value="" />
 				<input type="hidden" id="adult_article" name="adult_article" value="" />
-				<input type="hidden" name="fc8f910e0b32615814d9278a99297037c26282dd116bc841cf963d1d3445bf3273232b70b3c6197c32f56e0bb4dedbfab85b39d18aa6" value="b9d0c34a516d301b4e8c299fdc7e3e7afdeb04275703e6f36c5270531f645c6393b2d49b8408e8ae2e7057899000b11c5626123bbb6e" />
-				<input type="hidden" name="v_cur_t" value="1777316664" />
+				<input type="hidden" name="fc8f910e0b32615814d9278a99297037c26283df1a6ec641cf963d1d3445bf3290272ab08717b5a42ea4dc5ea2d6a879abec09e4d55f" value="b9d0c34a54683f1d4a8f299fdc7e3e7a5b48d06f04b5f27e9263855a33c23923ee3f3d6ab3da59576c7dfaa8af02fc65e041d53a2318" />
+				<input type="hidden" name="v_cur_t" value="1777649027" />
 								<input type="hidden" id="secret_article_key" name="secret_article_key" value="" />
 				<input type="hidden" id="cur_cate" name="cur_cate" value="scholarship">
 				
@@ -1532,19 +1533,19 @@ lately_gall_init('thesingularity', '특이점이 온다', 'M');
 					<div class="gallview_head clear ub-content">
 						<!-- 모바일에서 작성 icon_write_mbl -->
 						<h3 class="title ub-word">
-												<span class="title_headtext">[일반]</span> <span class="title_subject">이거진짜 에요?</span><span class="title_device"></span></h3>
+												<span class="title_headtext">[📪정보]</span> <span class="title_subject">머신 러닝 벤치마크 업데이트</span><span class="title_device"></span></h3>
 						
-						<div class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="helmet9281" data-ip="" data-loc="view">
+						<div class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="scale9740" data-ip="" data-loc="view">
 							<div class="fl">
 								<span>
-									<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/newnik.gif' border=0 title='helmet92** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/helmet9281');" alt='갤로그로 이동합니다.'></a>																		<span class="gall_date" title="2026-04-28 04:04:09">2026.04.28 04:04:09</span>
+									<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='scale97** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/scale9740');" alt='갤로그로 이동합니다.'></a>																		<span class="gall_date" title="2026-05-02 00:21:44">2026.05.02 00:21:44</span>
 																	</span>
 							</div>
 							<div class="fr">
 																<span class="gall_scrap"><button class="sp_scrap viewscrap">스크랩</button></span>
-																<span class="gall_count">조회 7</span>
-								<span class="gall_reply_num">추천 0</span>
-								<span class="gall_comment"><a href="#focus_cmt">댓글 1</a></span>
+																<span class="gall_count">조회 49</span>
+								<span class="gall_reply_num">추천 1</span>
+								<span class="gall_comment"><a href="#focus_cmt">댓글 2</a></span>
 							</div>
 						</div>
 					</div>
@@ -1557,16 +1558,8 @@ lately_gall_init('thesingularity', '특이점이 온다', 'M');
 				<div class="gallview_contents">
 					<div class="inner clear">
 											<div class="writing_view_box">
-							<div id="ad_nv_slot" style="width:300px;height:250px;display:none;"></div><div id="zzbang_div"><span id='zzbang_img'><script type="text/javascript">
-google_ad_client = "ca-pub-8171468792791627";
-/* gallery_auto_336280 */
-google_ad_slot = "9590488137";
-google_ad_width = 336;
-google_ad_height = 280;
-</script>
-<script type="text/javascript" src="//pagead2.googlesyndication.com/pagead/show_ads.js">
-</script></span></div><pre></pre>														<div class="write_div" style="overflow:hidden;width:900px;" data-tracking="f9ac92720176fba8966865c17f020c0f3228bf3b724d6e12cf21f389145cd3e468c3">
-							<p><img src="https://dcimg8.dcinside.co.kr/viewimage.php?id=39b5d535ecdc3fb362bec4bc02c8&no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e394fb6724fcf61c2ed8161e48c1b7de590fa8e208eb61175de3f3733a5d0b2fe5b22c4d650dfea3d8746903d8e2" onError="reload_img(this)"  data-tempno="193836919" alt="24b0d121e09c28a8699fe8b115ef046a78"></p><p><a class='lnk' href="https://sevenrate.kr/354297" target='_blank'>https://seveurate.kr/354297</a></p><br>ㄹㅇ?							
+							<div id="ad_nv_slot" style="width:300px;height:250px;display:none;"></div>														<div class="write_div" style="overflow:hidden;width:900px;" data-tracking="f9ac92720176fba8966865c17f020c0f3229bd3077436e12cf21f389145cd3e42be6">
+							<p><img src="https://dcimg8.dcinside.co.kr/viewimage.php?id=39b5d535ecdc3fb362bec4bc02c8&no=24b0d769e1d32ca73de787fa1bd625313384cc989dbda850395aa1d0f19ba5eb90f440a81c9f31345903fca0debfe551d30acd42c5d0a729c063e95daa8fafcedcdd0760604b4c8731b0" onClick="javascript:imgPop('https://image.dcinside.com/viewimagePop.php?no=24b0d769e1d32ca73de787fa1bd625313384cc989dbda850395aa1d0f19ba5eb90f440a81c9f31345903fca0debfe51ed42c94ddf8641a427b255b6e4745ec452657e4e2b025','image','fullscreen=yes,scrollbars=yes,resizable=no,menubar=no,toolbar=no,location=no,status=no');" onError="reload_img(this)"  data-fileno="517695" alt="3ab8d934e1df34a46bb1d5bd1bd03636e82d0fcfefa33e7c854989cd137b39a2"></p><p>5.5가 처음으로 80프로를 넘긴 모델이 됨 5.4보다 가격이 2배인데 오히려 이 벤치에서는 구동 비용이 절반 이하 라는 것도 주목할 부분 <br>토큰을 훨씬 덜 쓰고도 더 뛰어난 성능을 낸거라 </p>							
 							</div>
 							
 							<script>
@@ -1787,11 +1780,11 @@ google_ad_height = 280;
 	<script type="text/javascript" src="https://ad.xc.netinsight.co.kr/xc/j/WxABrJ9K/x/fst"></script></div>					</div>
 					
 					<!-- 추천검색-->
-					<div id="sch_alliance_box_1147859" class="sch_alliance_box clear" style="display: none">
+					<div id="sch_alliance_box_1155307" class="sch_alliance_box clear" style="display: none">
 						<div class="fl">
 							<span class="sch_alliance">추천검색</span>
 						</div>
-						<div id="sch_logbox_1147859" class="fl sch_logbox"></div>
+						<div id="sch_logbox_1155307" class="fl sch_logbox"></div>
 					</div>
 					<!-- //추천검색-->
 					
@@ -1807,26 +1800,26 @@ google_ad_height = 280;
 														<div class="inner_box">
 							<div class="inner ">
 															<div class="up_num_box">
-									<p class="up_num font_red" id="recommend_view_up_1147859">0</p>
+									<p class="up_num font_red" id="recommend_view_up_1155307">1</p>
 									<p class="sup_num">
 										<spen class="writer_nikcon">
 	                						<img src="//nstatic.dcinside.com/dc/w/images/fix_nik.gif" alt="고정닉">
 	            						</spen>
-										<span class="font_blue smallnum" id="recommend_view_up_fix_1147859">0</span>
+										<span class="font_blue smallnum" id="recommend_view_up_fix_1155307">1</span>
 									</p>
 								</div>
-								<button type="button" class="btn_recom_up" data-no="1147859">
+								<button type="button" class="btn_recom_up" data-no="1155307">
 								    <span class="blind">개념 추천</span><em class="sp_img icon_recom_up"></em>
 								    								</button>
 							</div>
 																					</div><!-- 둥 -->
 																					<div class="recom_bottom_box clear ">
-																								<button type="button" class="btn_silbechu" data-no="1147859"><em class="sp_img icon_silbechu"></em>실베추</button>
+																								<button type="button" class="btn_silbechu" data-no="1155307"><em class="sp_img icon_silbechu"></em>실베추</button>
 																
 								
-								<button type="button" class="btn_snsmore" data-no="1147859"><em class="sp_img icon_snsmore"></em>공유</button>
-																	<button type="button" class="btn_snscrap" data-no="1147859"><em class="sp_img icon_scrap"></em>스크랩</button>
-																<button type="button" class="btn_report" data-no="1147859"><em class="sp_img icon_report"></em>신고</button>
+								<button type="button" class="btn_snsmore" data-no="1155307"><em class="sp_img icon_snsmore"></em>공유</button>
+																	<button type="button" class="btn_snscrap" data-no="1155307"><em class="sp_img icon_scrap"></em>스크랩</button>
+																<button type="button" class="btn_report" data-no="1155307"><em class="sp_img icon_report"></em>신고</button>
 							</div>
 						</div>
 						<!-- //추천 비추천 -->
@@ -1837,18 +1830,24 @@ google_ad_height = 280;
 					<!-- 본문 하단 광고 -->
 										<div style="width:100%;overflow:hidden;text-align:center;margin-top:10px;">
 	<script type="text/javascript" src="https://ad.xc.netinsight.co.kr/xc/j/ccDkYbfd/x/fst" referrerpolicy="no-referrer-when-downgrade"></script></div>					<!-- //본문 하단 광고 -->
+										<!-- 원본 첨부 파일 -->
+					<div class="appending_file_box">
+						<strong>원본 첨부파일 <em class="font_red">1</em></strong>						<ul class="appending_file">
+							<li><a href="https://image.dcinside.com/download.php?no=24b0d769e1d32ca73de787fa1bd625313384cc989dbda850395aa1d0f19ba5eb90f440a81c9f31345903fca0debfe51ed42c94ddf8641a427b255b6e4745ec452657e4e2b025&f_no=weirdmlbenchmark.png">weirdmlbenchmark.png</a></li>						</ul>
+					</div>
+					<!-- //원본 첨부 파일 -->
 														</div>
 			</div>
 									<!-- 댓글 -->
 			<div id="jquery_jplayer"></div>
 <div class="view_comment" id="focus_cmt" tabindex="0">
 	<h2 class="blind">댓글 영역</h2>
-	<div id="comment_wrap_1147859" class="comment_wrap" data-article-lv="9" data-sort-type='I'>
+	<div id="comment_wrap_1155307" class="comment_wrap" data-article-lv="9" data-sort-type='I'>
 		<div class="comment_count">
 			<div class="fl num_box">
-				전체 댓글 <em class="font_red"><span id="comment_total_1147859">0</span></em>개
+				전체 댓글 <em class="font_red"><span id="comment_total_1155307">0</span></em>개
 				
-				<div class="comment_sort" data-no="1147859">
+				<div class="comment_sort" data-no="1155307">
                       <span class="radiobox imgcheck">
                         <input type="radio" id="sample1" name="selCommentSort" value="D" checked="checked">
                         <em class="checkmark"></em>
@@ -1873,8 +1872,8 @@ google_ad_height = 280;
 						<option value="N">최신순</option>
 						<option value="R">답글수</option>
 					</select>
-					<div class="select_area" onClick="showLayer(this, 'commentSortLayer_1147859');return false;"><span class="comment_sort_txt">등록순</span><span class="blind">정렬 기준선택</span><em class="sp_img icon_option_more"></em></div>
-					<ul class="option_box" id="commentSortLayer_1147859" data-no="1147859" style="left:-1px;top:19px;display:none"-->
+					<div class="select_area" onClick="showLayer(this, 'commentSortLayer_1155307');return false;"><span class="comment_sort_txt">등록순</span><span class="blind">정렬 기준선택</span><em class="sp_img icon_option_more"></em></div>
+					<ul class="option_box" id="commentSortLayer_1155307" data-no="1155307" style="left:-1px;top:19px;display:none"-->
 						<!--<li class="comment_sort" data-sort="I">등록순</li>-->
 						<!--li class="comment_sort" data-sort="D">등록순</li>
 						<li class="comment_sort" data-sort="N">최신순</li>
@@ -1886,8 +1885,8 @@ google_ad_height = 280;
 			</div>
 			<div class="fr">
 				<a href="#container" class="contgo">본문 보기</a>
-				<button type="button" class="btn_cmt_close" data-no="1147859" data-loc="TOP"><span>댓글닫기</span><em class="sp_img icon_cmt_more"></em></button>
-				<button type="button" class="btn_cmt_refresh" data-no="1147859" data-sort="">새로고침</button>
+				<button type="button" class="btn_cmt_close" data-no="1155307" data-loc="TOP"><span>댓글닫기</span><em class="sp_img icon_cmt_more"></em></button>
+				<button type="button" class="btn_cmt_refresh" data-no="1155307" data-sort="">새로고침</button>
 			</div>
 		</div>
 	</div>
@@ -1899,15 +1898,15 @@ google_ad_height = 280;
 
 <input type="hidden" name="clickbutton" id="clickbutton" value="N" />
 
-<input type='hidden' name='check_6' id='check_6' value='ec38ef555378f0ea1946115d507803f15128ac5a' />
-<input type='hidden' name='check_7' id='check_7' value='3897688fd4fd2f' />
+<input type='hidden' name='check_6' id='check_6' value='eb0de35369683ca602065d4aedb47fd34cea81606fe3de4bc31510a214e76b5294aac044369f4b' />
+<input type='hidden' name='check_7' id='check_7' value='369d638ed6ff2a' />
 <input type='hidden' name='check_8' id='check_8' value='e320dc5c674f' />
-<input type='hidden' name='check_9' id='check_9' value='3191758bd7e62563ac9282' />
-<input type='hidden' name='check_10' id='check_10' value='32956989cff82860af9296f144aea45544d8b4' />
-<input type='hidden' name='c_r_k_x_z' id='c_r_k_x_z' value='7cea8771b6836ef038ebe8e45883756d7d9b3c55eb6104523c22122dd7592e919c' />
+<input type='hidden' name='check_9' id='check_9' value='31926e91d3f12563aa9398f341a5' />
+<input type='hidden' name='check_10' id='check_10' value='32956989cff82960ad9896f140aea6505a082d' />
+<input type='hidden' name='c_r_k_x_z' id='c_r_k_x_z' value='7cea8771b38661f63ce8e8e45883756d299d54aa4583554811cbfc48913611c453' />
 
-<input type="hidden" id="cur_t" name="cur_t" value="1777316664">
-<input type='hidden' name="service_code" value="21ac6d96ad152e8f15a05b7350a2475909d19bcedeba9d4face8115e9bc0f84d4fbb289cf22316b11577beaf5ea81862eadaa146a93e97b7946173e99ee7fb455a4262ccf5c37addb05e87b306081e596279f9ac839bc0a9bb434da333b46ef565ead7d29c20731e59c66987ef12bc7893a410d5eddead05902957286d020c4c166d8107df8ef2cf9edad4524ce955ae764f62471a50746c2f85aeea07133925d0bc2752471b6617137cd2608bc7e78b257b9ec2efc10fbe0e2bba52a5d9b2eaa3781366beb2fca9db526b770a"/>
+<input type="hidden" id="cur_t" name="cur_t" value="1777649027">
+<input type='hidden' name="service_code" value="21ac6d96ad152e8f15a05b7350a2475909d19bcedeba9d4face8115e9bc0f84d4bb72e9cf32016b11577beaf5ea81862f4f529e92f9bc6dde31251a42f8378aea2c723096daaa653a774729923d3b92201b9949888155c08fee8d8bd520e869713a84c8b021dea0c991beb1c0c6a97d5d944765af2947f3d70ab236bad2a118b1e444e446ffe50cd8d4dfd93755a17e8dc5e9c01393a46c0535631356df1b72145b4cb623fd88b89bd993536bd3c9c08ffcb13e5c68a53b7c0c04d20223b8dec5126c6f26709dc647991fd8446"/>
 <input type="hidden" name="_GALLTYPE_" id="_GALLTYPE_" value="M" />
 <input type="hidden" name="member_division" id="member_division" value="Y" />
 <input type="hidden" name="cmt_max_length" id="cmt_max_length" value="400" />
@@ -1916,14 +1915,14 @@ google_ad_height = 280;
 <input type="hidden" id="notice_comment_del_avoid_msg" value="">
 
 <form id="_cmt_del_form_" name="_cmt_del_form_">
-	<input type='hidden' name="fc8f910e0b32615814d9278a99297037c26282dd116bc841cf963d1d3445bf3273232b70b3c6197c32f56e0bb4dedbfab85b2cd38a" value="b9d0c34a516d301b4e8c299fdc7e3e7afdeb04275703e6f36c5270531f645c6393b2d49b8408e8ae2e7057899000b11c56260739bb"/>
+	<input type='hidden' name="fc8f910e0b32615814d9278a99297037c26283df1a6ec641cf963d1d3445bf3290272ab08717b5a42ea4dc5ea2d6a879abec1ce6d5" value="b9d0c34a54683f1d4a8f299fdc7e3e7a5b48d06f04b5f27e9263855a33c23923ee3f3d6ab3da59576c7dfaa8af02fc65e041c03823"/>
 </form>
 
 <div class="cmt_write_box clear">
     	<div class="fl">
 						<div class="user_info_input id">
 		<label for="user_nick" class="">だいき</label>
-		<input type="hidden" name="name" id="name_1147859" value="だいき"/>
+		<input type="hidden" name="name" id="name_1155307" value="だいき"/>
 		</div>
 			</div>
 	<div class="cmt_txt_cont">
@@ -1932,60 +1931,17 @@ google_ad_height = 280;
 									타인의 권리를 침해하거나 명예를 훼손하는 댓글은 운영원칙 및 관련 법률에 제재를 받을 수 있습니다.<br>
 			Shift+Enter 키를 동시에 누르면 줄바꿈이 됩니다.
 						</label>
-						<textarea id="memo_1147859" onfocus="$('.cmt_textarea_label').hide();" maxlength="400" onKeyup="javascript:reply_length_count(1147859);"></textarea>
+						<textarea id="memo_1155307" onfocus="$('.cmt_textarea_label').hide();" maxlength="400" onKeyup="javascript:reply_length_count(1155307);"></textarea>
 								</div>
 		<div class="cmt_cont_bottm clear">
 			<div class="dccon_guidebox">
-				<button type="button" class="btn_white small tx_dccon " data-no = '1147859'><em class="sp_img icon_dccon"></em>디시콘</button>
+				<button type="button" class="btn_white small tx_dccon " data-no = '1155307'><em class="sp_img icon_dccon"></em>디시콘</button>
 				<button type="button" class="btn_dccon_guide">
 				<span class="blind">디시콘이란</span><em class="sp_img icon_guide_open"></em>
-				<!--<button type="button" class="btn_bigdccon_guide">대왕디시콘 사용법</button>-->
-			</div>
-			<div class="pop_dccon_guide" style="display: none;">
-				<div class="pop_wrap type3" style="left: 284px; bottom: -452px;">
-					<div class="pop_content bigdccon_guide">
-						<!-- inner -->
-						<div class="inner">
-							<div class="top">
-								<span class="sub_tit">NFT 이벤트</span>
-								<div class="img_box">
-								<img src="https://nstatic.dcinside.com/dc/w/images/bigdccon.png?1" alt="대왕디시콘">
-								</div>
-							</div>
-
-							<div class="block">
-								<p class="tit">획득법</p>
-								<div class="inr_block">
-								<h4>① NFT 발행</h4>
-								<p class="txt">작성한 게시물을 NFT로 발행하면 <b class="font_lightblue">일주일</b> 동안 사용할 수 있습니다. (최초 1회)</p>
-								<div class="bgbox">
-									<b class="font_red">꿀팁!</b><span class="txt">발행 후 NFT를 구매할 수 있는 클레이를 받을 수 있어요.<a class="lnk" href="https://event.dcinside.com/view/?no=575" target="_blank">받으러 가기</a></span>
-								</div>
-								</div>
-								<div class="inr_block">
-								<h4>② NFT 구매</h4>
-								<p class="txt">다른 이용자의 NFT를 구매하면 <b class="font_lightblue">한 달</b> 동안 사용할 수 있습니다. (구매 시마다 갱신)</p>
-								<div class="bgbox">
-									<b class="font_red">꿀팁!</b><span class="txt">구매 후 클레이를 한 번 더 받을 수 있어요.<a class="lnk" href="https://event.dcinside.com/view/?no=575" target="_blank">받으러 가기</a></span>
-								</div>
-								</div>
-							</div>
-
-							<div class="block">
-								<p class="tit">사용법</p>
-								<p class="txt">디시콘에서<span class="icon_wallet">지갑연결</span>시 바로 사용 가능합니다.</p>
-								
-							</div>
-						</div>
-						<!-- //inner -->
-						<button type="button" class="poply_greyclose"><em class="sp_img icon_grey_x"></em></button>
-
-					</div>
-				</div>
 			</div>
 			<div class="fr">
-							<button type="button" class="btn_blue btn_svc small repley_add" data-no = "1147859">등록</button>
-								<button type="button" class="btn_lightblue btn_svc small repley_add_vote" data-no = "1147859">등록+추천</button>
+							<button type="button" class="btn_blue btn_svc small repley_add" data-no = "1155307">등록</button>
+								<button type="button" class="btn_lightblue btn_svc small repley_add_vote" data-no = "1155307">등록+추천</button>
 												
 			</div>
 		</div>
@@ -2102,7 +2058,7 @@ google_ad_height = 280;
 <script>
 const use_gall_nick = get_gall_nick_info('use_yn');
 if(use_gall_nick == 'N') {
-    use_gall_nick_name('N','comment',1147859,false);
+    use_gall_nick_name('N','comment',1155307,false);
     $("#use_gall_nick_reply").val('N'); //답글 용
 }
 	
@@ -2117,7 +2073,7 @@ $(function() {
 		
     });
     
-    if(use_gall_nick == 'N') show_gall_nick_use_btn('comment',1147859);
+    if(use_gall_nick == 'N') show_gall_nick_use_btn('comment',1155307);
     
     
 });
@@ -2183,13 +2139,13 @@ $(function() {
 </div>
 </script>
 <script type="text/javascript">
-var _r = _d('Q+yEPM06d4u4d+ntdMSuP+UtQ+0EPMQvRTuEdF0tQgS5P+UtQgy5PM=5dTw5');
+var _r = _d('RMQEPMUvdow5PM0wR/u4dg=DdTuvQgQtQFUGPM=6dTuEQFntQg=FPMqE');
 $(document).data('t_vch2', '');
 $(document).data('t_vch2_chk', '');
 $(document).data('gallery_id', 'thesingularity');
-$(document).data('article_no', '1147859');
+$(document).data('article_no', '1155307');
 $(document).data('comment_id', 'thesingularity');
-$(document).data('comment_no', '1147859');
+$(document).data('comment_no', '1155307');
 
 var keyword = getParameterByName('s_keyword');
 var s_type = getParameterByName('s_type');
@@ -2225,7 +2181,7 @@ viewComments(1, 'VIEW_PAGE');
 		
   					</div>
 	<div class="fr">
-									<button type="button" class="btn_grey cancle" onclick="goDelete('https://gall.dcinside.com/mgallery/board/delete/?id=thesingularity&no=1147859')">삭제</button>											<button type="button" id="btn_write" class="btn_blue write" onclick="goWrite('https://gall.dcinside.com/mgallery/board/write/?id=thesingularity')">글쓰기</button>				</div>
+									<button type="button" class="btn_grey cancle" onclick="goDelete('https://gall.dcinside.com/mgallery/board/delete/?id=thesingularity&no=1155307')">삭제</button>											<button type="button" id="btn_write" class="btn_blue write" onclick="goWrite('https://gall.dcinside.com/mgallery/board/write/?id=thesingularity')">글쓰기</button>				</div>
 </div>				<!-- //개념글, 수정, 삭제, 글쓰기 버튼 영역-->
 		</article>
 		<!-- //본문 -->
@@ -2296,8 +2252,8 @@ viewComments(1, 'VIEW_PAGE');
 												<b><span class='nickname in' title='exp'  style=''><em>exp</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_managernik.gif' border=0 title='ritori** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/ritorito');" alt='갤로그로 이동합니다.'></a></b>																							</div>
 										</td>
 										<td class="gall_date" title="2026-04-12 20:40:42">26.04.12</td>
-										<td class="gall_count">32061</td>
-										<td class="gall_recommend">6</td>
+										<td class="gall_count">33042</td>
+										<td class="gall_recommend">7</td>
 									</tr>
 																		
 									<tr class="ub-content >">
@@ -2308,13 +2264,13 @@ viewComments(1, 'VIEW_PAGE');
 											<em class="icon_img icon_notice"></em><b>완몰가가 궁금한 사람들은 필독 (계속 추가 예정)</b></a>
 																							
 																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=353422&t=cv"><span class="reply_num">[26]</span></a>																					</td>
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=353422&t=cv"><span class="reply_num">[27]</span></a>																					</td>
 										<td class="gall_writer ub-writer" data-nick="부패하는유전자!!!" data-uid="sansss2015" data-ip="" data-loc="view_list">
 											<div class="addbox">
 												<b><span class='nickname in' title='부패하는유전자!!!'  style=''><em>부패하는유전자!!!</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='sansss20** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/sansss2015');" alt='갤로그로 이동합니다.'></a></b>																							</div>
 										</td>
 										<td class="gall_date" title="2023-09-03 07:34:52">23.09.03</td>
-										<td class="gall_count">37382</td>
+										<td class="gall_count">37770</td>
 										<td class="gall_recommend">77</td>
 									</tr>
 																		
@@ -2332,8 +2288,8 @@ viewComments(1, 'VIEW_PAGE');
 												<b><span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='prince23** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/prince2317');" alt='갤로그로 이동합니다.'></a></b>																							</div>
 										</td>
 										<td class="gall_date" title="2024-11-24 20:58:41">24.11.24</td>
-										<td class="gall_count">17939</td>
-										<td class="gall_recommend">9</td>
+										<td class="gall_count">18271</td>
+										<td class="gall_recommend">10</td>
 									</tr>
 																		
 									<tr class="ub-content >">
@@ -2344,913 +2300,913 @@ viewComments(1, 'VIEW_PAGE');
 											<em class="icon_img icon_notice"></em><b>특갤봇v2 신문고입니다.</b></a>
 																							
 																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1045755&t=cv"><span class="reply_num">[663]</span></a>																					</td>
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1045755&t=cv"><span class="reply_num">[692]</span></a>																					</td>
 										<td class="gall_writer ub-writer" data-nick="だいき" data-uid="image8481" data-ip="" data-loc="view_list">
 											<div class="addbox">
 												<b><span class='nickname in' title='だいき'  style=''><em>だいき</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_sub_managernik.gif' border=0 title='image84** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/image8481');" alt='갤로그로 이동합니다.'></a></b>																							</div>
 										</td>
 										<td class="gall_date" title="2026-03-10 01:35:10">26.03.10</td>
-										<td class="gall_count">235311</td>
-										<td class="gall_recommend">29</td>
-									</tr>
-																		
-									<tr class="ub-content crt>">
-										<td class="gall_num"><span class="sp_img crt_icon"> </span></td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147859&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>이거진짜 에요?</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147859&t=cv"><span class="reply_num">[1]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="helmet9281" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/newnik.gif' border=0 title='helmet92** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/helmet9281');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 04:04:09">04:04</td>
-										<td class="gall_count">7</td>
-										<td class="gall_recommend">0</td>
+										<td class="gall_count">282813</td>
+										<td class="gall_recommend">30</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147858</td>
+										<td class="gall_num">1155309</td>
 																														<td class="gall_subject">일반</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147858&page=1" view-msg ="" >
-																								<em class="icon_img icon_movie"></em>소라 송별회</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155309&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포) 속보</a>
 																								
 																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147858&t=cv"><span class="reply_num">[2]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="특갈" data-uid="identity9809" data-ip="" data-loc="view_list">
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155309&t=cv"><span class="reply_num">[5]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="broad2678" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='특갈'  style=''><em>특갈</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='identity98** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/identity9809');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='broad26** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/broad2678');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 04:02:41">04:02</td>
-										<td class="gall_count">23</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147857</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147857&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>결국 오픈소스가 승리한다 </a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147857&t=cv"><span class="reply_num">[4]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="cinema4542" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='cinema45** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/cinema4542');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 03:57:56">03:57</td>
-										<td class="gall_count">61</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147856</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147856&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>갤럭시 ar글래스 사양, 출시시기 루머</a>
-																								
-																																												 
-																																</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="flexible6364" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/newnik.gif' border=0 title='flexible63** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/flexible6364');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 03:56:23">03:56</td>
-										<td class="gall_count">43</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147855</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147855&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>이런 여친 사귀고 싶습니다</a>
-																								
-																																												 
-																																</td>
-										<td class="gall_writer ub-writer" data-nick="특갈" data-uid="identity9809" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='특갈'  style=''><em>특갈</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='identity98** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/identity9809');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 03:47:17">03:47</td>
-										<td class="gall_count">109</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147853</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147853&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>GPT 쉑 유머 감각 보소</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147853&t=cv"><span class="reply_num">[2]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="initial3245" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='initial32** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/initial3245');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 03:42:21">03:42</td>
-										<td class="gall_count">138</td>
-										<td class="gall_recommend">1</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147852</td>
-																														<td class="gall_subject">📪정보</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147852&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>Mimo 2.5 Pro 오픈소스 공개. 1.02T A42B</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147852&t=cv"><span class="reply_num">[9]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="NM" data-uid="tick2952" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='NM'  style=''><em>NM</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='tick29** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/tick2952');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 03:41:27">03:41</td>
-										<td class="gall_count">150</td>
+										<td class="gall_date" title="2026-05-02 00:22:41">00:22</td>
+										<td class="gall_count">67</td>
 										<td class="gall_recommend">4</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147851</td>
+										<td class="gall_num">1155308</td>
 																														<td class="gall_subject">일반</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147851&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>gpt 프로 첨쓰는데 모델에 이렇게 뜨는거 맞아?</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155308&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>AI OS 기원 43일차</a>
 																								
 																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147851&t=cv"><span class="reply_num">[1]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="" data-ip="211.214" data-loc="view_list">
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155308&t=cv"><span class="reply_num">[1]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="미짱세용" data-uid="plenty5252" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname' title='ㅇㅇ'><em>ㅇㅇ</em></span><span class="ip">(211.214)</span>																							</div>
+												<span class='nickname in' title='미짱세용'  style=''><em>미짱세용</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='plenty52** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/plenty5252');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 03:38:46">03:38</td>
-										<td class="gall_count">70</td>
+										<td class="gall_date" title="2026-05-02 00:22:37">00:22</td>
+										<td class="gall_count">12</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content crt>">
+										<td class="gall_num"><span class="sp_img crt_icon"> </span></td>
+																														<td class="gall_subject">📪정보</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155307&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>머신 러닝 벤치마크 업데이트</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155307&t=cv"><span class="reply_num">[2]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="scale9740" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='scale97** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/scale9740');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:21:44">00:21</td>
+										<td class="gall_count">49</td>
+										<td class="gall_recommend">1</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155306</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155306&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>트만이형 그게 무슨말이야 노동해방이 아니라</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155306&t=cv"><span class="reply_num">[5]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="cinema4542" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='cinema45** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/cinema4542');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:21:13">00:21</td>
+										<td class="gall_count">51</td>
 										<td class="gall_recommend">0</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147850</td>
-																														<td class="gall_subject">일반</td>
+										<td class="gall_num">1155305</td>
+																														<td class="gall_subject">🔨활용</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147850&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>덕테이프 현실불쾌짤 개잘뽑네 ㅋㅋㅋ (공포 주의)</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155305&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포) 매리야스를 입은 아빠가 빠따를 들고 서있는 모습</a>
 																								
 																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147850&t=cv"><span class="reply_num">[6]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="호감고닉유동" data-uid="vbfrxc58uc0r" data-ip="" data-loc="view_list">
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155305&t=cv"><span class="reply_num">[9]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="describe7406" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='호감고닉유동'  style=''><em>호감고닉유동</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='vbfrxc58uc** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/vbfrxc58uc0r');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='describe74** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/describe7406');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 03:35:34">03:35</td>
-										<td class="gall_count">225</td>
+										<td class="gall_date" title="2026-05-02 00:19:21">00:19</td>
+										<td class="gall_count">125</td>
 										<td class="gall_recommend">3</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147849</td>
-																														<td class="gall_subject">일반</td>
+										<td class="gall_num">1155304</td>
+																														<td class="gall_subject">🔨활용</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147849&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>클로드 머 건들였나</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155304&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포) 특이점이후의 세상</a>
 																								
 																																												 
-																																</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="factory9835" data-ip="" data-loc="view_list">
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155304&t=cv"><span class="reply_num">[6]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="fewweekslater" data-uid="slim4567" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='factory98** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/factory9835');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='fewweekslater'  style=''><em>fewweekslater</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='slim45** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/slim4567');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 03:34:28">03:34</td>
-										<td class="gall_count">80</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147848</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147848&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>클로드 정지먹었나 ?</a>
-																								
-																																												 
-																																</td>
-										<td class="gall_writer ub-writer" data-nick="ㄴㄴ" data-uid="rate8046" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㄴㄴ'  style=''><em>ㄴㄴ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='rate80** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/rate8046');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 03:30:07">03:30</td>
-										<td class="gall_count">89</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147847</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147847&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>젬마4 uncen과함께 6키로 감량함</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147847&t=cv"><span class="reply_num">[2]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="" data-ip="122.38" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname' title='ㅇㅇ'><em>ㅇㅇ</em></span><span class="ip">(122.38)</span>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 03:20:44">03:20</td>
-										<td class="gall_count">112</td>
-										<td class="gall_recommend">1</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147846</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147846&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>제미니쓰다 이런거 나왔는데 신기하노</a>
-																								
-																																												 
-																																</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="breathe2957" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='breathe29** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/breathe2957');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 03:18:32">03:18</td>
-										<td class="gall_count">101</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147845</td>
-																														<td class="gall_subject">📪정보</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147845&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>흥미로운 글 하나 찾음</a>
-																								
-																																												 
-																																</td>
-										<td class="gall_writer ub-writer" data-nick="누웠수당" data-uid="pilot5072" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='누웠수당'  style=''><em>누웠수당</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='pilot50** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/pilot5072');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 03:17:13">03:17</td>
-										<td class="gall_count">139</td>
+										<td class="gall_date" title="2026-05-02 00:18:19">00:18</td>
+										<td class="gall_count">169</td>
 										<td class="gall_recommend">2</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147844</td>
+										<td class="gall_num">1155303</td>
 																														<td class="gall_subject">일반</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147844&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>미토스 글 찾았다</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155303&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>픽셀이라고 생각하면 안무서움</a>
 																								
 																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147844&t=cv"><span class="reply_num">[6]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="cream6733" data-ip="" data-loc="view_list">
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155303&t=cv"><span class="reply_num">[1]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="capybara" data-uid="ready0681" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='cream67** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/cream6733');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='capybara'  style=''><em>capybara</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='ready06** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/ready0681');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 03:14:28">03:14</td>
-										<td class="gall_count">275</td>
+										<td class="gall_date" title="2026-05-02 00:17:49">00:17</td>
+										<td class="gall_count">84</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155302</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155302&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포)알트만:사람들은 앞으로 더 바쁘게 일할 것이다.</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155302&t=cv"><span class="reply_num">[14]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="2027재귀개선" data-uid="tiger4366" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='2027재귀개선'  style=''><em>2027재귀개선</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/sub_managernik.gif' border=0 title='tiger43** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/tiger4366');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:17:08">00:17</td>
+										<td class="gall_count">233</td>
+										<td class="gall_recommend">6</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155301</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155301&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포)  결혼식</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155301&t=cv"><span class="reply_num">[3]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="lemonguyz" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='lemongu** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/lemonguyz');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:16:52">00:16</td>
+										<td class="gall_count">122</td>
+										<td class="gall_recommend">2</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155300</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155300&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>매니저분들 매니저탭 봐주시면 감사하겠습니다...</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155300&t=cv"><span class="reply_num">[13]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="Asi" data-uid="worship5388" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='Asi'  style=''><em>Asi</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_sub_managernik.gif' border=0 title='worship53** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/worship5388');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:16:31">00:16</td>
+										<td class="gall_count">116</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155299</td>
+																														<td class="gall_subject">🔨활용</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155299&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>너무무서우..</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155299&t=cv"><span class="reply_num">[13]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="already6689" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='already66** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/already6689');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:15:31">00:15</td>
+										<td class="gall_count">145</td>
 										<td class="gall_recommend">1</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147843</td>
+										<td class="gall_num">1155298</td>
 																														<td class="gall_subject">일반</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147843&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>codex fast모드 킨 거랑 안 킨 거랑 체감 많이 됨?</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147843&t=cv"><span class="reply_num">[4]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="" data-ip="112.147" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname' title='ㅇㅇ'><em>ㅇㅇ</em></span><span class="ip">(112.147)</span>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 03:11:51">03:11</td>
-										<td class="gall_count">122</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147842</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147842&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>우횻 코덱스 모바일앱이라니</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147842&t=cv"><span class="reply_num">[9]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="65세얀르쿤할아버지의마지막역작JEPA" data-uid="indoor4684" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='65세얀르쿤할아버지의마지막역작JEPA'  style=''><em>65세얀르쿤할아버지의마지막역작JEPA</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_sub_managernik.gif' border=0 title='indoor46** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/indoor4684');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 03:11:06">03:11</td>
-										<td class="gall_count">275</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147841</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147841&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>음...미토스 써봤다는 글 x에 떴는데</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155298&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>윈도우에서 코덱스cli 업데이트후에</a>
 																								
 																																												 
 																																</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="cream6733" data-ip="" data-loc="view_list">
+										<td class="gall_writer ub-writer" data-nick="깐키마" data-uid="your2297" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='cream67** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/cream6733');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='깐키마'  style=''><em>깐키마</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='your22** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/your2297');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 03:10:52">03:10</td>
-										<td class="gall_count">151</td>
+										<td class="gall_date" title="2026-05-02 00:15:08">00:15</td>
+										<td class="gall_count">41</td>
 										<td class="gall_recommend">0</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147840</td>
-																														<td class="gall_subject">일반</td>
+										<td class="gall_num">1155296</td>
+																														<td class="gall_subject">🔨활용</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147840&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>오늘 X는 알트만 vs 머스크 소송떡밥이 메인이넴...</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155296&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>초보자 지구본 바이브코딩</a>
 																								
 																																												 
-																																</td>
-										<td class="gall_writer ub-writer" data-nick="특갈" data-uid="identity9809" data-ip="" data-loc="view_list">
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155296&t=cv"><span class="reply_num">[3]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="" data-ip="218.50" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='특갈'  style=''><em>특갈</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='identity98** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/identity9809');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname' title='ㅇㅇ'><em>ㅇㅇ</em></span><span class="ip">(218.50)</span>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 03:10:50">03:10</td>
+										<td class="gall_date" title="2026-05-02 00:14:38">00:14</td>
 										<td class="gall_count">89</td>
-										<td class="gall_recommend">0</td>
+										<td class="gall_recommend">1</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147839</td>
+										<td class="gall_num">1155295</td>
 																														<td class="gall_subject">일반</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147839&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>DRM 딱기다려</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155295&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>검열 먹었네</a>
 																								
 																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147839&t=cv"><span class="reply_num">[2]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㄴㄴ" data-uid="rate8046" data-ip="" data-loc="view_list">
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155295&t=cv"><span class="reply_num">[3]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="prepare4983" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='ㄴㄴ'  style=''><em>ㄴㄴ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='rate80** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/rate8046');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='prepare49** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/prepare4983');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 03:09:17">03:09</td>
-										<td class="gall_count">92</td>
+										<td class="gall_date" title="2026-05-02 00:13:57">00:13</td>
+										<td class="gall_count">137</td>
 										<td class="gall_recommend">0</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147838</td>
+										<td class="gall_num">1155294</td>
 																														<td class="gall_subject">일반</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147838&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>아하 딱 깨달았다 난 미디엄 써야함</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147838&t=cv"><span class="reply_num">[4]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="gulf3782" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='gulf37** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/gulf3782');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 03:08:47">03:08</td>
-										<td class="gall_count">131</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147837</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147837&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>사람들이 과도기에 대해 너무 큰 걱정을 하는것 같음.</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155294&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>코덱스앱으로 드림핵이나 풀어야지</a>
 																								
 																																												 
 																																</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="thing2249" data-ip="" data-loc="view_list">
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="swan1602" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/newnik.gif' border=0 title='thing22** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/thing2249');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='swan16** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/swan1602');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 03:08:27">03:08</td>
+										<td class="gall_date" title="2026-05-02 00:13:48">00:13</td>
+										<td class="gall_count">36</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155293</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155293&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포) 공포가 좋다</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155293&t=cv"><span class="reply_num">[9]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="모기기피제" data-uid="used6888" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='모기기피제'  style=''><em>모기기피제</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='used68** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/used6888');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:13:43">00:13</td>
+										<td class="gall_count">142</td>
+										<td class="gall_recommend">4</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155292</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155292&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>일상대화용으론 제미나이 &gt;&gt; 지피티가 확실함</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155292&t=cv"><span class="reply_num">[2]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="pour1219" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='pour12** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/pour1219');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:13:39">00:13</td>
 										<td class="gall_count">75</td>
 										<td class="gall_recommend">0</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147836</td>
+										<td class="gall_num">1155291</td>
 																														<td class="gall_subject">일반</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147836&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>깃헙 코파일럿도 창렬된 시점에서</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155291&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>어릴 적 꿨던 꿈의 이미지</a>
 																								
 																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147836&t=cv"><span class="reply_num">[1]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="daughter5478" data-ip="" data-loc="view_list">
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155291&t=cv"><span class="reply_num">[2]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="녹록" data-uid="fixed1958" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='daughter54** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/daughter5478');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='녹록'  style=''><em>녹록</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='fixed19** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/fixed1958');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 03:07:23">03:07</td>
-										<td class="gall_count">68</td>
+										<td class="gall_date" title="2026-05-02 00:13:34">00:13</td>
+										<td class="gall_count">79</td>
 										<td class="gall_recommend">0</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147835</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147835&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>코덱스 앱에 컨텍스트 한도는 뭐임?</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147835&t=cv"><span class="reply_num">[5]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="" data-ip="61.77" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname' title='ㅇㅇ'><em>ㅇㅇ</em></span><span class="ip">(61.77)</span>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 03:04:27">03:04</td>
-										<td class="gall_count">107</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147834</td>
+										<td class="gall_num">1155290</td>
 																														<td class="gall_subject">📪정보</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147834&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>앤트로픽도 오픈ai따라 공식 ipo 1조달러 돌파했네</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155290&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>GPT 5.5 high, WeirdML 1등 달성</a>
 																								
 																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147834&t=cv"><span class="reply_num">[1]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="누웠수당" data-uid="pilot5072" data-ip="" data-loc="view_list">
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155290&t=cv"><span class="reply_num">[4]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="일본에간대학원생" data-uid="math4457" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='누웠수당'  style=''><em>누웠수당</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='pilot50** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/pilot5072');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='일본에간대학원생'  style=''><em>일본에간대학원생</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/sub_managernik.gif' border=0 title='math44** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/math4457');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 03:04:25">03:04</td>
+										<td class="gall_date" title="2026-05-02 00:12:23">00:12</td>
+										<td class="gall_count">161</td>
+										<td class="gall_recommend">3</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155289</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155289&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>로컬 LLM 준비완료함 이륙해도되냐?</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155289&t=cv"><span class="reply_num">[15]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="할일없는넘" data-uid="scrub7127" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='할일없는넘'  style=''><em>할일없는넘</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/newnik.gif' border=0 title='scrub71** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/scrub7127');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:12:03">00:12</td>
+										<td class="gall_count">171</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155288</td>
+																														<td class="gall_subject">🔨활용</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155288&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포?) 손가락 냠냠</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155288&t=cv"><span class="reply_num">[13]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="이세이미야케" data-uid="jkwarawara" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='이세이미야케'  style=''><em>이세이미야케</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='jkwarawa** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/jkwarawara');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:11:43">00:11</td>
+										<td class="gall_count">154</td>
+										<td class="gall_recommend">1</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155287</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155287&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>근데 그록이 짱깨모델 급이면</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155287&t=cv"><span class="reply_num">[2]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="" data-ip="1.245" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname' title='ㅇㅇ'><em>ㅇㅇ</em></span><span class="ip">(1.245)</span>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:11:13">00:11</td>
+										<td class="gall_count">56</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155286</td>
+																														<td class="gall_subject">🔨활용</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155286&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>대회 참여하기</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155286&t=cv"><span class="reply_num">[16]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="행복한천국으로" data-uid="adjust7431" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='행복한천국으로'  style=''><em>행복한천국으로</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='adjust74** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/adjust7431');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:11:06">00:11</td>
 										<td class="gall_count">133</td>
+										<td class="gall_recommend">4</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155285</td>
+																														<td class="gall_subject">🔨활용</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155285&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포) 이런사람이 칼들고 쫓아오면 무서움?</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155285&t=cv"><span class="reply_num">[6]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="멍청이1" data-uid="barber0907" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='멍청이1'  style=''><em>멍청이1</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='barber09** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/barber0907');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:11:04">00:11</td>
+										<td class="gall_count">141</td>
+										<td class="gall_recommend">2</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155284</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155284&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포갤러리에</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155284&t=cv"><span class="reply_num">[2]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="과자에오" data-uid="headpn99" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='과자에오'  style=''><em>과자에오</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='headpn** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/headpn99');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:10:11">00:10</td>
+										<td class="gall_count">93</td>
+										<td class="gall_recommend">1</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155283</td>
+																														<td class="gall_subject">🔨활용</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155283&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포) 가 유행임?</a>
+																								
+																																												 
+																																</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="describe7406" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='describe74** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/describe7406');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:09:35">00:09</td>
+										<td class="gall_count">98</td>
 										<td class="gall_recommend">0</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147833</td>
+										<td class="gall_num">1155282</td>
 																														<td class="gall_subject">일반</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147833&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>기초생활수급자는 고유가지원금도 55~60만원이네</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155282&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>AI세상이라는게 정말 별거 없었군요</a>
 																								
 																																												 
-																																</td>
-										<td class="gall_writer ub-writer" data-nick="에스숭배자" data-uid="former9627" data-ip="" data-loc="view_list">
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155282&t=cv"><span class="reply_num">[10]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="클유아" data-uid="every5019" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='에스숭배자'  style=''><em>에스숭배자</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='former96** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/former9627');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='클유아'  style=''><em>클유아</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='every50** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/every5019');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 03:03:29">03:03</td>
-										<td class="gall_count">151</td>
+										<td class="gall_date" title="2026-05-02 00:09:29">00:09</td>
+										<td class="gall_count">131</td>
 										<td class="gall_recommend">0</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147832</td>
-																														<td class="gall_subject">일반</td>
+										<td class="gall_num">1155281</td>
+																														<td class="gall_subject">🔨활용</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147832&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>머스크 승소확률 30%</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155281&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>[공포] 텔레토비</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155281&t=cv"><span class="reply_num">[3]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="city9324" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/newnik.gif' border=0 title='city93** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/city9324');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:07:46">00:07</td>
+										<td class="gall_count">149</td>
+										<td class="gall_recommend">1</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155280</td>
+																														<td class="gall_subject">🔨활용</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155280&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>공포) 오늘 꾼 꿈이 무서웠다</a>
 																								
 																																												 
 																																</td>
-										<td class="gall_writer ub-writer" data-nick="라비" data-uid="effort8873" data-ip="" data-loc="view_list">
+										<td class="gall_writer ub-writer" data-nick="찌찔이" data-uid="wooeorbs" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='라비'  style=''><em>라비</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='effort88** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/effort8873');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='찌찔이'  style=''><em>찌찔이</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='wooeor** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/wooeorbs');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 03:01:42">03:01</td>
+										<td class="gall_date" title="2026-05-02 00:05:05">00:05</td>
+										<td class="gall_count">73</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155279</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155279&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포가 유행, 끔칙한 '진정한 공포'를 달립니다.</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155279&t=cv"><span class="reply_num">[14]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="회색" data-uid="counsel8318" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='회색'  style=''><em>회색</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/sub_managernik.gif' border=0 title='counsel83** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/counsel8318');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:04:59">00:04</td>
+										<td class="gall_count">304</td>
+										<td class="gall_recommend">3</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155278</td>
+																														<td class="gall_subject">🔨활용</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155278&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>꿈에서 나온 듯한 기괴한 백룸 </a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155278&t=cv"><span class="reply_num">[8]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="훈서기" data-uid="rneetn" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='훈서기'  style=''><em>훈서기</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='rnee** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/rneetn');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:04:50">00:04</td>
+										<td class="gall_count">200</td>
+										<td class="gall_recommend">5</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155277</td>
+																														<td class="gall_subject">🔨활용</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155277&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포)특이점은 멀었음</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155277&t=cv"><span class="reply_num">[4]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="power4218" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/newnik.gif' border=0 title='power42** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/power4218');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:04:01">00:04</td>
+										<td class="gall_count">197</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155276</td>
+																														<td class="gall_subject">🔨활용</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155276&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포 ) 01 :)</a>
+																								
+																																												 
+																																</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="prepare4983" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='prepare49** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/prepare4983');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:03:50">00:03</td>
+										<td class="gall_count">128</td>
+										<td class="gall_recommend">1</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155275</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155275&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>샘알트먼 기상</a>
+																								
+																																												 
+																																</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="except0513" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='except05** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/except0513');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:03:32">00:03</td>
+										<td class="gall_count">106</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155273</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155273&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>공포는 모든 것이 일상적인데 한 포인트만 미묘하게</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155273&t=cv"><span class="reply_num">[1]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="" data-ip="58.120" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname' title='ㅇㅇ'><em>ㅇㅇ</em></span><span class="ip">(58.120)</span>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-02 00:02:46">00:02</td>
+										<td class="gall_count">70</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155271</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155271&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>Chatgpt 냅다 그림그리려 시도하는거 어케 막냐</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155271&t=cv"><span class="reply_num">[5]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="" data-ip="211.117" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname' title='ㅇㅇ'><em>ㅇㅇ</em></span><span class="ip">(211.117)</span>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-01 23:58:17">05.01</td>
+										<td class="gall_count">131</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155270</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155270&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>제미나이 검색</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155270&t=cv"><span class="reply_num">[1]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="clause8860" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='clause88** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/clause8860');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-01 23:58:07">05.01</td>
+										<td class="gall_count">52</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155269</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155269&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>kimi는 검증 끝났지</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155269&t=cv"><span class="reply_num">[4]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="blanket5306" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='blanket53** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/blanket5306');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-01 23:57:48">05.01</td>
+										<td class="gall_count">113</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155268</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155268&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>qwen3.6이 로컬로는 모자이크 제거도 가능하다고 하네</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155268&t=cv"><span class="reply_num">[2]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="bush1359" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='bush13** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/bush1359');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-01 23:57:40">05.01</td>
+										<td class="gall_count">165</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155267</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155267&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>특이점존버 1608일차</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155267&t=cv"><span class="reply_num">[9]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="alphaca" data-uid="qqq0101kr" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='alphaca'  style=''><em>alphaca</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='qqq0101** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/qqq0101kr');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-01 23:57:25">05.01</td>
+										<td class="gall_count">120</td>
+										<td class="gall_recommend">1</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155266</td>
+																														<td class="gall_subject">🔨활용</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155266&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>야인시대 현실고증 버전.jpg</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155266&t=cv"><span class="reply_num">[3]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="Bing" data-uid="whyyyyyyyy" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='Bing'  style=''><em>Bing</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='whyyyyyy** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/whyyyyyyyy');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-01 23:56:49">05.01</td>
+										<td class="gall_count">218</td>
+										<td class="gall_recommend">1</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155265</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155265&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포) 재능없으면 뻔한거밖에 못만듬</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155265&t=cv"><span class="reply_num">[4]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="costume1074" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/newnik.gif' border=0 title='costume10** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/costume1074');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-01 23:56:46">05.01</td>
+										<td class="gall_count">209</td>
+										<td class="gall_recommend">1</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155264</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155264&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>다들 마음속으로는 알고있지 않아? 부정하고 싶어도</a>
+																								
+																																												 
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155264&t=cv"><span class="reply_num">[6]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="cinema4542" data-ip="" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='cinema45** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/cinema4542');" alt='갤로그로 이동합니다.'></a>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-01 23:56:05">05.01</td>
 										<td class="gall_count">117</td>
 										<td class="gall_recommend">0</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147831</td>
+										<td class="gall_num">1155263</td>
 																														<td class="gall_subject">🔨활용</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147831&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>gpt 이미지2 이것저것 - 건축</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155263&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포) 식사</a>
 																								
 																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147831&t=cv"><span class="reply_num">[2]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="templecat" data-uid="promise7479" data-ip="" data-loc="view_list">
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155263&t=cv"><span class="reply_num">[11]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="laptop" data-uid="laptop9985" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='templecat'  style=''><em>templecat</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_newnik.gif' border=0 title='promise74** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/promise7479');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='laptop'  style=''><em>laptop</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='laptop99** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/laptop9985');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 02:58:54">02:58</td>
-										<td class="gall_count">225</td>
-										<td class="gall_recommend">2</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147830</td>
-																														<td class="gall_subject">📪정보</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147830&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>딥싴 프로모션</a>
-																								
-																																												 
-																																</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="cream6733" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='cream67** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/cream6733');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:56:08">02:56</td>
-										<td class="gall_count">138</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147829</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147829&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>5월 31일 아마 이런 의미일걸</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147829&t=cv"><span class="reply_num">[1]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="scale9740" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='scale97** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/scale9740');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:56:11">02:56</td>
-										<td class="gall_count">89</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147828</td>
-																														<td class="gall_subject">📪정보</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147828&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>앤트로픽 : 끼요오오옷</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147828&t=cv"><span class="reply_num">[5]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="cream6733" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='cream67** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/cream6733');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:49:58">02:49</td>
-										<td class="gall_count">348</td>
+										<td class="gall_date" title="2026-05-01 23:55:30">05.01</td>
+										<td class="gall_count">245</td>
 										<td class="gall_recommend">1</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147827</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147827&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>gpt가 찐빠내면 왜케 화나지</a>
-																								
-																																												 
-																																</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="next0236" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='next02** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/next0236');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:48:01">02:48</td>
-										<td class="gall_count">82</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147826</td>
-																														<td class="gall_subject">📪정보</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147826&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>코파일럿 스튜디오, 지피티5.5띵 사용 가능</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147826&t=cv"><span class="reply_num">[6]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="cream6733" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='cream67** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/cream6733');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:46:01">02:46</td>
-										<td class="gall_count">225</td>
-										<td class="gall_recommend">1</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147825</td>
+										<td class="gall_num">1155262</td>
 																														<td class="gall_subject">🔨활용</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147825&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>이제 자야겠다. (기괴스케치짤 주으)</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155262&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포?) 뭔가 재능이 없어 잘 못하겠는..</a>
 																								
 																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147825&t=cv"><span class="reply_num">[2]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="KFree" data-uid="nice2691" data-ip="" data-loc="view_list">
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155262&t=cv"><span class="reply_num">[18]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="행복한천국으로" data-uid="adjust7431" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='KFree'  style=''><em>KFree</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='nice26** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/nice2691');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='행복한천국으로'  style=''><em>행복한천국으로</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='adjust74** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/adjust7431');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 02:43:09">02:43</td>
-										<td class="gall_count">203</td>
-										<td class="gall_recommend">3</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147824</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147824&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>엔진.. 다 만들었다고 생각했는데</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147824&t=cv"><span class="reply_num">[12]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="GPT의가지볶음" data-uid="decay4934" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='GPT의가지볶음'  style=''><em>GPT의가지볶음</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='decay49** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/decay4934');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:43:10">02:43</td>
-										<td class="gall_count">232</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147823</td>
-																														<td class="gall_subject">📪정보</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147823&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>깃헙 코파일럿, 사용량 기반 과금 모델로 전환</a>
-																								
-																																												 
-																																</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="cream6733" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='cream67** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/cream6733');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:42:24">02:42</td>
-										<td class="gall_count">153</td>
+										<td class="gall_date" title="2026-05-01 23:54:05">05.01</td>
+										<td class="gall_count">319</td>
 										<td class="gall_recommend">1</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147822</td>
+										<td class="gall_num">1155261</td>
 																														<td class="gall_subject">일반</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147822&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>5.5 눈깔 장애인거 안고쳐졋노</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147822&t=cv"><span class="reply_num">[3]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="gulf3782" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='gulf37** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/gulf3782');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:42:24">02:42</td>
-										<td class="gall_count">265</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147821</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147821&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>근데 머스크는 의외로 전유물충 아닌가</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147821&t=cv"><span class="reply_num">[2]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="" data-ip="119.204" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname' title='ㅇㅇ'><em>ㅇㅇ</em></span><span class="ip">(119.204)</span>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:42:00">02:42</td>
-										<td class="gall_count">96</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147820</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147820&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>왠일로 AI 수석 빤스런 얘기가 없노</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147820&t=cv"><span class="reply_num">[8]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="" data-ip="8.46" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname' title='ㅇㅇ'><em>ㅇㅇ</em></span><span class="ip">(8.46)</span>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:39:52">02:39</td>
-										<td class="gall_count">219</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147819</td>
-																														<td class="gall_subject">📪정보</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147819&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>구글 직원, 구글 ai의 군사적 사용 거부 서명</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147819&t=cv"><span class="reply_num">[1]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="cream6733" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='cream67** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/cream6733');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:39:05">02:39</td>
-										<td class="gall_count">204</td>
-										<td class="gall_recommend">1</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147818</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147818&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>RP쪽은 코파일럿이 저렇게 돼도 이제 신경도 안쓰네</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155261&page=1" view-msg ="" >
+																								<em class="icon_img icon_pic"></em>공포 ) 예술 가족</a>
 																								
 																																												 
 																																</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="cinema4542" data-ip="" data-loc="view_list">
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="lemonguyz" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='cinema45** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/cinema4542');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='lemongu** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/lemonguyz');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 02:38:51">02:38</td>
-										<td class="gall_count">77</td>
+										<td class="gall_date" title="2026-05-01 23:54:02">05.01</td>
+										<td class="gall_count">163</td>
 										<td class="gall_recommend">0</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147817</td>
+										<td class="gall_num">1155260</td>
 																														<td class="gall_subject">일반</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147817&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>잘자콘달아줘</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147817&t=cv"><span class="reply_num">[4]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="규나나" data-uid="heal7727" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='규나나'  style=''><em>규나나</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='heal77** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/heal7727');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:37:29">02:37</td>
-										<td class="gall_count">95</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147816</td>
-																														<td class="gall_subject">📪정보</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147816&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>앤디 재시 : Bedrock에서 oai 모델 제공 소식</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155260&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>이번엔 공포갤이구나</a>
 																								
 																																												 
 																																</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="cream6733" data-ip="" data-loc="view_list">
+										<td class="gall_writer ub-writer" data-nick="변도리" data-uid="sphere8341" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='cream67** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/cream6733');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='변도리'  style=''><em>변도리</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='sphere83** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/sphere8341');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 02:37:02">02:37</td>
-										<td class="gall_count">104</td>
-										<td class="gall_recommend">4</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147815</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147815&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>안되겠다 미연시로 노선 튼다</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147815&t=cv"><span class="reply_num">[7]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="규나나" data-uid="heal7727" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='규나나'  style=''><em>규나나</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='heal77** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/heal7727');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:36:29">02:36</td>
-										<td class="gall_count">230</td>
+										<td class="gall_date" title="2026-05-01 23:53:55">05.01</td>
+										<td class="gall_count">51</td>
 										<td class="gall_recommend">0</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147814</td>
+										<td class="gall_num">1155259</td>
 																														<td class="gall_subject">일반</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147814&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>나대신 실험해줄사람없나 ㅜㅜ</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155259&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>바이브 코딩 하면 원래 다 이러냐</a>
 																								
 																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147814&t=cv"><span class="reply_num">[10]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="isui" data-uid="zero4660" data-ip="" data-loc="view_list">
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155259&t=cv"><span class="reply_num">[11]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="employ5968" data-ip="" data-loc="view_list">
 											<div class="addbox">
-												<span class='nickname in' title='isui'  style=''><em>isui</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_newnik.gif' border=0 title='zero46** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/zero4660');" alt='갤로그로 이동합니다.'></a>																							</div>
+												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='employ59** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/employ5968');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 02:35:55">02:35</td>
-										<td class="gall_count">223</td>
-										<td class="gall_recommend">1</td>
+										<td class="gall_date" title="2026-05-01 23:53:49">05.01</td>
+										<td class="gall_count">177</td>
+										<td class="gall_recommend">0</td>
 									</tr>
 																		
 									<tr class="ub-content >">
-										<td class="gall_num">1147813</td>
+										<td class="gall_num">1155258</td>
 																														<td class="gall_subject">일반</td>
 																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147813&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>솔직히 openAI 머스크꺼였잖음</a>
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155258&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>자렴</a>
 																								
 																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147813&t=cv"><span class="reply_num">[7]</span></a>																					</td>
+											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1155258&t=cv"><span class="reply_num">[1]</span></a>																					</td>
+										<td class="gall_writer ub-writer" data-nick="레이븐" data-uid="" data-ip="118.219" data-loc="view_list">
+											<div class="addbox">
+												<span class='nickname' title='레이븐'><em>레이븐</em></span><span class="ip">(118.219)</span>																							</div>
+										</td>
+										<td class="gall_date" title="2026-05-01 23:52:45">05.01</td>
+										<td class="gall_count">49</td>
+										<td class="gall_recommend">0</td>
+									</tr>
+																		
+									<tr class="ub-content >">
+										<td class="gall_num">1155257</td>
+																														<td class="gall_subject">일반</td>
+																																								<td class="gall_tit ub-word">
+																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1155257&page=1" view-msg ="" >
+																								<em class="icon_img icon_txt"></em>무서워서 갤못오겠다!!!</a>
+																								
+																																												 
+																																</td>
 										<td class="gall_writer ub-writer" data-nick="라비" data-uid="effort8873" data-ip="" data-loc="view_list">
 											<div class="addbox">
 												<span class='nickname in' title='라비'  style=''><em>라비</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='effort88** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/effort8873');" alt='갤로그로 이동합니다.'></a>																							</div>
 										</td>
-										<td class="gall_date" title="2026-04-28 02:34:54">02:34</td>
-										<td class="gall_count">222</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147812</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147812&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>공포짤 주문들어와서 만들어봤는데</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147812&t=cv"><span class="reply_num">[7]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="교정시설" data-uid="possibly3254" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='교정시설'  style=''><em>교정시설</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_newnik.gif' border=0 title='possibly32** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/possibly3254');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:32:48">02:32</td>
-										<td class="gall_count">195</td>
-										<td class="gall_recommend">1</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147811</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147811&page=1" view-msg ="" >
-																								<em class="icon_img icon_pic"></em>어떻게 해야 이미지 일관성이 있을까</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147811&t=cv"><span class="reply_num">[5]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="규나나" data-uid="heal7727" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='규나나'  style=''><em>규나나</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 title='heal77** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/heal7727');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:30:55">02:30</td>
-										<td class="gall_count">149</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147810</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147810&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>돈다이를 위한 금연 5일차</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147810&t=cv"><span class="reply_num">[5]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="within5538" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/newnik.gif' border=0 title='within55** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/within5538');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:28:36">02:28</td>
-										<td class="gall_count">78</td>
-										<td class="gall_recommend">0</td>
-									</tr>
-																		
-									<tr class="ub-content >">
-										<td class="gall_num">1147809</td>
-																														<td class="gall_subject">일반</td>
-																																								<td class="gall_tit ub-word">
-																																			<a  href="/mgallery/board/view/?id=thesingularity&no=1147809&page=1" view-msg ="" >
-																								<em class="icon_img icon_txt"></em>난 구글이 veo 3.5만 내준다 해도 개빨아줌</a>
-																								
-																																												 
-											<a class="reply_numbox" href="https://gall.dcinside.com/mgallery/board/view/?id=thesingularity&no=1147809&t=cv"><span class="reply_num">[1]</span></a>																					</td>
-										<td class="gall_writer ub-writer" data-nick="ㅇㅇ" data-uid="energy6435" data-ip="" data-loc="view_list">
-											<div class="addbox">
-												<span class='nickname in' title='ㅇㅇ'  style=''><em>ㅇㅇ</em></span><a class='writer_nikcon '><img src='https://nstatic.dcinside.com/dc/w/images/nik.gif' border=0 title='energy64** : 갤로그로 이동합니다.'  width='12'  height='11'  style='cursor:pointer;margin-left:2px;' onClick="window.open('//gallog.dcinside.com/energy6435');" alt='갤로그로 이동합니다.'></a>																							</div>
-										</td>
-										<td class="gall_date" title="2026-04-28 02:28:25">02:28</td>
-										<td class="gall_count">63</td>
+										<td class="gall_date" title="2026-05-01 23:52:11">05.01</td>
+										<td class="gall_count">60</td>
 										<td class="gall_recommend">0</td>
 									</tr>
 																	</tbody>
@@ -3272,7 +3228,7 @@ viewComments(1, 'VIEW_PAGE');
 												<!-- 페이징 -->
 						<div class="bottom_paging_wrap">
     						<div class="bottom_paging_box iconpaging">
-    							<em>1</em><a href="/mgallery/board/lists/?id=thesingularity&page=2">2</a><a href="/mgallery/board/lists/?id=thesingularity&page=3">3</a><a href="/mgallery/board/lists/?id=thesingularity&page=4">4</a><a href="/mgallery/board/lists/?id=thesingularity&page=5">5</a><a href="/mgallery/board/lists/?id=thesingularity&page=6">6</a><a href="/mgallery/board/lists/?id=thesingularity&page=7">7</a><a href="/mgallery/board/lists/?id=thesingularity&page=8">8</a><a href="/mgallery/board/lists/?id=thesingularity&page=9">9</a><a href="/mgallery/board/lists/?id=thesingularity&page=10">10</a><a href="/mgallery/board/lists/?id=thesingularity&page=11">11</a><a href="/mgallery/board/lists/?id=thesingularity&page=12">12</a><a href="/mgallery/board/lists/?id=thesingularity&page=13">13</a><a href="/mgallery/board/lists/?id=thesingularity&page=14">14</a><a href="/mgallery/board/lists/?id=thesingularity&page=15">15</a><a href="/mgallery/board/lists/?id=thesingularity&page=16" class="sp_pagingicon page_next">다음</a><a href="/mgallery/board/lists/?id=thesingularity&page=17546" class="sp_pagingicon page_end">끝</a>    						</div>
+    							<em>1</em><a href="/mgallery/board/lists/?id=thesingularity&page=2">2</a><a href="/mgallery/board/lists/?id=thesingularity&page=3">3</a><a href="/mgallery/board/lists/?id=thesingularity&page=4">4</a><a href="/mgallery/board/lists/?id=thesingularity&page=5">5</a><a href="/mgallery/board/lists/?id=thesingularity&page=6">6</a><a href="/mgallery/board/lists/?id=thesingularity&page=7">7</a><a href="/mgallery/board/lists/?id=thesingularity&page=8">8</a><a href="/mgallery/board/lists/?id=thesingularity&page=9">9</a><a href="/mgallery/board/lists/?id=thesingularity&page=10">10</a><a href="/mgallery/board/lists/?id=thesingularity&page=11">11</a><a href="/mgallery/board/lists/?id=thesingularity&page=12">12</a><a href="/mgallery/board/lists/?id=thesingularity&page=13">13</a><a href="/mgallery/board/lists/?id=thesingularity&page=14">14</a><a href="/mgallery/board/lists/?id=thesingularity&page=15">15</a><a href="/mgallery/board/lists/?id=thesingularity&page=16" class="sp_pagingicon page_next">다음</a><a href="/mgallery/board/lists/?id=thesingularity&page=17723" class="sp_pagingicon page_end">끝</a>    						</div>
     								<div class="bottom_movebox">
         	<button type="button" class="btn_grey_roundbg btn_schmove" onclick="$('.move_page_lyr').show();">페이지 이동<span class="sp_img icon_schmove"></span></button>
 		</div>
@@ -3285,7 +3241,7 @@ viewComments(1, 'VIEW_PAGE');
                     	<div class="moveset">
                       		<span class="tit">페이지</span>
                       		<input class="" type="text" name="move_page" value="1">
-                      		<span class="num total_page">17546</span>
+                      		<span class="num total_page">17723</span>
                       		<button type="button" class="btn_blue small move_page_btn">이동</button>
                     	</div>
                   	</div>
@@ -3371,7 +3327,7 @@ viewComments(1, 'VIEW_PAGE');
   <!-- 로그인 정보 -->
   <div id="login_box" class="login_box">
 	<div class="user_info newarea" data-alarmId="4369d1e7d6938a">
-	  <a href="https://sign.dcinside.com/myinfo/modify" class="fl"><strong class="nickname in" style=""><em>だいき</em></strong>님</a><strong class='writer_nikcon ' title='image84** : 갤로그로 이동합니다.'  style='cursor:pointer' onClick="window.open('//gallog.dcinside.com/image8481');"><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 alt='갤러콘'  width='12'  height='11'  style='margin-left:2px;'></strong><a href='https://sign.dcinside.com/myinfo/modify'><span class='sp_img user_infogo'></span></a><div class="logout_boxbtn fr"><button type="button" onclick="location.href='https://sign.dcinside.com/logout?s_url=https%3A%2F%2Fgall.dcinside.com%2Fmgallery%2Fboard%2Fview%2F%3Fid%3Dthesingularity%26no%3D1147859%26page%3D1'" class="btn_inout logout">로그아웃</button></div> 
+	  <a href="https://sign.dcinside.com/myinfo/modify" class="fl"><strong class="nickname in" style=""><em>だいき</em></strong>님</a><strong class='writer_nikcon ' title='image84** : 갤로그로 이동합니다.'  style='cursor:pointer' onClick="window.open('//gallog.dcinside.com/image8481');"><img src='https://nstatic.dcinside.com/dc/w/images/fix_nik.gif' border=0 alt='갤러콘'  width='12'  height='11'  style='margin-left:2px;'></strong><a href='https://sign.dcinside.com/myinfo/modify'><span class='sp_img user_infogo'></span></a><div class="logout_boxbtn fr"><button type="button" onclick="location.href='https://sign.dcinside.com/logout?s_url=https%3A%2F%2Fgall.dcinside.com%2Fmgallery%2Fboard%2Fview%2F%3Fid%3Dthesingularity%26no%3D1155307%26page%3D1'" class="btn_inout logout">로그아웃</button></div> 
 	</div>
 	<div class="user_option four">
 	  <span><a href="javascript:;" onclick="window.open('https://gallog.dcinside.com/image8481')">갤로그<em class="sp_loginout icon_visit"></em></a></span>	  <span><a href="javascript:;" onclick="myFavorite('50%')">즐겨찾기<span class="blind">리스트 보기</span></a></span>
@@ -3518,207 +3474,207 @@ alarm_init();
         <div class="rcont_imgtxt_box">
         <div class="img">
         	            	<div class="rcontimg_box" >
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424692" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425733" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73ce787fa11d028312637f2d06f8b8dd65b1c2718db056aeb43e5cf1ace768f27708f8b2096531fd2827f4d7f214b30ffff853223faf92f4544d8b326597dc17dc0baeb0eb93b1a73ed0011b7932ac4ff7ed98343817a54f78eccf5112f" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617459e19dfb60c7d4f0e58d4978e0c38a51e8cbf9982d625fb920ce0d4937a7bc9923d060ea0cb3c2ecf6d428f3298a4b8fcc7165c05a1a9856725edd37ae48c2" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>“중국 생각보다 좋은데?” 한국인 316만명 우르르…</strong>
+                        	<strong>싱글벙글 관악산 근황</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" >
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424572" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425787" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73ce787fa11d028312637f2d06f8b8dd65b1c2718db046ae079380c7a404d0384db31cbfd266c7639e5914bb64a953c1ea8eb22b6d8cb7ef6f03a5b99b78428c951ab4ccf80f4bdde86f11de26a8edf9709c8506aa22422725e0359ba4e" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa11d0283193cea73dd4e46b57ae29b0dab79499462f6174eeda042d29f4ad61c600abc8037650b1402e7aa59e1396ab8f79156014aa" alt="" style="position:relative;top:-35px" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>두산 ㅈㄴ 잘패는 선수 ㅋㅋㅋㅋㅋ</strong>
+                        	<strong>트윈테일 후배가 유희왕하자고 꼬시는.manhwa</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424696" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425680" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73de787fa1bd625313384cc989dbda850395aa1d1f199a0eb976f880b3386e687c36594ce3b044b812045d5b4cb226bc3b523a0dbfc7f7fb835b3a04dc41025abb2" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e29cfb6036d9c131c2609ac5b64e549ece4c81c386e7b328d2088d65e9c34b5b3ff1b2dc0e073b4f21d154f25fbf2e88d3d9e9adde0dc747281333" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>캐나다,미국 여행기 1편-캐나다 밴프.webp</strong>
+                        	<strong>1600만원에 낙찰된 멜론. 그 정체를 알아보자</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424664" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425745" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e39bfb6452caee773789c1ec11813be738bce50b66fc88a7a61e3f7647ad5e11f1cf82200988056a38ae27473e49c62996f2b3e2919c6cba784496a7b1924cbf68ea699a54" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa11d0283193cea73dd4e46b57ae29b1dab49599410821341969c3036c944b37659106b4a655eabd8020a25930603dd62b355c5b3b6aea6fc5612fa8141e976330b7668bdd136d" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>텔타, AI인터뷰 어시스턴트 '인터뷰 프로' 출시</strong>
+                        	<strong>베트남 나트랑 여행사진[2] webp 17장</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424672" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425655" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73ce787fa11d028312637f2d06f8b8dd65b1c2718db056ae786fe122bab2686486fae1e3d3d0576ce9d4c52f3428bc6c548b00fef821f9e14e8117e4833074b4b781dfadc2193f16be78ce21429fe8238c3af6a932ceb04fb" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa1bd62531549b8405571e3d98064c1c8158d4c951bbc029b2ffea8f7de0e8ea769b873207e1cc9182b153e703515d2e20431f4018b47c6011143632b256eb76e1f3" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>문재인 “김정은, 이재명정부와 ‘평화와 번영의 한반도’ 꿈 그려가길”</strong>
+                        	<strong>jtbc) 네이버 미래가 암담하네</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424642" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425718" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa11d0283193cea73dd4e46b57ae29b1dab5909941d5e4dda3714626268c9f1550da24d5f806ec7596cefbfd84377e971b3be121afd4d198a513bb21125701b7a91b8a8f8866367b76d88afc20" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73ce787fa1bd625314b5d207020df860bbe98c96cc2c270c86fb6b8e3aa012ab6c5b6cca50072943ca3afda633b120409e5891ecaa9f3767a460b71" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>수목원에서 만끽하는 봄의 마지막 [19pic]</strong>
+                        	<strong>최근 모친상 당하고 후기 풀어준 신기루.jpg</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424561" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425683" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa11d0283193cea73dd4e46b57ae29b1dab5929941f8716c3ca882da1cc0de63ed382bbfbea1df126bd70dd87fe332c249efc2c58ea3406e7a56ed6881620f55bf018572734484cdcae655ea95c38789317b7b0ab15955b2c17138600a671fb3d7af" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73de787fa1bd625313384cc989dbda850395aa1d0f19ba6eb2cdabcd767c82d04bc6b9eb4f920b53844baf531e695f7ae9b71d7eacead192d6e85967af3" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>서울 지하철 부정승차 적발시 30배 부과...적발 부과금 연간 25억</strong>
+                        	<strong>전 FBI 국장 제임스 코미 체포됨, 처음부터 끝까지 정리</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424644" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425769" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa11d0283193cea73dd4e46b57ae29b1dab5929941f8716c3ca882da1cc0de63ed382bbfbea1df146adc04de7ee637c046efc193d4e7f7f4d6bfde376380411d82ef42e98f8d165a1633a995ca447cda9e578eae983e86a52508515822575f3a5b261a" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617459e19dfb60c7d4f0e58d4978e0c38a51e8cbf9982d625fbd2fce044a31afb999708f31bd0080865a3ffb4b408d4eea749a777eec6c61c6306e07a8b441a85ff0be5cd22c8173909854621ffb462b1ef008df04b5" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>'고유가 지원금'인데 주유소는 못 쓴다?…첫날부터 혼선</strong>
+                        	<strong>싱글벙글 풀대출해서 주식 투자한 개미의 최후</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424684" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425737" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa1bd62531549b8405571e3d98064c1c8158d5ce514f10bbfae1d3dc6a7110c6603caf51aaabe6e60cb964470ae736c45856890d20" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73ce787fa11d028312637f2d06f8b8dd65b1c2718da026ae19c424e0d4492f291217b58100f86ea6208f4e923eff76a8f613b5947be9bfe97edfa65ccca9c47abab6d3b17cd0d27b37bdd9845e52da3b3ba6932e0f7727e1eb2cf" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>메시의 나라 아르헨티나 근황... jpg</strong>
+                        	<strong>빈티지 파커 51 버건디 복원</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424578" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425710" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa11d0283193cea73dd4e46b57ae29b1dab5929943709bb773940e0cc952abb37d9c6ce6d3c161e624d7af38988f60c2c286f3493fec29b491c24e23588b20d094923c89bdb91946523012cdcd8665d7861f3de0f5a07d9db833" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa11d0283193cea73dd4e46b57ae29b1dab59c994312b2558de1429f53831148a6d29ec8fd3d431a4dd662159013ced26e688eded25737a9ae15dc3191b2818b38a3b4e37e" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>노인 기준 75세로 상향 고려중.jpg</strong>
+                        	<strong>E100D 측광 폐관수련</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424584" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425725" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e39bfb678604891e8d7c2216f319286600bd00be7c2788d4a7a5dcdac024cf26fda93369db23b05d83c63e86afab570daecc9d836767" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa11d0283193cea73dd4e46b57ae29b0dab79499417c969b175274b0902c40751e20aefb4dbb636a8f6a0d990f219b70399da5a2dc2d61577ada56f0af706d5efe98142f871f60435e9b2d9fdfc83abeec9d5f40c16aca88eca61bdc84d2d4deb42ffb" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>뉴진스 신곡 녹음하러 코펜하겐 갔나... 예약자명 ADOR 눈길</strong>
+                        	<strong>롤스로이스 대금 5.5억 꿀꺽…딜러의 수상한 돌려막기</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424652" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425783" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa11d0283193cea73dd4e46b57ae29b1dab5929941ef7d6e3e858dcb0290813fb3666eefe8cb74dece31be85eb2c86ac52d5dc49c307e4b5b543b06b0ef118da7879c04ad16c80c0c84b072e" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa11d0283193cea73dd4e46b57ae29b0dab79499478c703eb3f31d8eca5a2f364030d465d10d84b4ded69cc808a125069aaeae5cc280edeea17a11f162978cffdb0003d7e63fcc90847359fe8a11b5349a42679c1385806e2a281da558" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>남친이 군대가서 바람필까봐 걱정이라는 여친</strong>
+                        	<strong>김재환, 대패로드 2탄 준비중.jpg</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424562" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425688" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73ce787fa1bd625314b5d207020df860bbe98c96cc2c375c86c06dc1c8fa8598649d2cbf10ce8fcba15c38b1d1ea2593b9f88f7eb93152e24bf4b0e0b31" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa11d0283193cea73dd4e46b57ae29b0dab7949947877428a5e01487e11b78714434cc62d343ef143441032c624c19a7905b95c50ab362be305a3f7b64a0e7e85c6cca944a3427b5ff0556f0ac843dcd27132f75c1535ee19ac9496e695e34f3e8b0" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>부랴부랴 조/선통신사 축제 다녀온 후기</strong>
+                        	<strong>17명한테 얻어맞아야 대기업 면접 불러주는 좁아터진 취업길.</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424688" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425747" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e39bfb7d7f5a35c25d032d7b5372dca956b11497e17b806f703f21e7462be35cf29381f38f6e9f530bb07819e1cd883a2025ee530c8bccf010fdb6d9faf33f959e" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73de787fa1bd625313384cc989dbda850395aa1d0f19ba6eb37ccbbcc63c4361fa63786bafc21bc3a6bc9416c14bfa20e229b5ad89d1e9fb976cc67ca" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>자기자신을 땅속에 묻었다는 팔레스타인인... jpg</strong>
+                        	<strong>의사들이 병원건물 반값에 사는 방법.jpg</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424694" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425749" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73ce787fa11d028312637f2d06f8b8dd65b1c2718db056ae780e80465fd6bd11636b11f3c3d0d109a2810277dc5bc154cbf9dc00a5e81a9675cd4c55babc3fb4508059dd35c2d9d82885dbb91da4c4e630a0bbb3ad0c1502c5d74decfe46928ab8765c210a6e410b19c6eeea75f242990c0e3323d67d56e" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617459e19dfb60c1d3f3ec9a043fb992d502eec6fa9b3578b74315a57b255cb6ed6816584b3db773a3c84f77b28aed29ff62" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>해외 거주라로서 해외팬들이 불법번역 볼수밖에 없는 이유</strong>
+                        	<strong>[단독] "군인은 되고 군무원은 안 돼"…같은 아파트, 자녀 전학 '차별</strong>
                         </div>
                     </a>
                  </div>
                          	<div class="rcontimg_box" style="display:none;">
-                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=424686" depth1="rightframe" depth2="realtimebest">
+                	<a class="inner logClass" href="https://gall.dcinside.com/board/view/?id=dcbest&no=425671" depth1="rightframe" depth2="realtimebest">
                     	<span class="img_box">
-                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e39bfb60b451f6b59c66fee85df495d50fa1d66492b4b4accdecb66f6fd82f0e177669c7fdc8f219fb1f853debc0cb65de106cde7c02b439f75128937108" alt="" style="position:relative;" loading="lazy">
+                        	<img src="https://dccdn11.dcinside.co.kr/viewimage.php?id=29bed223f6c6&no=24b0d769e1d32ca73fe787fa11d0283193cea73dd4e46b57ae29b0dab7949947877428a5e01487e11b78714434cc68d5f389655bb8becf850543c702dbf7b6c161f78cb5cc76284f" alt="" style="position:relative;" loading="lazy">
                         </span>
                         <div class="txt_box">
-                        	<strong>안녕하세요. lpg 사용법에 대해 알려주겠습니댜</strong>
+                        	<strong>최가온배출 호화 아파트 '고연전'?..메이플자이·원베일리 운동회 '한판</strong>
                         </div>
                     </a>
                  </div>
                           </div>
              <ul class="txt">
-                          	<li ><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424650">권성동, 기자폭행혐의 벌금형 </a></li>
-                         	<li ><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424698">영어 강사 그만두고 로프공하는 서양아내.JPG</a></li>
-                         	<li ><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424656">최지만 인스타 입단인사 등번호 9번</a></li>
-                         	<li ><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424616">구글 AI 캠퍼스 세계 최초 한국 개설</a></li>
-                         	<li ><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424700">안성재의 모수 레스토랑 총괄매니저이자 소믈리에의 이야기</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424706">이재명이 말하는.. 욕 해도 괜찮은 이유 ..jpg</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424666">늑구, 집 나가 고생하더니…탈출 3주 만에 서점가 등판</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424596">은행에서 30만원 뜯길뻔하고 고소도 당한 복권1등 당첨자</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424638">월 50만원씩 3년 넣으면 최대 2200만원…청년미래적금 6월 출시</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424662">차 문 못 열 정도로 바짝 주차...연락했더니 선 안에 댔는데 왜 시비?</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424632">총격범 선언문 “반역자·강간범” 트럼프 겨냥…고위직 순으로 암살 계획</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424570">1.7% 깜짝 성장?..한국, 버틸 수 있는 힘 점점 줄어든다.webp</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424670">스압) 3코스 요리</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424610">싱글벙글 아직도 제국주의 잔재가 넘치는 영국 근황</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424594">CU가맹점주연합회 “파업 참여한 배송기사 상품 안 받겠다”</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424640">아동성착취물 범죄자 225명 '덜미'…"절반 이상이 10대"</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424682">춤추다 돌연 여학생 끌어안은 로봇… 中서 ‘안전성’ 도마</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424634">슈카) 민원 지옥이 되어가는 대한민국</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424676">공승연이 21세기 대군부인을 선택한 이유</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424658">자러가기전 마지막 사진(37장)</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424586">백운대 달렸어요</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424608">남욱 "대장동 1기 수사지휘부 '유동규 선에서 끝내겠다' 계획해"</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424568">요즘 중국 근황 모음</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424628">CCTV로 정당방위 입증…'여성 폭행 제압' 아파트 경비원 무죄</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424588">트럼프 총격범, 진보사회운동단체 '와이드 어웨이크' 회원</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424704">억울하게 짤린 조선시대 공무원.jpg</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424598">중국 E스포츠 선수 페이커 숭배</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424606">한국 ENC 참가 거절...jpg</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424708">싱글벙글 한 달 반 만에 10kg 빼는 저탄고지 식단</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424564">전여친 관계 영상을 트위터에 몰래 올려둔 남친</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424604">균안이 표정 봐라 무조건 떠난다 ㅋㅋㅋㅋ</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424592">“이제 공짜 와이파이 제공 못한다”는 유명 카페…경찰 조사까지?</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424626">시골쥐에게는 서울도 여행지이다. (16장)</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424636">훌쩍훌쩍 멸망 직전이라는 한국 피아노 시장 </a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424582">비공개라고 했는데…中 관광객이 촬영한 옥택연 결혼식 몰카 사진 '논란</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424612">李대통령 "한반도 평화공존 정책 흔들림없이 추진…北호응 기대"</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424660">싱글벙글 기계가 도입되고 있는 굴 공장 근황</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424674">일자리 찾는 Z세대, 취업 전까지 허용 가능한 공백은 1년 이내</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424620">시신서 30돈짜리 금목걸이 슬쩍…검시관 '벌금 1천만원</a></li>
-                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=424702">싱글벙글 카페에서 이상한 사람으로 낙인찍혔다는 웃대인의 이야기</a></li>
+                          	<li ><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425743">"트럼프, 45분간 새 군사옵션 보고받아…'최후의 일격' 고려"</a></li>
+                         	<li ><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425678">'마약왕' 뒤에 '청담사장' 있었다…100억대 마약 공급책 송환</a></li>
+                         	<li ><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425665">싱글벙글 우리나라에서 제대로 구분이 안되고 있는 용어</a></li>
+                         	<li ><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425686">싱글벙글 김성모식 추리만화.jpg</a></li>
+                         	<li ><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425765">사회적 로그아웃 71만 명…'쉬었음' 넘어 고립으로</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425789">최근 한녀들이 밀고 있다는 출산축하금 문화</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425713">"머리카락 길다고 감봉?"…민간인 男 군무원 규정에 '술렁'</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425720">싱글벙글「찐따 생산국」</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425763">일본인 아내의 한국이민 결정..장인어른의 눈물</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425773">이소라와 홍진경이 런웨이로 과정을 담는다는 새예능 근황</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425685">‘서울 도심 멧돼지’ 2년새 55% 급증</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425666">새로 산 렌즈로 새 찍기</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425693">삼성바이오로직스 첫 전면 파업</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425759">우파 단체, 민노총 집회서 몸싸움…"물러나라" 조합원 기습 난입도</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425793">싱글벙글 출산률 개씹창난 대만의 남녀갈등에 대해 알아보자</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425668">인쇄용지값 70% 폭등… 담합 제지사 상대 ‘집단 손배소’ 움직임</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425723">잘생긴건 타고났다는 주장 반박하는 정혁</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425698">아파트 14층 화재 부부 공룡‥'생활고' 유서</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425675">이재명 대통령,"나는 소년공 출신..노동자목소리 화답할것"</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425715">김경문, 퍼펙트상황이면 미국선 번트 못대는데 여긴 한국이니까.news</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425779">싱글벙글 아파트 자체에서 운영하는 전기체 충전 요금.jpg</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425673">싱글벙글 일본에서 욕 먹고 있는 다카이치 총리...jpg</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425728">일본의 전기 요금이 비싼 이유</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425658">평소 모습만 알면 전혀 몰랐을거 같은 홍진경의 아픔…jpg</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425708">[유쾌] 지금 미국을 뒤흔든 JP 모건 성노예 사건</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425721">홈플러스 노조 &quot;임금 포기&quot; 선언</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425771">LCK, '탈세 논란' 룰러 제재 안 하기로…"범죄행위 해당 안해</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425653">야동중독된 대니 브라운</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425706">정원오 '성·재생산' 지원? '자유 낙태권' 포함됐는데...</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425705">싱글벙글 유골함</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425726">철컹철컹 영국 버.튜버가 야짤 그리다가 체포</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425676">슈퍼 마리오 갤럭시 상세 후기 &#x1f4dd; 92/100</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425751">으악으악 무기 선고된 김녹완 공범들이 감형된 이유</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425696">싱글벙글 일본에서 제일 잘나간다는 천재 디자이너 </a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425690">포켓몬 30주년 한국행사 총정리 …….jpg</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425701">북한 김일성이 박정희 대통령을 암살하려 했던 이유</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425695">4월 사진 정산</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425757">우울한 노래가 꾸준히 사랑을 받는것에 대한 자우림의 생각</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425791">임요환이 존경 받는.. 이유 ..jpg</a></li>
+                         	<li style="display:none;"><a href="https://gall.dcinside.com/board/view/?id=dcbest&no=425656">훌쩍훌쩍 39세 모친의 소원 </a></li>
             	
              </ul>
 		</div>
@@ -3742,178 +3698,178 @@ alarm_init();
 		<div class="rcont_imgtxt_box r_media_box" style="display:none;">
 			<div class="img clear">
 								<div class="rcontimg_box"  >
-					<a class="inner logClass" href="https://gall.dcinside.com/hungryapp/2712" depth1="rightframe" depth2="dcmedia" target = "_self">
+					<a class="inner logClass" href="https://gall.dcinside.com/fnnews/24873" depth1="rightframe" depth2="dcmedia" target = "_self">
 						<span class="img_box">
-						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e39bfb7b82039ba69a9cab455df173fdebfddb762ef6316e1b933b98c7587dc30010ebf9f0725219f2bf89877d572ec89701f7f1d61b27a015bdace163226c8d94ed3d98955575ca3c0a8938c6984ede7886a81277fc5e" alt="" loading="lazy">
+						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617459e19dfb75e158dae65ccf4a2216cc623be6b7d9822082714b38b1ac8b12abc821533774bb42553947165916d71d54effcf13404db6f626d1a08" alt="" loading="lazy">
 						</span>
 						<div class="txt_box">
-							<strong>“사람 속에 악마가 있다”… 친구도 못 믿는 공포, ‘인 어스’ 공개</strong>
+							<strong>'박왕열 마약 공급책' 태국서 송환…고개 숙인 채 묵묵부답</strong>
 						</div>
 					</a>
 				</div>
 								<div class="rcontimg_box"  >
-					<a class="inner logClass" href="https://gall.dcinside.com/fnnews/24805" depth1="rightframe" depth2="dcmedia" target = "_self">
+					<a class="inner logClass" href="https://gall.dcinside.com/healthflow/8619" depth1="rightframe" depth2="dcmedia" target = "_self">
 						<span class="img_box">
-						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e39bfb754c97ed9ff16052758161a0c89c75e012396fd7223dd2afa931932140ce4cb745c98fa3aca5407b568bf94a3448cc327ce036e7bac5" alt="" loading="lazy">
+						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617459e19dfb7b3ab5c7b5587f253a72446b927355131e4d853551d92167d8070ef9635c404ce281c717905fac93e16277b77ab18fc61de140156396" alt="" loading="lazy">
 						</span>
 						<div class="txt_box">
-							<strong>아동성착취물 범죄 亞 특별단속…한국 경찰, 225명 검거</strong>
+							<strong>&quot;집 변기보다 더럽습니다&quot; 온 가족이 하루 10시간 보내는 최악의 1위 물건</strong>
 						</div>
 					</a>
 				</div>
 								<div class="rcontimg_box"  style="display:none">
-					<a class="inner logClass" href="https://gall.dcinside.com/indinews/6402" depth1="rightframe" depth2="dcmedia" target = "_self">
+					<a class="inner logClass" href="https://gall.dcinside.com/thewithcar/3094" depth1="rightframe" depth2="dcmedia" target = "_self">
 						<span class="img_box">
-						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e39bfb7afc1c17269715ffcb95b94e204676cc17811f743ebaa36464fe5e761d54a2ed97e86e69a080e6153569106544ae3df7726685" alt="" loading="lazy">
+						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617459e19dfb673207309c1bf6af9b537a8b94a5ba54da5d43aa2584afbf1fe134ca30225697c365339d878664ef32174c7f515b19da9dde61278f1ae193b4efd0439980fb8fe66f77e94ad466e1275f5db6c037f8e4b7266eba7b108936d5a77c091a8a10e12133844471cac7" alt="" loading="lazy">
 						</span>
 						<div class="txt_box">
-							<strong>&quot;검찰과 경찰, 평생 용서 못 할 것 같다&quot;…변영주 감독이 터뜨린 분노</strong>
+							<strong>“쿠팡도 삼성처럼 샅샅이 뒤져라”…형사처벌 가능성까지 열리자 ‘화들짝’</strong>
 						</div>
 					</a>
 				</div>
 								<div class="rcontimg_box"  style="display:none">
-					<a class="inner logClass" href="https://gall.dcinside.com/mmnews/33711" depth1="rightframe" depth2="dcmedia" target = "_self">
+					<a class="inner logClass" href="https://gall.dcinside.com/fnnews/24877" depth1="rightframe" depth2="dcmedia" target = "_self">
 						<span class="img_box">
-						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e39bfb7e48f6142ebe349a3640513138fc015a1a611ab8138e2c4e63de4574e0748df50fa592bcd73f9a7b9344e4e657cced48" alt="" loading="lazy">
+						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617459e19dfb75e158dae65ccf4a2216cc623be6b7d98220d622426db3f08813abc821533774bb7ab861725d7065718bb0c61d1f6b762868771eeb0d" alt="" loading="lazy">
 						</span>
 						<div class="txt_box">
-							<strong>문지인·김기리 부부, 유산과 시험관 실패 딛고 자연임신 성공... &quot;태명은 생명이&quot;</strong>
+							<strong>노동절 맞아 양대노총 서울 도심 대규모 집회…&quot;노동권 보장 촉구&quot;</strong>
 						</div>
 					</a>
 				</div>
 								<div class="rcontimg_box"  style="display:none">
-					<a class="inner logClass" href="https://gall.dcinside.com/gukjenews/27470" depth1="rightframe" depth2="dcmedia" target = "_self">
+					<a class="inner logClass" href="https://gall.dcinside.com/dailyesports/10051" depth1="rightframe" depth2="dcmedia" target = "_self">
 						<span class="img_box">
-						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e39bfb74b53890b28b508fc98b7519db01b9deb661cfd0d836cd207e75a7b5b080bc36eceaaee0bea04402e2fd4b9deb399befe95b741503cf5150" alt="" loading="lazy">
+						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617459e19dfb772b7f7e8ddf773002df865a38af6611df654772722c5a65f20611f568ee6f3f18a6ad13e7115d75be810b0d116cb98081b527fb3b0b30a09f2029ef685f7a82c3bbe81fec2ea692ac279eb74bca449159" alt="" loading="lazy">
 						</span>
 						<div class="txt_box">
-							<strong>&quot;백종원이 떴다&quot; 바가지 없는 남원 춘향제… 역대급 '월광포차' 라인업까지</strong>
+							<strong>[기획] 밖으로 나가는 LoL e스포츠</strong>
 						</div>
 					</a>
 				</div>
 								<div class="rcontimg_box"  style="display:none">
-					<a class="inner logClass" href="https://gall.dcinside.com/gamechosun/2526" depth1="rightframe" depth2="dcmedia" target = "_self">
+					<a class="inner logClass" href="https://gall.dcinside.com/gamemeca/22735" depth1="rightframe" depth2="dcmedia" target = "_self">
 						<span class="img_box">
-						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e39afb7466b8778b3b6cb7eedb5fafbca93b8cdd9c42c191a93c17306dea71391b1b0a19123145adf814e9a6df7751b258c40d9cbf3ce65bb40b" alt="" loading="lazy">
+						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73ce787fa11d028312637f2d06f8b8dd65b1c2718da026aebfda245dffbbfa3dcf4378175ca7e4922bfd25559b3b2071bf5fa528cda43e1e25ff1" alt="" loading="lazy">
 						</span>
 						<div class="txt_box">
-							<strong>[인물열전] 전부 사쿠라 아닌가요? 이래서 뉴비들은!</strong>
+							<strong>포르자 호라이즌·007 상륙하는 5월, 그 외 기대작은?</strong>
 						</div>
 					</a>
 				</div>
 								<div class="rcontimg_box"  style="display:none">
-					<a class="inner logClass" href="https://gall.dcinside.com/nanammedia/18953" depth1="rightframe" depth2="dcmedia" target = "_self">
+					<a class="inner logClass" href="https://gall.dcinside.com/weekhealthy/4542" depth1="rightframe" depth2="dcmedia" target = "_self">
 						<span class="img_box">
-						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e39bfb7d7b4320c755093b6b1d68dcad57b71098be867cd718d1d0405f180b313916fba34512b11d2faeb584040a4ca37b83f3266ca9a950d5" alt="" loading="lazy">
+						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617459e19dfb640de027cfa52bd923f46b6c39a4dea9c6e1093b34fb9b566405722ef8121bbb299b4a4a6c27f62458d3a7b3d7288421bd330652618b" alt="" loading="lazy">
 						</span>
 						<div class="txt_box">
-							<strong>AI 시대, 일주일 사흘 쉬는 직장이 표준이 된다</strong>
+							<strong>&quot;술만큼 최악이다..&quot; 밤에 먹으면 수면의 질을 10배 낮추는 '최악의 음식'</strong>
 						</div>
 					</a>
 				</div>
 								<div class="rcontimg_box"  style="display:none">
-					<a class="inner logClass" href="https://gall.dcinside.com/gamey/14310" depth1="rightframe" depth2="dcmedia" target = "_self">
+					<a class="inner logClass" href="https://gall.dcinside.com/khgames/6449" depth1="rightframe" depth2="dcmedia" target = "_self">
 						<span class="img_box">
-						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617559e39bfb74a13e9faeca01cd83977d12d700b9b3b7117cc206dc7272d75435028d2db6dd8a9b1c6a7f4ff23ded8c21b3dca1c022deefb4" alt="" loading="lazy">
+						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769e1d32ca73de787fa11d0283190dd0349b9d9dce5ef617459e19dfb786bb891137672b1100d42ac42ea00e83070dacfd28708b03894e701845ee1cdb872f30d79ea99d9d77eb9a63df3bd756f6e8763" alt="" loading="lazy">
 						</span>
 						<div class="txt_box">
-							<strong>넷마블게임박물관, '제1종 전문박물관' 정식 등록… 5월 가정의 달 기념 풍성한 이벤트 전개</strong>
+							<strong>로봇 카우보이들의 마법 사격 액션, '파 파 웨스트' 스팀 얼리 액세스 출시</strong>
 						</div>
 					</a>
 				</div>
 							</div>
 			<ul class="txt">
-								<li ><a href="https://gall.dcinside.com/gamey/14293" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">잠실에 쿠키런 디저트 가게가 생긴다</a></li>
-								<li ><a href="https://gall.dcinside.com/gamechosun/2527" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">[인터뷰]  우리 시대 꼭 필요한 작은 영능력에 대해... '전국퇴마사협회'-'팀 다다'</a></li>
-								<li ><a href="https://gall.dcinside.com/thewithcar/3047" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">그 시절 아빠들 “지금 봐도 예쁘네”…출시 열흘 만에 5,000대 팔린 전설의 국산차</a></li>
-								<li style="display:none"><a href="https://gall.dcinside.com/dailyesports/9992" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">'케리아' 류민석, T1과 3년 재계약...'페이커' 9년 동행</a></li>
-								<li style="display:none"><a href="https://gall.dcinside.com/autosentinel/818" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">'아이언맨'을 위한 포르쉐 911, 건터 웍스가 빚어낸 8주년 기념작 '엔드게임'</a></li>
-								<li style="display:none"><a href="https://gall.dcinside.com/khgames/6249" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">[주간 LCK] KT 롤스터, 팀 창단 이후 첫 개막 8연승 '신기록'</a></li>
-								<li style="display:none"><a href="https://gall.dcinside.com/autonology/557" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">&quot;10분 충전으로 300km 간다&quot;… 출시 1시간 만에 3,100대 '돌풍' 일으킨 전기 세단</a></li>
-								<li style="display:none"><a href="https://gall.dcinside.com/gamedonga/21446" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">[인터뷰] ‘30년 만에 다시 임진왜란’… 김태곤 PD, “역사 게임으로 승부수”</a></li>
-								<li style="display:none"><a href="https://gall.dcinside.com/gamedonga/21449" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">[동영상] 트럼프 저격범 알고보니 인디게임도 만들었다</a></li>
-								<li style="display:none"><a href="https://gall.dcinside.com/dailyesports/9994" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">한콘진 '코리아 인디게임 데브캠프' 공정성 논란… 사후검증 단계 추가</a></li>
-								<li style="display:none"><a href="https://gall.dcinside.com/hungryapp/2734" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">‘죽음의 조’ 살아남지 못한 젠지, 플레이오프 진출 좌절</a></li>
-								<li style="display:none"><a href="https://gall.dcinside.com/weekhealthy/4473" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">&quot;넓어진 모공 작아집니다&quot; 평생 피부과 갈 일 사라지게 만들어 주는 '최고 음식'</a></li>
+								<li ><a href="https://gall.dcinside.com/gukjenews/27936" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">약 6400억 손실...'삼성바이오로직스' 노조 파업 나선 이유는?</a></li>
+								<li ><a href="https://gall.dcinside.com/mmnews/33780" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">방탄소년단 뷔, 미국 월드투어 중 진·제이홉과 달콤한 휴식... &quot;아이스크림 먹으며 즐기는 반전 일상&quot;</a></li>
+								<li ><a href="https://gall.dcinside.com/cobak/3138" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">일론 머스크의 트윗 이후 &quot;사기꾼 알트만&quot; 밈 코인으로 15만 달러를 잃은 트레이더</a></li>
+								<li style="display:none"><a href="https://gall.dcinside.com/khgames/6462" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">해적 게임 '윈드로즈', 2주 만에 150만 장 판매</a></li>
+								<li style="display:none"><a href="https://gall.dcinside.com/autosentinel/848" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">세상에 단 한 대, '시그널 그린' 라페라리 87억 원 낙찰</a></li>
+								<li style="display:none"><a href="https://gall.dcinside.com/indinews/6419" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">'소울컴퍼니' 제리케이 뇌종양 투병 끝 별세, 아내가 전한 눈물의 마지막 인사</a></li>
+								<li style="display:none"><a href="https://gall.dcinside.com/gukjenews/27984" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">한국부동산원, 1분기 상업용부동산 임대동향조사 발표</a></li>
+								<li style="display:none"><a href="https://gall.dcinside.com/nanammedia/19431" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">&quot;적금 대신 삼성전자 샀어요&quot; 미성년 계좌 272% 폭증한 진짜 이유</a></li>
+								<li style="display:none"><a href="https://gall.dcinside.com/healthflow/8611" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">&quot;재활의학과 교수가 퇴직하며 말했습니다&quot; 100세까지 평생 해야 할 쉬운 운동 1위</a></li>
+								<li style="display:none"><a href="https://gall.dcinside.com/indinews/6424" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">아리아즈 효경,연예계 '충격' 폭로.... &quot;대표랑 사귀면 센터&quot;</a></li>
+								<li style="display:none"><a href="https://gall.dcinside.com/metakr/2588" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">&quot;너무 창피해서 탈퇴 고민...&quot; 무대 의상 보고 오열했던 레전드 아이돌</a></li>
+								<li style="display:none"><a href="https://gall.dcinside.com/thewithcar/3108" class="logClass" depth1="rightframe" depth2="dcmedia" target = "_self">“고유가 지원금 당장 재검토해라”…국민 분통 터지자, 대통령 ‘긴급 지시’</a></li>
 							</ul>
 		</div>
 		<div class="rcont_imgtxt_box dcissue r_issue_box" style="display:none;">
 			<div class="img clear">
 								<div class="rcontimg_box" >
-					<a class="inner logClass" href="https://issuefeed.dcinside.com/content/2235750" depth1="rightframe" depth2="dcissue" target = "_blank">
+					<a class="inner logClass" href="https://issuefeed.dcinside.com/content/2239982" depth1="rightframe" depth2="dcissue" target = "_blank">
 						<span class="img_box">
-						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769f6da39b46b80dfb8119e203e09c944cb50a8681881c08b85bdb5f53f6a35879e42174abe023e4edbd8a7e0de20070e7724335d3f3c41cf20a2e77b5d1834c9d9af3ae16e20a34e21d4" alt="" loading="lazy">
+						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769f6da39b46b80dfb8119e203e09c944cb50a8681881c08b84bfbff53f6bdc0af162495125c776a08a73d838a0f13bc117587932703f6fae72a3792551f51aa9d4e2123fbf6fef474216" alt="" loading="lazy">
 						</span>
 						<div class="txt_box">
 							<span class="ranking blue">1</span>
-							<strong>사냥개들 2 지나 실제 배우 강민아 더 섹시하고 매력적이네</strong>
+							<strong>Z세대 워너비 이다령, 힙스터 비키니 스타일링으로 2026년 패피 등극!</strong>
 						</div>
 					</a>
 				</div>
 								<div class="rcontimg_box" >
-					<a class="inner logClass" href="https://issuefeed.dcinside.com/content/2235145" depth1="rightframe" depth2="dcissue" target = "_blank">
+					<a class="inner logClass" href="https://issuefeed.dcinside.com/content/2239983" depth1="rightframe" depth2="dcissue" target = "_blank">
 						<span class="img_box">
-						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769f6da39b46b80dfb8119e203e09c944cb50a8681881c08b85bdb5f53f6a35879e421748b4516c4fdc8fa7b485bafe76d7c21f7eb5ea64a6fc14908d00b9a0eab4a1e0053ed8257ace56" alt="" loading="lazy">
+						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769f6da39b46b80dfb8119e203e09c944cb50a8681881c08b84bfbff53f6bdc0af162495324c922a58a70d836f74b89e843c28df709e43489ae85ce72eaaffc441b69c74ec9b2dc3ad991" alt="" loading="lazy">
 						</span>
 						<div class="txt_box">
 							<span class="ranking blue">2</span>
-							<strong>옹주 여름 여행 룩, 모노그램부터 글리터까지 완벽 분석!</strong>
+							<strong>패션 인플루언서 @otracyo8, 나이트 풀에서 선보인 뉴트럴 베이지 비키니의 반전 매력</strong>
 						</div>
 					</a>
 				</div>
 								<div class="rcontimg_box" style="display:none">
-					<a class="inner logClass" href="https://issuefeed.dcinside.com/content/2235297" depth1="rightframe" depth2="dcissue" target = "_blank">
+					<a class="inner logClass" href="https://issuefeed.dcinside.com/content/2239878" depth1="rightframe" depth2="dcissue" target = "_blank">
 						<span class="img_box">
-						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769f6da39b46b80dfb8119e203e09c944cb50a8681881c08b85bdb5f53f6a35879e424c18ef563f4c8d8da7e7d44ea62ea83cca1a3b6978858fe01c9bbac0f24bdff95bc1765f99cb09a4" alt="" loading="lazy">
+						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769f6da39b46b80dfb8119e203e09c944cb50a8681881c08b84bfbff53f6bdc0af1624d0377c276ae8b77d838f58ef858c2ef2ed1670f681a6f7cc9ad322a5f3141907e1ac512f9457243" alt="" loading="lazy">
 						</span>
 						<div class="txt_box">
 							<span class="ranking blue">6</span>
-							<strong>LG 트윈스 차영현, 화이트 비키니로 올여름 마지막 휴가 근황 공개!</strong>
+							<strong>갓 스무 살 지니, 미스맥심 결정전 우승! 05년생의 패기가 맥심 역사를 뒤흔든 사연</strong>
 						</div>
 					</a>
 				</div>
 								<div class="rcontimg_box" style="display:none">
-					<a class="inner logClass" href="https://issuefeed.dcinside.com/content/2235751" depth1="rightframe" depth2="dcissue" target = "_blank">
+					<a class="inner logClass" href="https://issuefeed.dcinside.com/content/2239847" depth1="rightframe" depth2="dcissue" target = "_blank">
 						<span class="img_box">
-						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769f6da39b46b80dfb8119e203e09c944cb50a8681881c08b85bdb5f53f6a35879e421b4cbc016d4c83d8a7bad3b381fd831000443cafc50507da81dfcbc2d7f0fdbb0cfe19a563c57614" alt="" loading="lazy">
+						<img src="https://dccdn11.dcinside.co.kr/viewimage.php?no=24b0d769f6da39b46b80dfb8119e203e09c944cb50a8681881c08b84bfbff53f6bdc0af1621f0270c425af8d74d830f405b751f479f437f69546c14f427f8ac87805dc5baa7a71cf6584b5afd4" alt="" loading="lazy">
 						</span>
 						<div class="txt_box">
 							<span class="ranking blue">7</span>
-							<strong>아금화가 아니라 아금화지? BJ 토마토 아름다운 외모 역시 4대천왕</strong>
+							<strong>유채련, 비키니로 완성한 눈부신 스타일링…화이트&블루 포인트로 시선 강탈</strong>
 						</div>
 					</a>
 				</div>
 							</div>
 			<ul class="txt">
 								<li >
-					<a href="https://issuefeed.dcinside.com/content/2233903" class="logClass" depth1="rightframe" depth2="dcissue" target = "_blank">
+					<a href="https://issuefeed.dcinside.com/content/2238703" class="logClass" depth1="rightframe" depth2="dcissue" target = "_blank">
 					<span class="ranking blue">3</span>
-					‘유튜버’ 말왕, 아내 있었다… 충격 고백					</a>
+					"다리 길이 실화?" 권나라, 필라테스 중 포착된 역대급 레깅스 핏 '충격'					</a>
 				</li>
 								<li >
-					<a href="https://issuefeed.dcinside.com/content/2233915" class="logClass" depth1="rightframe" depth2="dcissue" target = "_blank">
+					<a href="https://issuefeed.dcinside.com/content/2239981" class="logClass" depth1="rightframe" depth2="dcissue" target = "_blank">
 					<span class="ranking blue">4</span>
-					배우 박보영 19살 연상 선배 배우와 열애설, 결국 방송에 나와서…					</a>
+					월드컵 앞두고 ‘초대형 해킹 사태’…손흥민·이강인까지 털렸다, 유출 규모 충격					</a>
 				</li>
 								<li >
-					<a href="https://issuefeed.dcinside.com/content/2234520" class="logClass" depth1="rightframe" depth2="dcissue" target = "_blank">
+					<a href="https://issuefeed.dcinside.com/content/2239980" class="logClass" depth1="rightframe" depth2="dcissue" target = "_blank">
 					<span class="ranking blue">5</span>
-					軍 기밀을 묻는 기자에게 국방부 대변인이 굳은 표정으로 남긴 답변					</a>
+					어반자카파 박용인 징역 1년 구형… ‘버터 없는 버터맥주’가 불러온 씁쓸한 결말					</a>
 				</li>
 								<li style="display:none">
-					<a href="https://issuefeed.dcinside.com/content/2233674" class="logClass" depth1="rightframe" depth2="dcissue" target = "_blank">
+					<a href="https://issuefeed.dcinside.com/content/2239800" class="logClass" depth1="rightframe" depth2="dcissue" target = "_blank">
 					<span class="ranking blue">8</span>
-					무려 78명의 아내를 둔 유명 사이비 목사의 결혼생활의 결과					</a>
+					대한민국 모든 살인범의 ‘공소시효’를 끝내버린 엄마의 16년 사투					</a>
 				</li>
 								<li style="display:none">
-					<a href="https://issuefeed.dcinside.com/content/2232919" class="logClass" depth1="rightframe" depth2="dcissue" target = "_blank">
+					<a href="https://issuefeed.dcinside.com/content/2239945" class="logClass" depth1="rightframe" depth2="dcissue" target = "_blank">
 					<span class="ranking blue">9</span>
-					길거리에 폐지줍는 노인에게 무려 1억원을 준 연예인의 정체					</a>
+					백지영, 영상 유출 사건때 도와줬던 이상민과 손절해…이유 ‘소름’					</a>
 				</li>
 								<li style="display:none">
-					<a href="https://issuefeed.dcinside.com/content/2235749" class="logClass" depth1="rightframe" depth2="dcissue" target = "_blank">
+					<a href="https://issuefeed.dcinside.com/content/2239746" class="logClass" depth1="rightframe" depth2="dcissue" target = "_blank">
 					<span class="ranking blue">10</span>
-					한국 국민 99%가 몰랐던…유승준이 입국 금지된 소름돋는 진짜 이유					</a>
+					한국 남성과 결혼한 중국 국민 여배우…47세에 임신 ‘韓中 연예계 경사’					</a>
 				</li>
 							</ul>
 		</div>
@@ -3924,9 +3880,9 @@ alarm_init();
 <!--  //뉴스/디시미디어/디시이슈 -->
 <!-- 개념글 -->
 <article>
-  <div class="content_box r_recommend" data-rand="23">
+  <div class="content_box r_recommend" data-rand="20">
 	<header>
-	  <h3 class="tit"><a href="https://gall.dcinside.com/board/view/?id=leagueoflegends6&no=13031045">개념글<span class="sub">[<em>리그 오브 레전드</em>]</span></a></h3>
+	  <h3 class="tit"><a href="https://gall.dcinside.com/board/view/?id=sh_new&no=8319103">개념글<span class="sub">[<em>키움 히어로즈</em>]</span></a></h3>
 	  <div class="pageing_box">
 		<div class="page_num">
 		  <strong class="now_num">1</strong>/<span class="total_num">27</span>
@@ -3937,12 +3893,12 @@ alarm_init();
 	</header>
 	<ul id="rightRecom" class="rcont_list">
 	
-			<li><a href="https://gall.dcinside.com/board/view/?id=leagueoflegends6&no=13031045" class="logClass" depth1="rightframe" depth2="recommend">구버지 한화에서 왜 이랬는지 알겠노</a></li>
-			<li><a href="https://gall.dcinside.com/board/view/?id=leagueoflegends6&no=13030876" class="logClass" depth1="rightframe" depth2="recommend">이거 사진도 그xx가 강제로 찍게 한거 아님?</a></li>
-			<li><a href="https://gall.dcinside.com/board/view/?id=leagueoflegends6&no=13030565" class="logClass" depth1="rightframe" depth2="recommend">아니 신치형 너무 비참하잖아 개xxㅋㅋ</a></li>
-			<li><a href="https://gall.dcinside.com/board/view/?id=leagueoflegends6&no=13030270" class="logClass" depth1="rightframe" depth2="recommend">티원 분위기와 대비되는 진짜 광기.jpg</a></li>
-			<li><a href="https://gall.dcinside.com/board/view/?id=leagueoflegends6&no=13029378" class="logClass" depth1="rightframe" depth2="recommend">버터떡 다른 서폿 대입법ㅋㅋㅋㅋ</a></li>
-			<li><a href="https://gall.dcinside.com/board/view/?id=leagueoflegends6&no=13029311" class="logClass" depth1="rightframe" depth2="recommend">만약 24 젠지였으면…jpg</a></li>
+			<li><a href="https://gall.dcinside.com/board/view/?id=sh_new&no=8319103" class="logClass" depth1="rightframe" depth2="recommend">다시는 못볼 성적이니 올려두자.jpg</a></li>
+			<li><a href="https://gall.dcinside.com/board/view/?id=sh_new&no=8318909" class="logClass" depth1="rightframe" depth2="recommend">더쿠 개동헌줌들 ㅋㅋㅋㅋㅅㅂ</a></li>
+			<li><a href="https://gall.dcinside.com/board/view/?id=sh_new&no=8318737" class="logClass" depth1="rightframe" depth2="recommend">꼴등 입갤.jpg</a></li>
+			<li><a href="https://gall.dcinside.com/board/view/?id=sh_new&no=8318479" class="logClass" depth1="rightframe" depth2="recommend">재업) 안우진 부채 나눔 홍보</a></li>
+			<li><a href="https://gall.dcinside.com/board/view/?id=sh_new&no=8318250" class="logClass" depth1="rightframe" depth2="recommend">전태현은 스윙 접근법부터가 성공해봤자 최대치 이지영따리인데</a></li>
+			<li><a href="https://gall.dcinside.com/board/view/?id=sh_new&no=8318094" class="logClass" depth1="rightframe" depth2="recommend">아기포수 때문에 하똥볼 털린거라니까</a></li>
 		
 	</ul>
 	<script id="gr_recom-tmpl" type="text/x-jquery-tmpl">
@@ -4159,19 +4115,19 @@ $('footer.dcfoot').addClass('type1');
     <!-- //하단 -->
       </div>
 	<div id="div_con" class="pop_wrap type3" style="left:0;top:38px;display:none">
-	<div class="pop_content dcconlayer mandudel">
+	<div class="pop_content dcconlayer edit">
 		<div class="blind"><h3>디시콘 리스트</h3></div>
 		 <!-- dccon_list_wrap -->
 		<div class="dccon_list_wrap clear">
 			<div class="doublecon_wrap daewangcon">
-				
+				<div class="left">
 					
 				<span class="checkbox">
 					<input type="checkbox" id="double_dcon">
 					<em class="checkmark"></em>
 					<label for="double_dcon">더블콘</label>
 				</span>
-				<div class="bgbox" style="display: none;">
+				<div class="bgbox doublecon_bgbox" style="display: none;">
 					<div id ="double_img"></div>
 					<button type="button" class="btn_close" style="display:none;"><em class="blind">닫기</em></button>
 				</div>
@@ -4189,9 +4145,79 @@ $('footer.dcfoot').addClass('type1');
 						<button class="sp_img btn_tipclose12" onclick="$('#tip_daewangcon').hide();"><em class="blind">닫기</em></button>
 					</div>
 				</div>
-
-								<div class="right">
-					<button id="btn__daewangcon" type="button" class="txtbtn font_grey">대왕콘 사용</button>
+								<div class="aling">
+				    <span class="checkbox round blue">
+                        <input type="checkbox" id="bkmark" class="round_check">
+                        <label for="bkmark" class="round_label"><em class="inr">즐겨찾기</em></label>
+                    </span>
+                    <button type="button" class="sp_img btn_bkmark" style="display:none">디시콘 즐겨찾기</button>
+                    <div id="favoriteFolderLayer" class="pop_wrap type3" style=";top:17px;left:auto;margin-left:93px;display:none">
+                        <div class="pop_content pop_bkmark_edit folder">
+                            <div class="pop_head bg"><h3>즐겨찾기 폴더</h3></div>
+                            <div class="bg_grey">
+                                <div class="aling">
+                                    <h4>폴더 추가</h4>
+                                    <div class="align">
+                                        <button type="button" class="btn_foldadd"><span class="sp_img icon_plus">폴더 추가</span></button>
+                                        <!--즐겨찾기 폴더 추가 레이어-->
+                                        <div class="pop_wrap type3 " style="top:72px;right:-1px;display:none">
+                                            <!-- .pop_content.lyscrap_save -->
+                                            <div class="pop_content ly_folder_add">
+                                                <div class="pop_head"><h3>즐겨찾기 폴더 추가</h3></div>
+                                                <!--inr-->
+                                                <div class="inr">
+                                                    <div class="box">
+                                                        <h4>폴더명</h4>
+                                                        <div class="naming">
+                                  						    <input type="text" value="" maxlength="3">
+                                  							<span class="num">0/3</span>
+                                						</div>
+                              						</div>
+                              						<div class="txt_box">
+                                						<p class="font_grey">폴더는 최대 10개까지 추가 가능합니다.</p>
+                                						<p class="font_grey">폴더명은 최대 3글자입니다.</p>
+                              						</div>
+                            					</div>   
+                                                <!--//inr-->       
+                            					<div class="btn_box">
+                              						<button type="button" class="btn_blue small">등록</button>
+                            					</div>
+                            				</div>
+                                            <!-- //.pop_content.lyscrap_save -->
+                        					<button type="button" class="poply_bgblueclose"><span class="blind">레이어 닫기</span><em class="sp_img icon_bgblueclose"></em></button>
+                      					</div>
+                                        <!--//즐겨찾기 폴더 추가 레이어--->
+                    				</div>                                                        
+                  				</div>                                                      
+                			</div>
+                            <!--bkmark_editlist-->
+                			<div class="bkmark_editlist">
+                  				<ul id="bkmark_fdedit_ul"></ul>
+                			</div>   
+                            <!--//bkmark_editlist-->
+                            <div class="bg_grey txt_box">
+                  				<p>폴더는 최대 10개까지 추가 가능합니다.</p>
+                  				<p>폴더명은 최대 3글자입니다.</p>
+                			</div>
+                			<div class="btn_box">
+                  				<button type="button" class="btn_apply">저장</button>
+                			</div>
+                		</div>
+              			<button type="button" class="poply_whiteclose"><span class="blind">레이어 닫기</span><em class="sp_img icon_whiteclose"></em></button>
+            		</div>
+				</div>
+								</div>
+				
+				<div class="right">
+				    					<button id="btn__daewangcon" type="button" class="txtbtn font_grey">대왕콘</button>
+										<div class="fr clear">
+					    <button type="button" class="btn_dccon_hot">
+						    <span class="blind">인기 디시콘</span><em class="sp_img icon_dccon_hot"></em>
+					    </button>
+					    <button type="button" class="btn_dccon_setting">
+						    <span class="blind">디시콘 관리</span><em class="sp_img icon_dccon_setting"></em>
+					    </button>
+				    </div>
 				</div>
 				<div id="daewangcon_layer" class="pop_wrap type3 " style="display:none;right:-1px;top:33px">
 					<div class="pop_content ly_daewang">
@@ -4215,7 +4241,98 @@ $('footer.dcfoot').addClass('type1');
 					</div>
 					<button type="button" class="poply_greyclose" onclick="$('#daewangcon_layer').hide()"><em class="sp_img icon_grey_x">닫기</em></button>
 				</div>
-				 
+				<!-- 즐겨찾기 폴더 -->
+				<div id="favoriteFolderAddLayer" class="bgbox bkmk_area" style="display:;">
+				    <!--폴더가 없는 경우-->
+                    <div class="bkmk_folder">
+                        <!--tbox-->
+                        <div class="tbox">
+                            <p>즐겨찾기 폴더를 추가해 주세요.</p>
+                            <div class="inr">
+                                <button type="button" class="btn_qmark sp_img icon_qmark_ccc">즐겨찾기 안내</button>
+                                <!--pop_wrap.type2-->
+                                <div class="pop_wrap type2" style="top:19px;left:auto;">
+                                    <div class="pop_content bkmark_infobox">                                                        
+                                        <div class="inner">
+                                            <div class="pop_head dashed"><h3>즐겨찾기 추가 안내</h3></div>
+                                            <div class="tip_txtbox">
+                                                <p class="decor bar">폴더는 최대 10개까지 추가 가능합니다.</p>
+                                                <p class="decor bar">폴더명은 최대 3글자입니다</p>
+                                                <p class="decor bar">즐겨찾기 폴더 추가는 즐겨찾기 on 후 우측의 폴더 아이콘을 터치하여 추가할 수 있습니다.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="naming">
+                            <input type="text" id="favoriteFolderNameInput" class="favorite-folder-name-input" placeholder="폴더명" maxlength="3">
+                            <span class="num">0/3</span>
+                        </div>
+                        <div class="btn_area">
+                            <button type="button" id="btn_add_folder" class="btn_blue small">등록</button>
+                        </div>
+                        <button type="button" class="btn_bkm_close"><span class="blind">닫기</span><em class="sp_img icon_x_fa_1212"></em></button>     
+                    </div>
+                </div>
+				<!-- //즐겨찾기 폴더 -->
+				<!-- 즐겨찾기 폴더 -->
+				<div id="favoriteFolderSelectLayer" class="bgbox bkmk_area" style="display:;">
+				    <!--폴더가 없는 경우-->
+                    <div class="bkmk_folder">
+                        <!--tbox-->
+                        <div class="tbox" id="dccon_folder_setting">
+                            <p>즐겨찾기를 추가할 폴더를 선택해 주세요.</p>
+                            <div class="inr" id="dccon_folder_cont">
+                                <button type="button" class="btn_qmark sp_img icon_qmark_ccc">즐겨찾기 안내</button>
+                                <!--pop_wrap.type2-->
+                                <div class="pop_wrap type2" style="top:19px;left:auto;">
+                                    <div class="pop_content bkmark_infobox">                                                        
+                                        <div class="inner">
+                                            <div class="pop_head dashed"><h3>즐겨찾기 추가 안내</h3></div>
+                                            <div class="tip_txtbox">
+                                                <p class="decor bar">즐겨찾기 폴더에 디시콘 개수는 50개까지 등록할 수 있습니다.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button type="button" class="sel_color" style="background:#999999;" data-picker_prefix="dccfv_" onclick="picker_load('dccon_folder','dccon_folder',this)">
+                  					<span class="blind">즐겨찾기 폴더 색상</span>
+                				</button>
+                				<div class="pop_wrap type3" id="dccfv_picker_lay" style="left:50%;top:25px;margin-left:-162px;display:none">
+                				    <div class="pop_content txtmark_colorset">
+                                        <div class="pop_head"><h3>색상 설정</h3></div>
+										<div class="inner">
+                                            <div class="sel_color box" style="background:#cb000d"></div>
+									        <div id="dccfv_picker" style="text-align: center"></div>
+											<div class="btn_box">
+                                                <button type="button" class="btn_cancle" onclick="picker_hide();">취소</button>
+                                                <button type="button" class="btn_apply" data-layer="dccon_folder" data-type="dccon_folder" id="dccfv_color_apply">확인</button>
+                                            </div>
+                                        </div>
+						                <button type="button" class="poply_bgblueclose" onclick="picker_hide();"><span class="blind">레이어 닫기</span><em class="sp_img icon_bgblueclose"></em></button>
+								    </div>
+							    </div>
+                            </div>
+                        </div>
+                        <div class="bkmrk_listcont">
+              			    <button type="button" class="nav_btn prev" style="z-index:2;">
+        						<span class="sp_img icon_prev">이전</span>
+    						</button>
+    						<div class="wr" style="width:100%; margin:0 10px; overflow:hidden;padding-right:10px; box-sizing:border-box; overflow:hidden;">
+              				    <ul class="bkmrk_list"></ul>
+              				</div>
+              				<button type="button" class="nav_btn next" style="z-index:2;">
+        						<span class="sp_img icon_next">다음</span>
+    						</button>
+            			</div>
+                        <div class="btn_area">
+                            <button type="button" id="btn_sel_folder_submit" class="btn_blue small">등록</button>
+                        </div>
+                        <button type="button" class="btn_bkm_close"><span class="blind">닫기</span><em class="sp_img icon_x_fa_1212"></em></button>     
+                    </div>
+                </div>
+				<!-- //즐겨찾기 폴더 -->
 				<div class="tip_box2  tip_con_weekly" id="tip_dccon_weekly" style="display:none;cursor:pointer;" onClick="con_weekly_tip();">
                 	<div class="inner">
                         <p class="txt">주간 인기 디시콘은 매주 월요일 갱신됩니다.</p>
@@ -4237,10 +4354,17 @@ $('footer.dcfoot').addClass('type1');
 						<span class="frame"></span>
 					</li>
                     <script id="dccon_icon-tmpl" type="text/x-jquery-tmpl">
-				        <li class = "li_pack{{if typeof type !== 'undefined' && type === 'W'}} weekly_line{{/if}}">
+				        <li class="li_pack{{if typeof type !== 'undefined' && type === 'W'}} weekly_line{{/if}}">
                         <button type="button" class="dccon_btn no_btn" package_idx = "${package_idx}" title= "${title}" {{if typeof type !== 'undefined'}}  t="${type}"{{/if}}>
                         <img src="${main_img_url}" alt="${title}">
                         </button>
+                        <span class="frame"></span>
+                        </li>
+                    </script>
+                    
+                    <script id="dccon_folder-tmpl" type="text/x-jquery-tmpl">
+				        <li class="folder_li">
+                        <button type="button" class="dccon_btn no_btn" title= "${name}">${name}</button>
                         <span class="frame"></span>
                         </li>
                     </script>
@@ -4251,19 +4375,74 @@ $('footer.dcfoot').addClass('type1');
 					<span class="blind">다음</span><em class="sp_img icon_dccon_next"></em>
 					</button>
 				</div>
-				<div class="fr clear">
-					<button type="button" class="btn_dccon_hot">
-						<span class="blind">인기 디시콘</span><em class="sp_img icon_dccon_hot"></em>
-					</button>
-					<button type="button" class="btn_dccon_setting">
-						<span class="blind">디시콘 관리</span><em class="sp_img icon_dccon_setting"></em>
-					</button>
-				</div>
+				
 			</div>
 			<!-- //디시콘 목록 -->
 	
 			<!-- 디시콘 리스트 dccon_list_box -->
-			<div class="dccon_list_box dcconlist" style ="display:none;" ></div>
+			<div class="dccon_list_box dcconlist" style ="display:none;" >
+			    <div id="folder_icon_empty" class="bkmark_empty" style="display:none;">
+                    <p class="font_grey">즐겨찾기한 디시콘이 없습니다.</p>
+                    <p class="font_grey"><span class="sp_img starcon">별</span>을 누르면 즐겨찾기 가능합니다.</p>
+                </div>
+			    <div class="bkmark_edit" style="display:none;">
+                    <div class="area">
+                        <button type="button" id="btn_folder_edit" class="btn_edit font_blue">즐겨찾기 편집</button>
+                        <!--즐겨찾기 편집-->
+                        <div id="folderEditLayer" class="pop_wrap type3" style="right:-24px;top:20px;display:none">
+                            <div class="pop_content pop_bkmark_edit">
+                                <div class="pop_head bg"><h3>즐겨찾기 편집</h3></div>
+                                <div class="bg_grey">
+                                    <div class="aling">
+                                        <h4>폴더명</h4>
+                                        <div class="naming">
+                                            <input type="text" value="만두">
+                                            <span class="num">0/3</span>
+                                        </div>
+                                    </div>
+                                    <p class="stxt">4/50 * 디시콘 개수는 50개까지 등록할 수 있습니다.</p>
+                                </div>
+                                <div class="bkmark_editlist">
+                                    <ul>
+                                        <li>
+                                            <div class="lcont">
+                                                <img src="https://nstatic.dcinside.com/dc/test/m/img/timg10.png" alt="">
+                                                <span class="alt">알트값</span>
+                                            </div>
+                                            <div class="rcont">
+                                                <button type="button" class="btn_change sp_img icon_change_img888 ">순서 변경</button>
+                                                <button type="button" class="btn_del sp_img icon_grey777_x">삭제</button>
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <div class="btn_box">
+                  					<button type="button" id="btn_delete_folder" class="btn_cancle">폴더 삭제</button>
+                  					<button type="button" id="btn_save_folder_edit" class="btn_apply">저장</button>
+                				</div>
+                			</div>
+              				<button type="button" class="poply_whiteclose"><span class="blind">레이어 닫기</span><em class="sp_img icon_whiteclose"></em></button>
+            			</div>
+            			<!--//즐겨찾기 편집-->
+            		</div>
+            		<div class="area">
+            			<button type="button" class="sp_img icon_qmark_blue">즐겨찾기 편집이란</button>
+                        <!--즐겨찾기 편집이란-->
+            			<div class="pop_wrap type2" style="top:20px;right:-6px;">
+              				<div class="pop_content bkmark_infobox">                                                        
+                				<div class="inner">
+                  					<div class="pop_head dashed"><h3>즐겨찾기 편집</h3></div>
+                  					<div class="tip_txtbox">                                                        
+                    					<p class="decor bar">개별 이미지들의 위치 변경, 삭제, 별칭 추가, 폴더명 변경을 할 수 있습니다</p>
+                    					<p class="decor bar">별칭을 추가할 경우 별칭으로 검색할 수 있습니다.</p>
+                  					</div>
+                  				</div>                                                          
+              				</div>                                                        
+            			</div>
+                        <!--//즐겨찾기 편집이란-->
+                    </div>
+                </div>
+			</div>
 			<input type="hidden" name="bigdccon_expire_date" value="">
 	
             <script id="dccon_pagination-tmpl" type="text/x-jquery-tmpl">
@@ -4284,7 +4463,53 @@ $('footer.dcfoot').addClass('type1');
 		    <ul class="dccon_list clear page_${page}_index_${index}" >
 			{{each detail}}
 			{{if ($index < list_page) }}
-			<li class = "list_${parseInt($index / list_page) + 1} list_li" >
+			<li class = "list_${parseInt($index / list_page) + 1} list_li">
+			{{else}}
+			<li class = "list_${parseInt($index / list_page) + 1} list_li" style = "display:none;">
+			{{/if}}
+			{{if package_idx == '114022'}}
+			<button type="button" class="img_dccon logClass" depth1="topframe" depth2="comment_dccon" depth3="tos1" detail_idx="${detail_idx}" package_idx="${package_idx}" title="${title}"><img src="${list_img}" alt="${title}"></button>
+                        <button type="button" class="btn_starmark {{if bookmark}}on{{/if}}">즐겨찾기</button>
+                        </li>
+			{{else package_idx == '113758'}}
+			<button type="button" class="img_dccon logClass" depth1="topframe" depth2="comment_dccon" depth3="tos2" detail_idx="${detail_idx}" package_idx="${package_idx}" title="${title}"><img src="${list_img}" alt="${title}"></button>
+                        <button type="button" class="btn_starmark {{if bookmark}}on{{/if}}">즐겨찾기</button>
+                        </li>
+			{{else}}
+			<button type="button" class="img_dccon" detail_idx="${detail_idx}" package_idx="${package_idx}" title="${title}">
+            {{if video_src && video_src !== ''}}
+            <video 
+            src="${video_src}" 
+            autoplay 
+            loop 
+            muted 
+            playsinline 
+            preload="metadata"
+            style="width:100%;height:100%;object-fit:cover; pointer-events:none;"
+            data-src="${list_img}"
+            type="video/mp4"
+            onerror="DcconVideoError(this)"
+            oncanplay="DcconVideoPlayCheck(this)">
+            </video>
+            {{else}}
+            <img src="${list_img}" alt="${title}" loading="lazy">
+            {{/if}}
+            </button>
+                        <button type="button" class="btn_starmark {{if bookmark}}on{{/if}}">즐겨찾기</button>
+                        </li>
+			{{/if}}
+			{{/each}}
+			<li class="dccon_list_btm guide">
+                {{html $("#dccon_pagination-tmpl").tmpl($data).html()}}
+            </li>
+            </ul>
+            </script>
+ 
+            <script id="dccon_folder_list-tmpl" type="text/x-jquery-tmpl">
+		    <ul class="dccon_list clear folder_page_${folder_page}_index_${folder_index}" >
+			{{each detail}}
+			{{if ($index < list_page) }}
+			<li class = "list_${parseInt($index / list_page) + 1} list_li">
 			{{else}}
 			<li class = "list_${parseInt($index / list_page) + 1} list_li" style = "display:none;">
 			{{/if}}
@@ -4293,7 +4518,27 @@ $('footer.dcfoot').addClass('type1');
 			{{else package_idx == '113758'}}
 			<button type="button" class="img_dccon logClass" depth1="topframe" depth2="comment_dccon" depth3="tos2" detail_idx="${detail_idx}" package_idx="${package_idx}" title="${title}"><img src="${list_img}" alt="${title}"></button></li>
 			{{else}}
-			<button type="button" class="img_dccon" detail_idx="${detail_idx}" package_idx="${package_idx}" title="${title}"><img src="${list_img}" alt="${title}" loading="lazy"></button></li>
+			<button type="button" class="img_dccon" detail_idx="${detail_idx}" package_idx="${package_idx}" title="${title}">
+            {{if video_src && video_src !== ''}}
+            <video 
+            src="${video_src}" 
+            autoplay 
+            loop 
+            muted 
+            playsinline 
+            preload="metadata"
+            style="width:100%;height:100%;object-fit:cover; pointer-events:none;"
+            data-src="${list_img}"
+            type="video/mp4"
+            onerror="DcconVideoError(this)"
+            oncanplay="DcconVideoPlayCheck(this)">
+            </video>
+            {{else}}
+            <img src="${list_img}" alt="${title}" loading="lazy">
+            {{/if}}
+            </button>
+            <button type="button" class="btn_starmark on">즐겨찾기</button>
+            </li>
 			{{/if}}
 			{{/each}}
 			<li class="dccon_list_btm guide">
@@ -4301,6 +4546,8 @@ $('footer.dcfoot').addClass('type1');
             </li>
             </ul>
             </script>
+            
+            
             
 	        <script id="recent_list-tmpl" type="text/x-jquery-tmpl">
 			{{each detail}}
@@ -4320,54 +4567,27 @@ $('footer.dcfoot').addClass('type1');
 				<div class="hot_inner dw_hot">
 				  <div class="clear">
 					<h4 class="pop_dccon_tit">디시콘</h4>
-					<h4 class="pop_dccon_tit sch_txt" style="display:none;">디시콘 검색결과<span class="dccon_sch_num">(0)</span></h4>
-					<form id="f_sch_dccon">
-						<div class="option_sort fr dccon">
-						  <div class="select_box select_arraybox">
-							<div class="select_area">디시콘명<span class="blind">정렬 기준선택</span><em class="sp_img icon_option_more"></em></div>
-							<ul class="option_box" style="left:-1px;top:23px;display:none"><!-- 옵션 펼침 display:block -->
-							  <li data-value="title">디시콘명</li>
-							  <li data-value="nick_name">닉네임</li>
-							  <li data-value="tags">태그</li>
-							</ul>
-						  </div>
-						  <script>ul_selectric($('#f_sch_dccon .select_arraybox'), 'type' , 'title');</script>
-						  <div class="dccon_search_wrap">
-							  <fieldset>
-								<legend class="blind">디시콘 검색</legend>
-								<div class="dccon_search_box ">
-								  <div class="dccon_search clear">
-									<div class="inner_search">
-									  <input class="in_keyword" title="검색어 입력" type="text" name="keyword" value="">
-									</div>
-									<button class="sp_img bnt_dccon_search" type="submit"><span class="blind">검색</span></button>
-								  </div>
-								</div>
-							  </fieldset>
-						  </div>
-						</div>
-					</form>
+					
 				  </div>
 				  <div class="dw_hotcon">
-					<div class="tabbox_btn red">
-					  <button type="button" class="btn_tab daily on">일간 인기 디시콘</button>
-					  <button type="button" class="btn_tab weekly ">주간 인기 디시콘</button>
+				    <div class="loc">
+    					<div class="tabbox_btn red angled">
+    					  <button type="button" class="btn_tab daily" data-type="daily">일간 인기 디시콘</button>
+    					  <button type="button" class="btn_tab weekly" data-type="weekly">주간 인기 디시콘</button>
+    					  <button type="button" class="btn_tab monthly" data-type="monthly">월간 인기 디시콘</button>
+    					</div>
+    					<div class="hotcon_paging_btn">
+                      		<button class="btn_hotcon_prev">
+                        		<span class="blind">이전</span><em class="sp_img icon_hotcon_prev"></em>
+                      		</button>
+                      		<button class="btn_hotcon_next on">
+                        		<span class="blind">다음</span><em class="sp_img icon_hotcon_next"></em>
+                      		</button>
+                    	</div>
 					</div>
 				  </div>
 				</div>
-				<div class="hot_inner hots">
-					<div class="clear">
-						<h4 class="pop_dccon_tit">인기 디시콘</h4>
-						<div class="hotcon_paging_btn">
-						<button class="btn_hotcon_prev">
-							 <span class="blind">이전</span><em class="sp_img icon_hotcon_prev"></em>
-						</button>
-						<button class="btn_hotcon_next on">
-							<span class="blind">다음</span><em class="sp_img icon_hotcon_next"></em>
-						</button>
-						</div>
-					</div>
-				</div>
+				<ul class="dccon_shop_list clear" style="display:none;"></ul>
 				<script id="dccon_shop-tmpl" type="text/x-jquery-tmpl">
 				{{each(i,item) list}}
 				{{if parseInt(i % 5) == 0}}
@@ -4418,7 +4638,7 @@ function bigdccon_expire_pop() {
 <div id = "data_info"></div>
 <script id="dccon_detail-tmpl" type="text/x-jquery-tmpl">
 <div class="pop_wrap type3" id = "package_detail" style="left: 109px;top:20px;">
- <div class="pop_content dccon_popinfo">
+ <div class="pop_content dccon_popinfo edit">
 	 <div class="pop_head clear">
 		<h3 >디시콘 정보</h3>
 	</div>
@@ -4430,9 +4650,14 @@ function bigdccon_expire_pop() {
 		<div class="viewtxt_top clear">
 			<h4 class="font_blue con_title">${info['title']}</h4>
 			{{if info['register']}}
+            {{if info['my_icon_edit']}}
+            <button type="button" class="btn_blue small btn_my_dccon_edit" data-idx="${info['package_idx']}">수정</button>
+            {{else}}
+            <button type="button" class="btn_grey small btn_my_dccon_edit">수정</button>
+            {{/if}}
 			{{else (info['residual']) }}
 			{{else}}
-			<button type="button" class="btn_blue small btn_buy" reqpath="/dccon">구매하기</button>
+			<button type="button" class="btn_blue small btn_buy" reqpath="/dccon">사용</button>
 			{{/if}}
 		</div>
 		<div class="viewtxt_cont">
@@ -4441,7 +4666,7 @@ function bigdccon_expire_pop() {
 			</p>
 			<div class="inner_info">
 			<span class="tbox">제작</span>
-			<span class="seller_name">${info['seller_name']}</span>
+			<span class="seller_name"><a href="https://dccon.dcinside.com/hot/1/nick_name/${info['seller_name']}" target="_blank">${info['seller_name']}</a></span>
 			<span class="makeday">${info['reg_date_short']}</span>
 			</div>
 			<div class="inner_info">
@@ -4449,7 +4674,7 @@ function bigdccon_expire_pop() {
 			<span class="seller_name">
 			{{each(i,item) tags}}
 			{{if i != 0}},{{/if}}
-			${tag}
+			<a href="https://dccon.dcinside.com/hot/1/tags/${tag}" target="_blank">${tag}</a>
 			{{/each}}
 			</span>
 			</div>
@@ -4469,10 +4694,6 @@ function bigdccon_expire_pop() {
 	<!-- //디시콘 리스트 dccon_list_box -->
 	</div>
 	<!-- //dccon_list_wrap -->
-	<div class="dccon_infobox">
-		<p>음란물을 디시콘으로 등록하는 경우 사이버수사대에 즉각 신고합니다.</p>
-		<p>서비스 이용에 부적절하거나, 저작권에 위반된 저작물일 경우 별도 통보 없이 판매중지될 수 있습니다.</p>
-	</div>
 	</div>
  <button type="button" class="poply_bgblueclose package_close" ><span class="blind">디시콘 정보 레이어 닫기</span><em class="sp_img icon_bgblueclose"></em></button>
 
@@ -4835,8 +5056,8 @@ function bigdccon_expire_pop() {
 	<div class="user_control">
         		<button type="button" class="btn_user_control" onclick="set_notice('SET');">공지등록</button>
                 		<button type="button" class="btn_user_control" onclick="get_quick_avoid_conf('#avoid_pop_view'); toggle_layer($('#avoid_pop_view'));">차단</button>
-                		<button type="button" class="btn_user_control" data-headtype="general" onclick="update_recom('SET', 1147859);">개념글 등록</button>
-        						<button type="button" class="btn_user_control" onclick ="update_bump(1147859)" >끌올</button>
+                		<button type="button" class="btn_user_control" data-headtype="general" onclick="update_recom('SET', 1155307);">개념글 등록</button>
+        						<button type="button" class="btn_user_control" onclick ="update_bump(1155307)" >끌올</button>
 			</div>
     	<div class="mng_subject_sel">
 		<div class="select_area">일반<span class="blind">말머리 옵션 보기</span><em class="sp_img icon_option_more"></em></div>
@@ -4962,9 +5183,9 @@ $('.mngbtn_wrap:eq(0)').find('.tip_box2').show();
 <script type="text/javascript">
 $('.btn_recommend_box').after($('#minor_manager_view_buttons-tmpl').tmpl(null));
 
-$('#minor_block_pop-tmpl').tmpl([{ id: 'avoid_pop_view', no: '1147859', iscmt: false }]).appendTo('.user_control');
+$('#minor_block_pop-tmpl').tmpl([{ id: 'avoid_pop_view', no: '1155307', iscmt: false }]).appendTo('.user_control');
 
-ul_selectric($('.mng_setbox .mng_subject_sel'), '', '0');
+ul_selectric($('.mng_setbox .mng_subject_sel'), '', '10');
 </script>
 <script id="minor_manager_checkbox-tmpl" type="text/x-jquery-tmpl">
 <span class="checkbox">
